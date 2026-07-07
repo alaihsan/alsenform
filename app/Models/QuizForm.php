@@ -6,6 +6,8 @@ use Database\Factories\QuizFormFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class QuizForm extends Model
@@ -13,12 +15,16 @@ class QuizForm extends Model
     /** @use HasFactory<QuizFormFactory> */
     use HasFactory;
 
+    use SoftDeletes;
+
     protected $fillable = [
         'user_id',
         'title',
         'description',
         'slug',
         'template',
+        'folder',
+        'quiz_folder_id',
         'questions',
         'settings',
         'published_at',
@@ -33,12 +39,23 @@ class QuizForm extends Model
             'questions' => 'array',
             'settings' => 'array',
             'published_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function quizFolder(): BelongsTo
+    {
+        return $this->belongsTo(QuizFolder::class);
+    }
+
+    public function responses(): HasMany
+    {
+        return $this->hasMany(QuizResponse::class);
     }
 
     public static function uniqueSlug(string $title, ?self $ignore = null): string
