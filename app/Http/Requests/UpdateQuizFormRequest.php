@@ -48,6 +48,7 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.answer' => ['nullable'],
             'questions.*.required' => ['boolean'],
             'questions.*.media' => ['array'],
+            'questions.*.points' => ['nullable', 'integer', 'min:0'],
             'settings' => ['required', 'array'],
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],

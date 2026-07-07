@@ -28,7 +28,8 @@ import {
     UserPlus,
     Video,
 } from 'lucide-vue-next';
-import { computed, reactive, ref, type Component } from 'vue';
+import { useDebounceFn } from '@vueuse/core';
+import { computed, reactive, ref, watch, type Component } from 'vue';
 
 type QuestionType =
     | 'Short answer'
@@ -50,9 +51,10 @@ type Question = {
     description: string;
     type: QuestionType;
     options: string[];
-    answer: string | string[];
+    answer: any;
     required: boolean;
-    media: { type: 'image' | 'video'; label: string }[];
+    media: { type: 'image' | 'video'; url: string }[];
+    points: number;
 };
 
 type PreviewAnswer = string | string[];
@@ -70,6 +72,15 @@ type QuizFormPayload = {
     };
     updateUrl: string;
     publicUrl: string;
+};
+
+const getYoutubeEmbedUrl = (url: string): string | null => {
+    if (!url) {
+        return null;
+    }
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : null;
 };
 
 const props = defineProps<{
@@ -123,7 +134,17 @@ const form = reactive({
     title: props.quizForm?.title ?? preset.title,
     description: props.quizForm?.description ?? preset.description,
     questions: [
-        ...(props.quizForm?.questions ?? [
+        ...(props.quizForm?.questions.map((q) => ({
+            id: q.id,
+            title: q.title,
+            description: q.description ?? '',
+            type: q.type,
+            options: q.options ? [...q.options] : [],
+            answer: q.answer,
+            required: Boolean(q.required),
+            media: (q.media ?? []).map((m: any) => ({ type: m.type, url: m.url ?? '' })),
+            points: q.points ?? 10,
+        })) ?? [
             {
                 id: 1,
                 title: preset.question,
@@ -133,6 +154,7 @@ const form = reactive({
                 answer: '',
                 required: true,
                 media: [],
+                points: 10,
             },
         ]),
     ] as Question[],
@@ -187,8 +209,13 @@ const activeQuestion = computed(() => form.questions.find((question) => question
 const responseCount = computed(() => 0);
 const shareUrl = computed(() => publicUrl.value);
 
+const debouncedRecordHistory = useDebounceFn(() => {
+    recordHistory();
+}, 500);
+
 const markChanged = (message = 'Draft updated') => {
     statusMessage.value = message;
+    debouncedRecordHistory();
 };
 
 const normalizePublicSlug = () => {
@@ -220,6 +247,7 @@ const saveDraft = (publishAfterSave = false) => {
         },
         {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
                 markChanged('Draft saved');
@@ -247,6 +275,7 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         answer: type === 'Checkboxes' ? [] : '',
         required: false,
         media: [],
+        points: 10,
     };
 
     form.questions.push(question);
@@ -262,7 +291,8 @@ const duplicateQuestion = (question: Question) => {
         title: `${question.title} copy`,
         options: [...question.options],
         answer: Array.isArray(question.answer) ? [...question.answer] : question.answer,
-        media: [...question.media],
+        media: (question.media ?? []).map(m => ({ ...m })),
+        points: question.points ?? 10,
     };
 
     const index = form.questions.findIndex((item) => item.id === question.id);
@@ -448,7 +478,7 @@ const addTitleDescription = () => {
 const addMediaToActiveQuestion = (type: 'image' | 'video') => {
     activeQuestion.value.media.push({
         type,
-        label: type === 'image' ? 'Gambar pendukung soal' : 'Video pendukung soal',
+        url: '',
     });
     markChanged(type === 'image' ? 'Image added to question' : 'Video added to question');
 };
@@ -500,14 +530,14 @@ const downloadImportTemplate = () => {
         'Apa ibu kota Indonesia? | Jakarta | Bandung | Surabaya',
         'Jelaskan proses daur air.',
     ].join('\n');
-    const blob = new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'alsenform-question-template.docx';
+    link.download = 'alsenform-question-template.txt';
     link.click();
     URL.revokeObjectURL(url);
-    markChanged('DOCX template downloaded');
+    markChanged('TXT template downloaded');
 };
 
 const importQuestionsFromText = (content: string) => {
@@ -516,7 +546,7 @@ const importQuestionsFromText = (content: string) => {
         .map((line) => line.trim())
         .filter((line) => line && !line.toLowerCase().includes('template') && !line.toLowerCase().startsWith('contoh'));
 
-    const importedLines = lines.length ? lines : ['Pertanyaan dari file DOCX | Option 1 | Option 2'];
+    const importedLines = lines.length ? lines : ['Pertanyaan dari file TXT | Option 1 | Option 2'];
 
     importedLines.forEach((line) => {
         const parts = line
@@ -531,6 +561,7 @@ const importQuestionsFromText = (content: string) => {
             options: parts.length > 1 ? parts.slice(1) : [],
             required: false,
             media: [],
+            points: 10,
         };
         form.questions.push(question);
         activeQuestionId.value = question.id;
@@ -570,8 +601,113 @@ const cycleTheme = () => {
     markChanged('Theme changed');
 };
 
-const undo = () => markChanged('Undo is ready for the next saved history step');
-const redo = () => markChanged('Redo is ready for the next saved history step');
+// Toast Notification State
+const toastMessage = ref('');
+const showToast = ref(false);
+let toastTimeout: any = null;
+
+const triggerToast = (message: string) => {
+    toastMessage.value = message;
+    showToast.value = true;
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+    }
+    toastTimeout = setTimeout(() => {
+        showToast.value = false;
+    }, 3000);
+};
+
+// Undo & Redo History State Stack
+const history = ref<string[]>([]);
+const historyIndex = ref(-1);
+let isUndoingRedoing = false;
+
+const recordHistory = () => {
+    if (isUndoingRedoing) {
+        return;
+    }
+    const currentState = JSON.stringify({
+        title: form.title,
+        description: form.description,
+        questions: form.questions,
+        settings: form.settings,
+    });
+    // If the state is identical to the current history state, skip recording
+    if (historyIndex.value >= 0 && history.value[historyIndex.value] === currentState) {
+        return;
+    }
+    // Truncate future history if we were in the middle of undo stack
+    if (historyIndex.value < history.value.length - 1) {
+        history.value = history.value.slice(0, historyIndex.value + 1);
+    }
+    history.value.push(currentState);
+    historyIndex.value = history.value.length - 1;
+
+    // Enforce capacity of max 5 undos
+    while (historyIndex.value > 5) {
+        history.value.shift();
+        historyIndex.value--;
+    }
+
+    // Enforce capacity of max 5 redos
+    if (history.value.length - 1 - historyIndex.value > 5) {
+        history.value = history.value.slice(0, historyIndex.value + 1 + 5);
+    }
+};
+
+const undo = () => {
+    if (historyIndex.value > 0) {
+        isUndoingRedoing = true;
+        historyIndex.value--;
+        const state = JSON.parse(history.value[historyIndex.value]);
+        form.title = state.title;
+        form.description = state.description;
+        form.questions = state.questions;
+        form.settings = state.settings;
+        isUndoingRedoing = false;
+        statusMessage.value = 'Undo performed';
+        triggerToast('Undo berhasil dilakukan');
+    }
+};
+
+const redo = () => {
+    if (historyIndex.value < history.value.length - 1) {
+        isUndoingRedoing = true;
+        historyIndex.value++;
+        const state = JSON.parse(history.value[historyIndex.value]);
+        form.title = state.title;
+        form.description = state.description;
+        form.questions = state.questions;
+        form.settings = state.settings;
+        isUndoingRedoing = false;
+        statusMessage.value = 'Redo performed';
+        triggerToast('Redo berhasil dilakukan');
+    }
+};
+
+const canUndo = computed(() => historyIndex.value > 0);
+const canRedo = computed(() => historyIndex.value < history.value.length - 1);
+
+// Record initial state
+recordHistory();
+
+// Auto-save logic
+const autoSave = useDebounceFn(() => {
+    if (props.quizForm) {
+        saveDraft(false);
+    }
+}, 3000); // 3 seconds debounce
+
+// Watch form changes
+watch(
+    () => [form.title, form.description, form.questions, form.settings],
+    () => {
+        statusMessage.value = 'Saving changes automatically...';
+        autoSave();
+        debouncedRecordHistory();
+    },
+    { deep: true }
+);
 </script>
 
 <template>
@@ -621,10 +757,24 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                     <button type="button" class="rounded-full p-2 transition hover:bg-slate-100" aria-label="Preview" @click="openPreview">
                         <Eye class="h-5 w-5" />
                     </button>
-                    <button type="button" class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block" aria-label="Undo" @click="undo">
+                    <button
+                        type="button"
+                        class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
+                        :class="{ 'opacity-40 cursor-not-allowed': !canUndo }"
+                        :disabled="!canUndo"
+                        aria-label="Undo"
+                        @click="undo"
+                    >
                         <Undo2 class="h-5 w-5" />
                     </button>
-                    <button type="button" class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block" aria-label="Redo" @click="redo">
+                    <button
+                        type="button"
+                        class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
+                        :class="{ 'opacity-40 cursor-not-allowed': !canRedo }"
+                        :disabled="!canRedo"
+                        aria-label="Redo"
+                        @click="redo"
+                    >
                         <Redo2 class="h-5 w-5" />
                     </button>
                     <button
@@ -706,7 +856,7 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
         </header>
 
         <section class="mx-auto grid max-w-[980px] grid-cols-1 gap-4 px-4 py-5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_60px]">
-            <input ref="fileInput" type="file" accept=".docx,.txt,.md" class="hidden" @change="handleImportFile" />
+            <input ref="fileInput" type="file" accept=".txt,.md" class="hidden" @change="handleImportFile" />
             <div class="space-y-4">
                 <p class="text-sm font-medium text-slate-500">{{ statusMessage }}</p>
 
@@ -786,21 +936,61 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                                         @input="markChanged('Description updated')"
                                     />
 
-                                    <div v-if="question.media.length" class="mb-4 grid gap-3 sm:grid-cols-2">
+                                    <!-- Media Rendering and Editing -->
+                                    <div v-if="question.media && question.media.length" class="mb-4 grid gap-4 sm:grid-cols-2">
                                         <div
-                                            v-for="media in question.media"
-                                            :key="`${question.id}-${media.type}-${media.label}`"
-                                            class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm font-medium text-slate-500"
+                                            v-for="(media, mediaIndex) in question.media"
+                                            :key="mediaIndex"
+                                            class="relative rounded-xl border border-slate-200 bg-slate-50 p-4"
                                         >
-                                            {{ media.label }}
+                                            <div class="flex items-center justify-between mb-2">
+                                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                                                    {{ media.type }}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="text-slate-400 hover:text-red-500 transition"
+                                                    title="Hapus media"
+                                                    @click.stop="question.media.splice(mediaIndex, 1); markChanged('Media removed');"
+                                                >
+                                                    <Trash2 class="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            <input
+                                                v-model="media.url"
+                                                type="text"
+                                                placeholder="Masukkan URL Gambar/Video (e.g. YouTube URL)"
+                                                class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs outline-none focus:border-indigo-500 bg-white mb-2"
+                                                @input="markChanged('Media URL updated')"
+                                            />
+                                            <div v-if="media.url" class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                                <img v-if="media.type === 'image'" :src="media.url" class="max-h-48 w-full object-contain p-2" />
+                                                <iframe
+                                                    v-else-if="media.type === 'video' && getYoutubeEmbedUrl(media.url)"
+                                                    :src="getYoutubeEmbedUrl(media.url)"
+                                                    class="w-full aspect-video"
+                                                    frameborder="0"
+                                                    allowfullscreen
+                                                ></iframe>
+                                                <div v-else class="p-2 text-xs text-slate-400 text-center">Format URL video tidak didukung (gunakan link YouTube)</div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div
-                                        v-if="question.type === 'Short answer'"
-                                        class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-400"
-                                    >
-                                        Short answer text
+                                    <div v-if="question.type === 'Short answer'" class="space-y-4">
+                                        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-400">
+                                            Short answer text
+                                        </div>
+                                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                                            <label class="block text-xs font-bold text-emerald-800 mb-1">Kunci Jawaban Benar (Pencocokan Teks):</label>
+                                            <input
+                                                v-model="question.answer"
+                                                type="text"
+                                                placeholder="Masukkan kunci jawaban benar..."
+                                                class="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                                                @input="markChanged('Answer key updated')"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div
@@ -838,13 +1028,20 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
 
                                     <div v-else-if="question.type === 'Linear scale'" class="space-y-4">
                                         <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
-                                            <span
+                                            <button
                                                 v-for="option in question.options"
                                                 :key="option"
-                                                class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-bold"
+                                                type="button"
+                                                :class="[
+                                                    'flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold transition',
+                                                    question.answer === option
+                                                        ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                                                        : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-300'
+                                                ]"
+                                                @click.stop="question.answer = question.answer === option ? '' : option; markChanged('Answer key updated');"
                                             >
                                                 {{ option }}
-                                            </span>
+                                            </button>
                                         </div>
                                         <button
                                             type="button"
@@ -856,11 +1053,25 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                                         >
                                             Add scale point
                                         </button>
+                                        <div v-if="question.answer" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                            <span class="font-bold">Kunci jawaban benar:</span> {{ question.answer }}
+                                        </div>
                                     </div>
 
                                     <div v-else-if="question.type === 'Rating'" class="space-y-4">
-                                        <div class="flex gap-2 rounded-xl bg-slate-50 p-3 text-amber-400">
-                                            <Star v-for="option in question.options" :key="option" class="h-8 w-8 fill-current" />
+                                        <div class="flex gap-2 rounded-xl bg-slate-50 p-3 text-slate-300">
+                                            <button
+                                                v-for="option in question.options"
+                                                :key="option"
+                                                type="button"
+                                                :class="[
+                                                    'transition',
+                                                     Number(question.answer) >= Number(option) ? 'text-amber-400' : 'text-slate-300 hover:text-amber-200'
+                                                ]"
+                                                @click.stop="question.answer = question.answer === option ? '' : option; markChanged('Answer key updated');"
+                                            >
+                                                <Star class="h-8 w-8 fill-current" />
+                                            </button>
                                         </div>
                                         <button
                                             type="button"
@@ -872,6 +1083,9 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                                         >
                                             Add rating point
                                         </button>
+                                        <div v-if="question.answer" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                            <span class="font-bold">Kunci jawaban benar (Rating):</span> {{ question.answer }} bintang
+                                        </div>
                                     </div>
 
                                     <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-3">
@@ -901,37 +1115,39 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                                             :key="`${question.id}-${optionIndex}`"
                                             class="flex items-center gap-3 text-base transition hover:translate-x-1 sm:text-lg"
                                         >
-                                            <span
+                                            <!-- Checkbox/Radio Correct Answer Selector on the left -->
+                                            <button
+                                                type="button"
+                                                :aria-label="`Pilih ${option || `Opsi ${optionIndex + 1}`} sebagai jawaban benar`"
                                                 :class="[
-                                                    'flex h-5 w-5 shrink-0 items-center justify-center border-2 border-slate-300 text-xs font-bold text-slate-400',
-                                                    question.type === 'Checkboxes'
-                                                        ? 'rounded'
-                                                        : question.type === 'Drop-down'
-                                                          ? 'rounded-lg border-transparent'
-                                                          : 'rounded-full',
+                                                    'flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
+                                                    question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
+                                                    isCorrectAnswer(question, option)
+                                                        ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                                                        : 'border-slate-300 bg-white hover:border-emerald-400'
                                                 ]"
+                                                @click.stop="setCorrectAnswer(question, option)"
                                             >
-                                                {{ question.type === 'Drop-down' ? optionIndex + 1 : '' }}
+                                                <span
+                                                    v-if="isCorrectAnswer(question, option)"
+                                                    :class="[
+                                                        'block h-2 w-2 bg-white',
+                                                        question.type === 'Checkboxes' ? 'rounded-sm' : 'rounded-full'
+                                                    ]"
+                                                ></span>
+                                            </button>
+
+                                            <!-- Dropdown number index if it is a Drop-down type -->
+                                            <span v-if="question.type === 'Drop-down'" class="text-xs font-bold text-slate-400">
+                                                #{{ optionIndex + 1 }}
                                             </span>
+
                                             <input
                                                 :value="question.options[optionIndex]"
                                                 type="text"
                                                 class="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
                                                 @input="updateOption(question, optionIndex, ($event.target as HTMLInputElement).value)"
                                             />
-                                            <button
-                                                type="button"
-                                                :aria-label="`Jadikan ${option || `Option ${optionIndex + 1}`} sebagai jawaban benar`"
-                                                :class="[
-                                                    'shrink-0 rounded-full border px-3 py-1 text-xs font-bold transition',
-                                                    isCorrectAnswer(question, option)
-                                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                                        : 'border-slate-200 bg-white text-slate-400 hover:border-emerald-300 hover:text-emerald-600',
-                                                ]"
-                                                @click.stop="setCorrectAnswer(question, option)"
-                                            >
-                                                {{ isCorrectAnswer(question, option) ? 'Benar' : 'Kunci' }}
-                                            </button>
                                             <button
                                                 type="button"
                                                 class="rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
@@ -1039,6 +1255,17 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                                             >
                                                 <Trash2 class="h-6 w-6" />
                                             </button>
+                                            <span class="h-8 border-l border-slate-200"></span>
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="text-xs font-semibold text-slate-500 text-slate-700">Poin:</span>
+                                                <input
+                                                    v-model.number="question.points"
+                                                    type="number"
+                                                    min="0"
+                                                    class="w-14 rounded-lg border border-slate-300 px-2 py-1 text-xs text-center font-bold outline-none focus:border-indigo-500 bg-white"
+                                                    @input="markChanged('Points updated')"
+                                                />
+                                            </div>
                                             <span class="h-8 border-l border-slate-200"></span>
                                             <span class="text-sm font-medium">Required</span>
                                             <button
@@ -1188,7 +1415,26 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                 <p class="mt-2 text-slate-500">{{ form.description }}</p>
                 <div class="mt-6 space-y-5">
                     <div v-for="question in form.questions" :key="`preview-${question.id}`" class="rounded-2xl border border-slate-200 p-5">
-                        <p class="font-bold">{{ question.title }} <span v-if="question.required" class="text-red-500">*</span></p>
+                        <p class="font-bold flex flex-wrap items-center">
+                            <span>{{ question.title }}</span>
+                            <span v-if="question.required" class="text-red-500 ml-1">*</span>
+                            <span v-if="question.points" class="ml-2 text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                                {{ question.points }} Poin
+                            </span>
+                        </p>
+                        <!-- Preview media display -->
+                        <div v-if="question.media && question.media.length" class="mt-3 mb-4 grid gap-4 sm:grid-cols-2">
+                            <div v-for="(media, idx) in question.media" :key="idx" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                <img v-if="media.type === 'image' && media.url" :src="media.url" class="max-h-48 w-full object-contain p-2" />
+                                <iframe
+                                    v-else-if="media.type === 'video' && media.url && getYoutubeEmbedUrl(media.url)"
+                                    :src="getYoutubeEmbedUrl(media.url)"
+                                    class="w-full aspect-video"
+                                    frameborder="0"
+                                    allowfullscreen
+                                ></iframe>
+                            </div>
+                        </div>
                         <div
                             v-if="question.type === 'File upload'"
                             class="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
@@ -1304,6 +1550,24 @@ const redo = () => markChanged('Redo is ready for the next saved history step');
                 </div>
             </section>
         </div>
+
+        <!-- Floating Premium Toast -->
+        <Transition
+            enter-active-class="transition duration-300 ease-out transform"
+            enter-from-class="translate-y-10 opacity-0 scale-95"
+            enter-to-class="translate-y-0 opacity-100 scale-100"
+            leave-active-class="transition duration-150 ease-in transform"
+            leave-from-class="translate-y-0 opacity-100 scale-100"
+            leave-to-class="translate-y-10 opacity-0 scale-95"
+        >
+            <div
+                v-if="showToast"
+                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-xl border border-white/10"
+            >
+                <div class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <span>{{ toastMessage }}</span>
+            </div>
+        </Transition>
     </main>
 </template>
 
