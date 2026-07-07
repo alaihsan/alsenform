@@ -285,6 +285,7 @@ test('public quiz link works by unique slug', function () {
     $quizForm = QuizForm::factory()->create([
         'title' => 'Public quiz',
         'slug' => 'public-quiz',
+        'published_at' => now(),
     ]);
 
     $this->get('/forms/public-quiz')
@@ -298,6 +299,7 @@ test('public quiz link works by unique slug', function () {
 test('public users can submit quiz responses', function () {
     $quizForm = QuizForm::factory()->create([
         'slug' => 'public-response-quiz',
+        'published_at' => now(),
         'questions' => [
             [
                 'id' => 1,
@@ -329,6 +331,16 @@ test('public users can submit quiz responses', function () {
         'quiz_form_id' => $quizForm->id,
         'email' => 'respondent@example.com',
     ]);
+});
+
+test('unpublished public quiz links are not visible to guests', function () {
+    $quizForm = QuizForm::factory()->create([
+        'slug' => 'draft-public-quiz',
+        'published_at' => null,
+    ]);
+
+    $this->get(route('forms.public', ['quizForm' => $quizForm->slug]))
+        ->assertNotFound();
 });
 
 test('form editor includes response summaries', function () {
@@ -416,7 +428,7 @@ test('authenticated users can update google forms style settings', function () {
         'defaultCollectEmailMode' => 'responder',
         'defaultQuestionRequired' => true,
         'defaultQuestionPoints' => 20,
-        'maxUploadSize' => 100,
+        'maxUploadSize' => 40,
     ]);
 
     $this->patch(route('forms.update', $quizForm), [

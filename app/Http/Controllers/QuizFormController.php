@@ -2,52 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreQuizResponseRequest;
+use App\Actions\DuplicateQuizForm;
+use App\Http\Requests\MoveQuizFormToFolderRequest;
 use App\Http\Requests\UpdateQuizFormRequest;
+use App\Http\Requests\UploadQuizFormMediaRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
-use App\Models\QuizResponse;
-use App\Models\UnlockRequest;
+use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class QuizFormController extends Controller
 {
-    public function dashboard(Request $request): Response
-    {
-        $recentForms = QuizForm::query()
-            ->withTrashed()
-            ->with('quizFolder')
-            ->whereBelongsTo($request->user())
-            ->latest('updated_at')
-            ->get()
-            ->map(fn (QuizForm $quizForm): array => $this->recentFormPayload($quizForm));
-        $folders = QuizFolder::query()
-            ->whereBelongsTo($request->user())
-            ->withCount(['forms' => fn ($query) => $query->whereNull('deleted_at')])
-            ->orderBy('name')
-            ->get()
-            ->map(fn (QuizFolder $folder): array => [
-                'id' => $folder->id,
-                'name' => $folder->name,
-                'formsCount' => $folder->forms_count,
-                'updateUrl' => route('folders.update', $folder),
-                'deleteUrl' => route('folders.destroy', $folder),
-            ]);
-
-        return Inertia::render('Dashboard', [
-            'recentForms' => $recentForms,
-            'folders' => $folders,
-            'createFolderUrl' => route('folders.store'),
-        ]);
-    }
-
     public function create(Request $request, ?string $template = null): RedirectResponse
     {
+        Gate::authorize('create', QuizForm::class);
+
         $preset = $this->preset($template ?? 'blank');
 
         $quizForm = QuizForm::query()->create([
@@ -78,15 +52,15 @@ class QuizFormController extends Controller
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
     }
 
-    public function edit(Request $request, QuizForm $quizForm): Response
+    public function edit(Request $request, QuizForm $quizForm, QuizFormPayloads $payloads): Response
     {
-        abort_unless($request->user()->is($quizForm->user), 403);
+        Gate::authorize('update', $quizForm);
 
         $quizForm->touch();
 
         return Inertia::render('FormEditor', [
             'template' => $quizForm->template,
-            'quizForm' => $this->editorPayload($quizForm),
+            'quizForm' => $payloads->editor($quizForm),
         ]);
     }
 
@@ -106,94 +80,18 @@ class QuizFormController extends Controller
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
     }
 
-    public function duplicate(Request $request, QuizForm $quizForm): RedirectResponse
+    public function duplicate(QuizForm $quizForm, DuplicateQuizForm $duplicateQuizForm): RedirectResponse
     {
-        abort_unless($request->user()->is($quizForm->user), 403);
+        Gate::authorize('update', $quizForm);
 
-        $duplicate = $quizForm->replicate([
-            'slug',
-            'published_at',
-        ]);
-
-        $duplicate->forceFill([
-            'title' => $quizForm->title.' (Copy)',
-            'slug' => QuizForm::generateComplexSlug(),
-            'published_at' => null,
-        ])->save();
+        $duplicate = $duplicateQuizForm->handle($quizForm);
 
         return to_route('forms.edit', ['quizForm' => $duplicate->slug]);
     }
 
-    public function storeFolder(Request $request): RedirectResponse
+    public function moveToFolder(MoveQuizFormToFolderRequest $request, QuizForm $quizForm): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:80',
-                Rule::unique('quiz_folders')->where(fn ($query) => $query->where('user_id', $request->user()->id)),
-            ],
-        ]);
-
-        QuizFolder::query()->firstOrCreate([
-            'user_id' => $request->user()->id,
-            'name' => trim($validated['name']),
-        ]);
-
-        return to_route('dashboard');
-    }
-
-    public function updateFolder(Request $request, QuizFolder $quizFolder): RedirectResponse
-    {
-        abort_unless($request->user()->is($quizFolder->user), 403);
-
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:80',
-                Rule::unique('quiz_folders')
-                    ->ignore($quizFolder)
-                    ->where(fn ($query) => $query->where('user_id', $request->user()->id)),
-            ],
-        ]);
-
-        $name = trim($validated['name']);
-
-        $quizFolder->update([
-            'name' => $name,
-        ]);
-
-        $quizFolder->forms()->update([
-            'folder' => $name,
-        ]);
-
-        return to_route('dashboard');
-    }
-
-    public function destroyFolder(Request $request, QuizFolder $quizFolder): RedirectResponse
-    {
-        abort_unless($request->user()->is($quizFolder->user), 403);
-
-        $quizFolder->forms()->update([
-            'folder' => null,
-            'quiz_folder_id' => null,
-        ]);
-
-        $quizFolder->delete();
-
-        return to_route('dashboard');
-    }
-
-    public function moveToFolder(Request $request, QuizForm $quizForm): RedirectResponse
-    {
-        abort_unless($request->user()->is($quizForm->user), 403);
-
-        $validated = $request->validate([
-            'folder_id' => ['nullable', 'integer', 'exists:quiz_folders,id'],
-            'folder' => ['nullable', 'string', 'max:80'],
-        ]);
-
+        $validated = $request->validated();
         $folder = null;
 
         if (isset($validated['folder_id'])) {
@@ -215,182 +113,40 @@ class QuizFormController extends Controller
         return to_route('dashboard');
     }
 
-    public function destroy(Request $request, QuizForm $quizForm): RedirectResponse
+    public function destroy(QuizForm $quizForm): RedirectResponse
     {
-        abort_unless($request->user()->is($quizForm->user), 403);
+        Gate::authorize('delete', $quizForm);
 
         $quizForm->delete();
 
         return to_route('dashboard');
     }
 
-    public function restore(Request $request, QuizForm $quizForm): RedirectResponse
+    public function restore(QuizForm $quizForm): RedirectResponse
     {
-        abort_unless($request->user()->is($quizForm->user), 403);
+        Gate::authorize('restore', $quizForm);
 
         $quizForm->restore();
 
         return to_route('dashboard');
     }
 
-    public function forceDelete(Request $request, QuizForm $quizForm): RedirectResponse
+    public function forceDelete(QuizForm $quizForm): RedirectResponse
     {
-        abort_unless($request->user()->is($quizForm->user), 403);
+        Gate::authorize('forceDelete', $quizForm);
 
         $quizForm->forceDelete();
 
         return to_route('dashboard');
     }
 
-    public function show(QuizForm $quizForm): Response
+    public function uploadMedia(UploadQuizFormMediaRequest $request): JsonResponse
     {
-        return Inertia::render('PublicQuiz', [
-            'quizForm' => [
-                'title' => $quizForm->title,
-                'description' => $quizForm->description,
-                'questions' => $quizForm->questions,
-                'settings' => $quizForm->settings,
-                'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
-            ],
+        $path = $request->file('file')->store('media', 'public');
+
+        return response()->json([
+            'url' => asset('storage/'.$path),
         ]);
-    }
-
-    public function storeResponse(StoreQuizResponseRequest $request, QuizForm $quizForm): RedirectResponse
-    {
-        $validated = $request->validated();
-
-        QuizResponse::query()->create([
-            'quiz_form_id' => $quizForm->id,
-            'email' => $validated['email'] ?? null,
-            'answers' => $validated['answers'],
-            'ip_address' => $request->ip(),
-            'user_agent' => (string) $request->userAgent(),
-        ]);
-
-        return to_route('forms.public', ['quizForm' => $quizForm->slug]);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function editorPayload(QuizForm $quizForm): array
-    {
-        return [
-            'id' => $quizForm->id,
-            'title' => $quizForm->title,
-            'description' => $quizForm->description,
-            'slug' => $quizForm->slug,
-            'questions' => $quizForm->questions,
-            'settings' => $quizForm->settings,
-            'responses' => $this->responsesPayload($quizForm),
-            'updateUrl' => route('forms.update', $quizForm),
-            'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
-            'isPublished' => ! is_null($quizForm->published_at),
-        ];
-    }
-
-    /**
-     * @return array{total: int, latest: array<int, array<string, mixed>>, questions: array<int, array<string, mixed>>}
-     */
-    private function responsesPayload(QuizForm $quizForm): array
-    {
-        $responses = $quizForm->responses()
-            ->latest()
-            ->get(['id', 'email', 'answers', 'created_at']);
-        $questions = collect($quizForm->questions ?? [])->map(function (array $question) use ($responses): array {
-            $questionId = (string) ($question['id'] ?? '');
-            $counts = [];
-            $textAnswers = [];
-
-            foreach ($responses as $response) {
-                $answer = $response->answers[$questionId] ?? $response->answers[(int) $questionId] ?? null;
-
-                if ($answer === null || $answer === '') {
-                    continue;
-                }
-
-                foreach ((array) $answer as $value) {
-                    if ($value === null || $value === '') {
-                        continue;
-                    }
-
-                    $label = (string) $value;
-                    $counts[$label] = ($counts[$label] ?? 0) + 1;
-
-                    if (count($textAnswers) < 8) {
-                        $textAnswers[] = $label;
-                    }
-                }
-            }
-
-            arsort($counts);
-
-            return [
-                'id' => $question['id'] ?? null,
-                'title' => $question['title'] ?? 'Untitled question',
-                'type' => $question['type'] ?? 'Short answer',
-                'total' => array_sum($counts),
-                'options' => collect($counts)->map(fn (int $count, string $label): array => [
-                    'label' => $label,
-                    'count' => $count,
-                ])->values()->all(),
-                'textAnswers' => $textAnswers,
-            ];
-        })->values()->all();
-
-        return [
-            'total' => $responses->count(),
-            'latest' => $responses->take(5)->map(fn (QuizResponse $response): array => [
-                'id' => $response->id,
-                'email' => $response->email,
-                'submittedAt' => $response->created_at->diffForHumans(),
-            ])->values()->all(),
-            'questions' => $questions,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function recentFormPayload(QuizForm $quizForm): array
-    {
-        return [
-            'id' => $quizForm->id,
-            'title' => $quizForm->title,
-            'description' => $quizForm->description,
-            'folderId' => $quizForm->quiz_folder_id,
-            'folder' => $quizForm->quizFolder?->name ?? $quizForm->folder,
-            'editUrl' => route('forms.edit', ['quizForm' => $quizForm->slug]),
-            'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
-            'duplicateUrl' => route('forms.duplicate', $quizForm),
-            'moveFolderUrl' => route('forms.folder', $quizForm),
-            'deleteUrl' => route('forms.destroy', $quizForm),
-            'restoreUrl' => route('forms.restore', $quizForm),
-            'forceDeleteUrl' => route('forms.force-delete', $quizForm),
-            'updatedLabel' => 'Opened '.$quizForm->updated_at->format('j M Y'),
-            'updatedAt' => $quizForm->updated_at->toISOString(),
-            'isPublished' => ! is_null($quizForm->published_at),
-            'isTrashed' => ! is_null($quizForm->deleted_at),
-            'tone' => match ($quizForm->template) {
-                'party-invite' => 'bg-fuchsia-50',
-                'work-request' => 'bg-cyan-50',
-                'rsvp' => 'bg-orange-50',
-                't-shirt-sign-up' => 'bg-violet-50',
-                default => 'bg-slate-100',
-            },
-            'stripe' => match ($quizForm->template) {
-                'party-invite' => 'bg-fuchsia-300',
-                'work-request' => 'bg-emerald-300',
-                'rsvp' => 'bg-orange-300',
-                't-shirt-sign-up' => 'bg-violet-500',
-                default => 'bg-indigo-500',
-            },
-            'accent' => match ($quizForm->template) {
-                'rsvp' => 'bg-orange-500',
-                'work-request' => 'bg-emerald-500',
-                default => 'bg-violet-600',
-            },
-        ];
     }
 
     /**
@@ -436,110 +192,5 @@ class QuizFormController extends Controller
                 'options' => ['Option 1'],
             ],
         };
-    }
-
-    public function uploadMedia(Request $request): JsonResponse
-    {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:jpg,jpeg,png,gif,webp,mp4,webm,mov', 'max:512000'],
-        ]);
-
-        $path = $request->file('file')->store('media', 'public');
-
-        return response()->json([
-            'url' => asset('storage/'.$path),
-        ]);
-    }
-
-    public function getUnlockRequests(QuizForm $quizForm): JsonResponse
-    {
-        abort_unless($quizForm->user_id === auth()->id(), 403);
-
-        $requests = UnlockRequest::where('quiz_form_id', $quizForm->id)
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'requests' => $requests,
-        ]);
-    }
-
-    public function approveUnlockRequest(UnlockRequest $unlockRequest): JsonResponse
-    {
-        $quizForm = $unlockRequest->quizForm;
-        abort_unless($quizForm->user_id === auth()->id(), 403);
-
-        $unlockRequest->update([
-            'status' => 'approved',
-        ]);
-
-        return response()->json([
-            'message' => 'Request berhasil disetujui.',
-            'request' => $unlockRequest,
-        ]);
-    }
-
-    public function storeUnlockRequest(Request $request, QuizForm $quizForm): JsonResponse
-    {
-        $validated = $request->validate([
-            'respondent_identifier' => ['required', 'string'],
-            'email' => ['nullable', 'email'],
-        ]);
-
-        $code = (string) rand(100000, 999999);
-
-        $unlockRequest = UnlockRequest::updateOrCreate(
-            [
-                'quiz_form_id' => $quizForm->id,
-                'respondent_identifier' => $validated['respondent_identifier'],
-            ],
-            [
-                'email' => $validated['email'] ?? null,
-                'unlock_code' => $code,
-                'status' => 'pending',
-            ]
-        );
-
-        return response()->json([
-            'message' => 'Permintaan buka kunci berhasil dikirim.',
-            'request' => $unlockRequest,
-        ]);
-    }
-
-    public function checkUnlockRequestStatus(QuizForm $quizForm, string $identifier): JsonResponse
-    {
-        $unlockRequest = UnlockRequest::where('quiz_form_id', $quizForm->id)
-            ->where('respondent_identifier', $identifier)
-            ->first();
-
-        return response()->json([
-            'status' => $unlockRequest ? $unlockRequest->status : 'none',
-        ]);
-    }
-
-    public function verifyUnlockCode(Request $request, QuizForm $quizForm): JsonResponse
-    {
-        $validated = $request->validate([
-            'respondent_identifier' => ['required', 'string'],
-            'code' => ['required', 'string'],
-        ]);
-
-        $unlockRequest = UnlockRequest::where('quiz_form_id', $quizForm->id)
-            ->where('respondent_identifier', $validated['respondent_identifier'])
-            ->first();
-
-        if ($unlockRequest && $unlockRequest->unlock_code === trim($validated['code'])) {
-            $unlockRequest->update(['status' => 'approved']);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Kode benar. Kuis terbuka.',
-            ]);
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Kode salah. Silakan coba lagi.',
-        ], 422);
     }
 }

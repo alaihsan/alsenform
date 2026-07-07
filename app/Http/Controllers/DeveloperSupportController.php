@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreDonationRequest;
+use App\Http\Requests\StoreSuggestionRequest;
+use App\Http\Requests\StoreWithdrawalRequest;
 use App\Models\Donation;
 use App\Models\Suggestion;
 use App\Models\Withdrawal;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -14,12 +18,9 @@ class DeveloperSupportController extends Controller
     /**
      * Submit user feedback / suggestion.
      */
-    public function storeSuggestion(Request $request)
+    public function storeSuggestion(StoreSuggestionRequest $request): JsonResponse|RedirectResponse
     {
-        $validated = $request->validate([
-            'subject' => ['required', 'string', 'max:255'],
-            'message' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $suggestion = Suggestion::query()->create([
             'user_id' => $request->user()->id,
@@ -43,13 +44,9 @@ class DeveloperSupportController extends Controller
     /**
      * Initialize a new pending donation.
      */
-    public function storeDonation(Request $request)
+    public function storeDonation(StoreDonationRequest $request): JsonResponse|RedirectResponse
     {
-        $validated = $request->validate([
-            'donor_name' => ['required', 'string', 'max:255'],
-            'amount' => ['required', 'integer', 'min:1000'],
-            'message' => ['nullable', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $donation = Donation::query()->create([
             'user_id' => $request->user()->id,
@@ -75,8 +72,10 @@ class DeveloperSupportController extends Controller
     /**
      * Simulate payment confirmation for a donation.
      */
-    public function confirmDonation(Request $request, Donation $donation)
+    public function confirmDonation(Request $request, Donation $donation): JsonResponse|RedirectResponse
     {
+        abort_unless($request->user()->is($donation->user), 403);
+
         if ($donation->status !== 'success') {
             $donation->update([
                 'status' => 'success',
@@ -139,22 +138,9 @@ class DeveloperSupportController extends Controller
      * Withdraw developer balance.
      * Accessible only to admin users.
      */
-    public function storeWithdrawal(Request $request)
+    public function storeWithdrawal(StoreWithdrawalRequest $request): JsonResponse|RedirectResponse
     {
-        abort_unless($request->user()->is_admin, 403, 'Akses ditolak. Hanya untuk administrator.');
-
-        $totalReceived = Donation::query()->where('status', 'success')->sum('amount');
-        $totalWithdrawn = Withdrawal::query()->sum('amount');
-        $currentBalance = $totalReceived - $totalWithdrawn;
-
-        $validated = $request->validate([
-            'amount' => ['required', 'integer', 'min:5000', 'max:'.$currentBalance],
-            'bank_name' => ['required', 'string', 'max:255'],
-            'account_number' => ['required', 'string', 'max:50'],
-            'account_name' => ['required', 'string', 'max:255'],
-        ], [
-            'amount.max' => 'Saldo tidak mencukupi untuk melakukan penarikan sebesar ini.',
-        ]);
+        $validated = $request->validated();
 
         $withdrawal = Withdrawal::query()->create([
             'user_id' => $request->user()->id,

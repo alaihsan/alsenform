@@ -83,7 +83,7 @@ class QuizForm extends Model
             $result = '';
             while (strlen($result) < 59) {
                 $remaining = 59 - strlen($result);
-                $groupSize = rand(7, 10);
+                $groupSize = random_int(7, 10);
 
                 if ($groupSize >= $remaining) {
                     $groupSize = $remaining;
@@ -93,7 +93,7 @@ class QuizForm extends Model
 
                 $group = '';
                 for ($i = 0; $i < $groupSize; $i++) {
-                    $group .= $chars[rand(0, strlen($chars) - 1)];
+                    $group .= $chars[random_int(0, strlen($chars) - 1)];
                 }
 
                 $result .= $group;

@@ -109,6 +109,23 @@ test('authenticated users can confirm a donation (payment simulation)', function
     ]);
 });
 
+test('authenticated users cannot confirm another users donation', function () {
+    $owner = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $this->actingAs($otherUser);
+
+    $donation = Donation::query()->create([
+        'user_id' => $owner->id,
+        'donor_name' => 'Supporter',
+        'amount' => 50000,
+        'payment_reference' => 'DON-OWNER',
+        'status' => 'pending',
+    ]);
+
+    $this->postJson(route('support.confirm-donation', $donation))
+        ->assertForbidden();
+});
+
 test('authenticated admin users can view support stats and suggestions', function () {
     $admin = User::factory()->create(['is_admin' => true]);
     $this->actingAs($admin);

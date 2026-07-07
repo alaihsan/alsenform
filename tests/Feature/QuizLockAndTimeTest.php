@@ -3,6 +3,7 @@
 use App\Models\QuizForm;
 use App\Models\UnlockRequest;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 test('guests are unauthorized to get unlock requests of a form', function () {
     $form = QuizForm::factory()->create();
@@ -29,7 +30,7 @@ test('owners can fetch unlock requests and approve them', function () {
         'quiz_form_id' => $form->id,
         'respondent_identifier' => 'test-resp-123',
         'email' => 'student@test.com',
-        'unlock_code' => '555666',
+        'unlock_code' => Hash::make('555666'),
         'status' => 'pending',
     ]);
 
@@ -46,13 +47,16 @@ test('owners can fetch unlock requests and approve them', function () {
 });
 
 test('respondents can create unlock request, check status and verify code', function () {
-    $form = QuizForm::factory()->create();
+    $form = QuizForm::factory()->create([
+        'published_at' => now(),
+    ]);
 
     // 1. Create request
-    $this->postJson(route('forms.public.unlock-requests.store', $form->slug), [
+    $createResponse = $this->postJson(route('forms.public.unlock-requests.store', $form->slug), [
         'respondent_identifier' => 'test-resp-789',
         'email' => 'anon@gmail.com',
-    ])->assertStatus(200);
+    ])->assertStatus(200)
+        ->assertJsonStructure(['code']);
 
     $req = UnlockRequest::where('quiz_form_id', $form->id)
         ->where('respondent_identifier', 'test-resp-789')
@@ -60,6 +64,7 @@ test('respondents can create unlock request, check status and verify code', func
 
     expect($req)->not->toBeNull();
     expect($req->status)->toBe('pending');
+    expect($req->unlock_code)->not->toBe($createResponse->json('code'));
 
     // 2. Check status
     $this->getJson(route('forms.public.unlock-requests.status', [$form->slug, 'test-resp-789']))
@@ -75,7 +80,7 @@ test('respondents can create unlock request, check status and verify code', func
     // 4. Verify correct code succeeds
     $this->postJson(route('forms.public.unlock-verify', $form->slug), [
         'respondent_identifier' => 'test-resp-789',
-        'code' => $req->unlock_code,
+        'code' => $createResponse->json('code'),
     ])->assertStatus(200)
         ->assertJsonPath('success', true);
 

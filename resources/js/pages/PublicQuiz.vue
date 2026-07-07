@@ -57,6 +57,7 @@ const isRequestingUnlock = ref(false);
 const hasRequestedUnlock = ref(false);
 const unlockRequestStatus = ref<'none' | 'pending' | 'approved'>('none');
 const manualUnlockCode = ref('');
+const generatedUnlockCode = ref('');
 const unlockError = ref('');
 const showRequestSuccess = ref(false);
 
@@ -99,12 +100,13 @@ const requestUnlock = async () => {
     isRequestingUnlock.value = true;
     unlockError.value = '';
     try {
-        await axios.post(`/forms/${props.quizForm.slug}/unlock-requests`, {
+        const response = await axios.post(`/forms/${props.quizForm.slug}/unlock-requests`, {
             respondent_identifier: respondentIdentifier,
             email: unlockRequestEmail.value || email.value || null,
         });
         hasRequestedUnlock.value = true;
         unlockRequestStatus.value = 'pending';
+        generatedUnlockCode.value = response.data.code ?? '';
         showRequestSuccess.value = true;
     } catch (err: any) {
         unlockError.value = err.response?.data?.message || 'Gagal mengirim permintaan buka kunci.';
@@ -147,6 +149,7 @@ const unlockQuiz = () => {
     isLocked.value = false;
     localStorage.setItem(`is_locked_${props.quizForm.id}`, 'false');
     manualUnlockCode.value = '';
+    generatedUnlockCode.value = '';
     unlockError.value = '';
     showRequestSuccess.value = false;
     if (pollInterval) {
@@ -674,6 +677,10 @@ const submitAnotherResponse = () => {
                     <p class="mt-1.5 text-xs text-slate-400 leading-relaxed">
                         Permintaan buka kunci telah dikirim. Halaman ini akan terbuka otomatis begitu disetujui oleh pembuat kuis.
                     </p>
+                    <div v-if="generatedUnlockCode" class="mt-4 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-center">
+                        <span class="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">Kode satu kali</span>
+                        <span class="mt-1 block font-mono text-2xl font-black tracking-[0.3em] text-white">{{ generatedUnlockCode }}</span>
+                    </div>
                 </div>
 
                 <div v-else class="space-y-3">

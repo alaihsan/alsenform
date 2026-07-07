@@ -67,7 +67,7 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.defaultCollectEmailMode' => ['nullable', 'string', Rule::in(['none', 'verified', 'responder'])],
             'settings.defaultQuestionRequired' => ['nullable', 'boolean'],
             'settings.defaultQuestionPoints' => ['nullable', 'integer', 'min:0', 'max:1000'],
-            'settings.maxUploadSize' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'settings.maxUploadSize' => ['nullable', 'integer', 'min:1', 'max:40'],
             'settings.questionFont' => ['nullable', 'string', 'max:255'],
             'settings.answerFont' => ['nullable', 'string', 'max:255'],
             'settings.themeColorClass' => ['nullable', 'string', 'max:100'],

@@ -1,24 +1,32 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
+import {
+    backgroundPatterns,
+    colorThemes,
+    fonts,
+    gridQuestionTypes,
+    noOptionQuestionTypes,
+    optionQuestionTypes,
+    pieColors,
+    questionTypes,
+    scaleQuestionTypes,
+    templatePresets,
+} from '@/constants/form-editor';
+import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
+import type { PreviewAnswer, Question, QuestionType, QuizFormPayload } from '@/types/quiz';
 import axios from 'axios';
 import {
-    CalendarDays,
     Check,
-    CheckSquare,
     ChevronDown,
     Circle,
-    Clock,
     Download,
     Eye,
     FileText,
     FileUp,
-    Grid3X3,
     Image,
     Key,
     Link2,
-    List,
-    Menu,
     MoreVertical,
     Palette,
     PanelTop,
@@ -34,92 +42,7 @@ import {
     UserPlus,
     Video,
 } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, reactive, ref, watch, type Component } from 'vue';
-
-type QuestionType =
-    | 'Short answer'
-    | 'Paragraph'
-    | 'Multiple choice'
-    | 'Checkboxes'
-    | 'Drop-down'
-    | 'File upload'
-    | 'Linear scale'
-    | 'Rating'
-    | 'Multiple-choice grid'
-    | 'Tick box grid'
-    | 'Date'
-    | 'Time';
-
-type Question = {
-    id: number;
-    title: string;
-    description: string;
-    type: QuestionType;
-    options: string[];
-    rows?: string[];
-    columns?: string[];
-    answer: any;
-    required: boolean;
-    media: { type: 'image' | 'video'; url: string }[];
-    points: number;
-};
-
-type PreviewAnswer = string | string[] | Record<number, any>;
-
-type QuizFormPayload = {
-    id: number;
-    title: string;
-    description: string;
-    slug: string;
-    questions: Question[];
-    isPublished?: boolean;
-    settings: {
-        collectEmail: boolean;
-        showProgress: boolean;
-        shuffleQuestions: boolean;
-        isQuiz?: boolean;
-        emailCollectionMode?: 'none' | 'verified' | 'responder';
-        sendResponseCopy?: 'off' | 'request' | 'always';
-        allowResponseEditing?: boolean;
-        limitOneResponse?: boolean;
-        confirmationMessage?: string;
-        showSubmitAnotherResponse?: boolean;
-        showResultsSummary?: boolean;
-        disableRespondentAutosave?: boolean;
-        defaultCollectEmailMode?: 'none' | 'verified' | 'responder';
-        defaultQuestionRequired?: boolean;
-        defaultQuestionPoints?: number;
-        maxUploadSize?: number;
-        questionFont?: string;
-        answerFont?: string;
-        themeColorClass?: string;
-        backgroundColorClass?: string;
-        backgroundPatternClass?: string;
-        lockOnBlur?: boolean;
-        timeLimit?: number;
-    };
-    responses: {
-        total: number;
-        latest: {
-            id: number;
-            email: string | null;
-            submittedAt: string;
-        }[];
-        questions: {
-            id: number | string | null;
-            title: string;
-            type: string;
-            total: number;
-            options: {
-                label: string;
-                count: number;
-            }[];
-            textAnswers: string[];
-        }[];
-    };
-    updateUrl: string;
-    publicUrl: string;
-};
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
 const getYoutubeEmbedUrl = (url: string): string | undefined => {
     if (!url) {
@@ -134,45 +57,6 @@ const props = defineProps<{
     template: string;
     quizForm?: QuizFormPayload;
 }>();
-
-const templatePresets: Record<string, { title: string; description: string; question: string; options: string[] }> = {
-    blank: {
-        title: 'Untitled form',
-        description: 'Form description',
-        question: 'Untitled Question',
-        options: ['Option 1'],
-    },
-    'contact-information': {
-        title: 'Contact Information',
-        description: 'Kumpulkan informasi kontak responden.',
-        question: 'Informasi apa yang ingin dikirim?',
-        options: ['Nama lengkap', 'Email', 'Nomor WhatsApp'],
-    },
-    'party-invite': {
-        title: 'Party Invite',
-        description: 'Konfirmasi undangan acara.',
-        question: 'Apakah kamu akan hadir?',
-        options: ['Ya, hadir', 'Belum pasti', 'Tidak bisa hadir'],
-    },
-    'work-request': {
-        title: 'Work Request',
-        description: 'Detail permintaan pekerjaan untuk tim.',
-        question: 'Jenis pekerjaan apa yang dibutuhkan?',
-        options: ['Desain', 'Dokumen', 'Perbaikan teknis'],
-    },
-    rsvp: {
-        title: 'RSVP',
-        description: 'Konfirmasi kehadiran peserta.',
-        question: 'Status kehadiran kamu?',
-        options: ['Hadir', 'Tidak hadir', 'Mungkin hadir'],
-    },
-    't-shirt-sign-up': {
-        title: 'T-Shirt Sign Up',
-        description: 'Pemesanan kaos dan pilihan ukuran.',
-        question: 'Ukuran kaos yang dipilih?',
-        options: ['S', 'M', 'L', 'XL'],
-    },
-};
 
 const preset = templatePresets[props.template] ?? templatePresets.blank;
 let nextQuestionId = Math.max(...(props.quizForm?.questions?.map((question: Question) => Number(question.id)) ?? [1])) + 1;
@@ -223,7 +107,7 @@ const form = reactive({
         defaultCollectEmailMode: props.quizForm?.settings?.defaultCollectEmailMode ?? 'none',
         defaultQuestionRequired: props.quizForm?.settings?.defaultQuestionRequired ?? false,
         defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
-        maxUploadSize: props.quizForm?.settings?.maxUploadSize ?? 20,
+        maxUploadSize: Math.min(props.quizForm?.settings?.maxUploadSize ?? 20, 40),
         questionFont: props.quizForm?.settings?.questionFont ?? "'Inter', sans-serif",
         answerFont: props.quizForm?.settings?.answerFont ?? "'Inter', sans-serif",
         themeColorClass: props.quizForm?.settings?.themeColorClass ?? 'bg-indigo-600',
@@ -249,45 +133,6 @@ const isImportModalOpen = ref(false);
 const isImportingFile = ref(false);
 const importError = ref('');
 const statusMessage = ref('All changes saved locally');
-const fonts = [
-    { name: 'Inter (Default)', value: "'Inter', sans-serif" },
-    { name: 'Outfit (Modern)', value: "'Outfit', sans-serif" },
-    { name: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', sans-serif" },
-    { name: 'Montserrat', value: "'Montserrat', sans-serif" },
-    { name: 'Roboto', value: "'Roboto', sans-serif" },
-    { name: 'Playfair Display', value: "'Playfair Display', serif" },
-    { name: 'Lora', value: "'Lora', serif" },
-    { name: 'Merriweather', value: "'Merriweather', serif" },
-    { name: 'Georgia', value: "'Georgia', serif" },
-    { name: 'Fira Code (Monospace)', value: "'Fira Code', monospace" },
-];
-
-const colorThemes = [
-    { name: 'Classic Indigo', theme: 'bg-indigo-600', bg: 'bg-[#f0efff]' },
-    { name: 'Emerald Garden', theme: 'bg-emerald-600', bg: 'bg-[#eefdf5]' },
-    { name: 'Rose Blush', theme: 'bg-rose-600', bg: 'bg-[#fff1f2]' },
-    { name: 'Amber Warmth', theme: 'bg-amber-600', bg: 'bg-[#fefaf0]' },
-    { name: 'Sky Breeze', theme: 'bg-sky-600', bg: 'bg-[#f0f9ff]' },
-    { name: 'Fuchsia Fantasy', theme: 'bg-fuchsia-600', bg: 'bg-[#fdf4ff]' },
-    { name: 'Violet Mystery', theme: 'bg-violet-600', bg: 'bg-[#f5f3ff]' },
-    { name: 'Teal Dream', theme: 'bg-teal-600', bg: 'bg-[#f0fdfa]' },
-    { name: 'Orange Warmth', theme: 'bg-orange-600', bg: 'bg-[#fff7ed]' },
-    { name: 'Slate Gray', theme: 'bg-slate-700', bg: 'bg-[#f8fafc]' },
-];
-
-const backgroundPatterns = [
-    { name: 'Solid Background', value: 'pattern-none' },
-    { name: 'Polka Dots', value: 'pattern-dots' },
-    { name: 'Grid Graph', value: 'pattern-grid' },
-    { name: 'Stripes', value: 'pattern-diagonal' },
-    { name: 'Waves Ripple', value: 'pattern-waves' },
-    { name: 'Zigzag Chevron', value: 'pattern-zigzag' },
-    { name: 'Hexagon Cell', value: 'pattern-hexagons' },
-    { name: 'Blueprint Grid', value: 'pattern-blueprint' },
-    { name: 'Bubbles Circle', value: 'pattern-bubbles' },
-    { name: 'Triangle Mesh', value: 'pattern-triangles' },
-];
-
 const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
 const publicSlug = ref(props.quizForm?.slug ?? 'untitled-form');
@@ -359,26 +204,6 @@ const toggleSetting = (key: keyof typeof form.settings) => {
     markSettingsChanged();
 };
 
-const questionTypes = [
-    { value: 'Short answer', group: 'text', icon: Menu },
-    { value: 'Paragraph', group: 'text', icon: List },
-    { value: 'Multiple choice', group: 'choice', icon: Circle },
-    { value: 'Checkboxes', group: 'choice', icon: CheckSquare },
-    { value: 'Drop-down', group: 'choice', icon: ChevronDown },
-    { value: 'File upload', group: 'file', icon: FileText },
-    { value: 'Linear scale', group: 'scale', icon: MoreVertical },
-    { value: 'Rating', group: 'scale', icon: Star },
-    { value: 'Multiple-choice grid', group: 'grid', icon: Grid3X3 },
-    { value: 'Tick box grid', group: 'grid', icon: Grid3X3 },
-    { value: 'Date', group: 'date', icon: CalendarDays },
-    { value: 'Time', group: 'date', icon: Clock },
-] as const satisfies readonly { value: QuestionType; group: string; icon: Component }[];
-
-const optionQuestionTypes: QuestionType[] = ['Multiple choice', 'Checkboxes', 'Drop-down'];
-const noOptionQuestionTypes: QuestionType[] = ['Short answer', 'Paragraph', 'File upload', 'Date', 'Time'];
-const scaleQuestionTypes: QuestionType[] = ['Linear scale', 'Rating'];
-const gridQuestionTypes: QuestionType[] = ['Multiple-choice grid', 'Tick box grid'];
-
 const questionTypeIcon = (type: QuestionType) => questionTypes.find((questionType) => questionType.value === type)?.icon ?? Circle;
 
 const activeQuestion = computed(() => form.questions.find((question: Question) => question.id === activeQuestionId.value) ?? form.questions[0]);
@@ -386,7 +211,6 @@ const responseCount = computed(() => props.quizForm?.responses?.total ?? 0);
 const shareUrl = computed(() => publicUrl.value);
 const responseQuestions = computed(() => props.quizForm?.responses?.questions ?? []);
 const latestResponses = computed(() => props.quizForm?.responses?.latest ?? []);
-const pieColors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#a855f7', '#14b8a6', '#f97316'];
 
 const pieChartStyle = (question: NonNullable<QuizFormPayload['responses']>['questions'][number]) => {
     if (!question.total || !question.options.length) {
@@ -2699,7 +2523,7 @@ watch(
                                                 v-model.number="form.settings.maxUploadSize"
                                                 type="number"
                                                 min="1"
-                                                max="500"
+                                                max="40"
                                                 class="h-12 w-28 rounded border border-slate-300 px-4 text-lg focus:border-indigo-500 focus:ring-indigo-500"
                                                 @change="markSettingsChanged"
                                             />
@@ -2712,62 +2536,12 @@ watch(
                     </section>
                 </template>
 
-                <section v-else-if="activeTab === 'keamanan'" class="space-y-5">
-                    <div class="rounded-xl border border-slate-300 bg-white p-7 shadow-sm">
-                        <div class="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                            <div>
-                                <h2 class="text-2xl font-normal text-slate-950">Keamanan & Buka Kunci Kuis</h2>
-                                <p class="mt-2 text-base text-slate-500">Lihat dan setujui permintaan pengerjaan ulang / buka kunci kuis akibat pemindahan tab oleh responden.</p>
-                            </div>
-                            <button
-                                type="button"
-                                class="rounded-xl bg-indigo-50 hover:bg-indigo-100 px-4 py-2 text-xs font-bold text-indigo-700 transition"
-                                @click="fetchUnlockRequests"
-                            >
-                                Segarkan List
-                            </button>
-                        </div>
-
-                        <div v-if="unlockRequests.length" class="mt-6 divide-y divide-slate-150 border border-slate-200 rounded-2xl overflow-hidden">
-                            <div v-for="req in unlockRequests" :key="req.id" class="flex items-center justify-between gap-4 p-5 hover:bg-slate-50 transition-colors">
-                                <div class="min-w-0">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-bold text-base text-slate-800">{{ req.email ?? 'Responden Anonim' }}</span>
-                                        <span :class="['text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider', req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">
-                                            {{ req.status === 'approved' ? 'Terbuka' : 'Terkunci' }}
-                                        </span>
-                                    </div>
-                                    <span class="block text-xs text-slate-500 font-mono mt-1">ID: {{ req.respondent_identifier }}</span>
-                                    <span class="block text-xs text-slate-400 mt-0.5">Meminta pada: {{ new Date(req.created_at).toLocaleString('id-ID') }}</span>
-                                </div>
-                                <div class="flex items-center gap-4">
-                                    <div class="text-right">
-                                        <span class="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Kode Buka</span>
-                                        <span class="block text-xl font-black text-indigo-600 font-mono tracking-wider">{{ req.unlock_code }}</span>
-                                    </div>
-                                    <button
-                                        v-if="req.status === 'pending'"
-                                        type="button"
-                                        class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 shadow transition-all"
-                                        @click="approveUnlockRequest(req.id)"
-                                    >
-                                        Setujui
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-else class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center mt-6">
-                            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50">
-                                <Key class="h-6 w-6 text-indigo-500" />
-                            </div>
-                            <h3 class="mt-4 text-lg font-semibold text-slate-700">Belum ada request masuk</h3>
-                            <p class="mt-2 text-sm text-slate-500">
-                                Jika ada responden yang pindah tab saat mengerjakan kuis, permintaan persetujuan akan muncul di sini.
-                            </p>
-                        </div>
-                    </div>
-                </section>
+                <UnlockRequestsPanel
+                    v-else-if="activeTab === 'keamanan'"
+                    :unlock-requests="unlockRequests"
+                    @refresh="fetchUnlockRequests"
+                    @approve="approveUnlockRequest"
+                />
             </div>
         </section>
 

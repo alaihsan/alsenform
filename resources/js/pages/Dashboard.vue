@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
+import { formTemplates } from '@/constants/dashboard';
+import { useToast } from '@/composables/useToast';
+import type { QuizFolder, RecentForm } from '@/types/quiz';
 import {
     AArrowDown,
     Clipboard,
@@ -36,36 +39,6 @@ import { usePage, useForm } from '@inertiajs/vue3';
 import { LogOut, User, Key, MessageSquare, Heart, Coins, Award, Shield, Wallet, History } from 'lucide-vue-next';
 import axios from 'axios';
 
-type RecentForm = {
-    id: number;
-    title: string;
-    description: string;
-    folderId: number | null;
-    folder: string | null;
-    editUrl: string;
-    publicUrl: string;
-    duplicateUrl: string;
-    moveFolderUrl: string;
-    deleteUrl: string;
-    restoreUrl: string;
-    forceDeleteUrl: string;
-    updatedLabel: string;
-    updatedAt: string;
-    tone: string;
-    stripe: string;
-    accent: string;
-    isPublished: boolean;
-    isTrashed: boolean;
-};
-
-type QuizFolder = {
-    id: number;
-    name: string;
-    formsCount: number;
-    updateUrl: string;
-    deleteUrl: string;
-};
-
 type FolderModalMode = 'create' | 'rename' | 'delete';
 type FormDeleteMode = 'trash' | 'force';
 
@@ -87,7 +60,7 @@ const activeFolderMenuId = ref<number | null>(null);
 const draggedFormId = ref<number | null>(null);
 const activeDropFolderId = ref<number | null>(null);
 const isHomeDropActive = ref(false);
-const toastMessage = ref('');
+const { toastMessage, showToast } = useToast();
 const folderModalMode = ref<FolderModalMode | null>(null);
 const selectedFolder = ref<QuizFolder | null>(null);
 const folderNameInput = ref('');
@@ -122,16 +95,7 @@ const filteredRecentForms = computed(() => {
     });
 });
 
-const templates = [
-    { title: 'Blank form', slug: 'blank', theme: 'blank', color: 'bg-white' },
-    { title: 'Contact Information', slug: 'contact-information', theme: 'contact', color: 'bg-emerald-50' },
-    { title: 'Party Invite', slug: 'party-invite', theme: 'party', color: 'bg-fuchsia-50' },
-    { title: 'Work Request', slug: 'work-request', theme: 'work', color: 'bg-cyan-50' },
-    { title: 'RSVP', slug: 'rsvp', theme: 'rsvp', color: 'bg-orange-50' },
-    { title: 'T-Shirt Sign Up', slug: 't-shirt-sign-up', theme: 'shirt', color: 'bg-violet-50' },
-];
-
-const visibleTemplates = computed(() => (isTemplateGalleryOpen.value ? templates : templates.slice(0, 3)));
+const visibleTemplates = computed(() => (isTemplateGalleryOpen.value ? formTemplates : formTemplates.slice(0, 3)));
 const statusFilterLabel = computed(() => {
     if (statusFilter.value === 'published') {
         return 'Published';
@@ -148,15 +112,6 @@ const statusFilterLabel = computed(() => {
     return 'All forms';
 });
 const activeFolderFilter = computed(() => folders.value.find((folder) => folder.id === folderFilter.value) ?? null);
-
-function showToast(message: string): void {
-    toastMessage.value = message;
-    setTimeout(() => {
-        if (toastMessage.value === message) {
-            toastMessage.value = '';
-        }
-    }, 2500);
-}
 
 function copyPublicUrl(form: RecentForm): void {
     if (!navigator.clipboard) {
