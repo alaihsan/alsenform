@@ -29,7 +29,8 @@ import {
     Video,
 } from 'lucide-vue-next';
 import { useDebounceFn } from '@vueuse/core';
-import { computed, reactive, ref, watch, type Component } from 'vue';
+import { computed, onMounted, reactive, ref, watch, type Component } from 'vue';
+import axios from 'axios';
 
 type QuestionType =
     | 'Short answer'
@@ -128,13 +129,13 @@ const templatePresets: Record<string, { title: string; description: string; ques
 };
 
 const preset = templatePresets[props.template] ?? templatePresets.blank;
-let nextQuestionId = Math.max(...(props.quizForm?.questions.map((question) => Number(question.id)) ?? [1])) + 1;
+let nextQuestionId = Math.max(...(props.quizForm?.questions?.map((question) => Number(question.id)) ?? [1])) + 1;
 
 const form = reactive({
     title: props.quizForm?.title ?? preset.title,
     description: props.quizForm?.description ?? preset.description,
     questions: [
-        ...(props.quizForm?.questions.map((q) => ({
+        ...(props.quizForm?.questions?.map((q) => ({
             id: q.id,
             title: q.title,
             description: q.description ?? '',
@@ -158,10 +159,16 @@ const form = reactive({
             },
         ]),
     ] as Question[],
-    settings: props.quizForm?.settings ?? {
-        collectEmail: false,
-        showProgress: true,
-        shuffleQuestions: false,
+    settings: {
+        collectEmail: props.quizForm?.settings?.collectEmail ?? false,
+        showProgress: props.quizForm?.settings?.showProgress ?? true,
+        shuffleQuestions: props.quizForm?.settings?.shuffleQuestions ?? false,
+        maxUploadSize: props.quizForm?.settings?.maxUploadSize ?? 20,
+        questionFont: props.quizForm?.settings?.questionFont ?? "'Inter', sans-serif",
+        answerFont: props.quizForm?.settings?.answerFont ?? "'Inter', sans-serif",
+        themeColorClass: props.quizForm?.settings?.themeColorClass ?? 'bg-indigo-600',
+        backgroundColorClass: props.quizForm?.settings?.backgroundColorClass ?? 'bg-[#f0efff]',
+        backgroundPatternClass: props.quizForm?.settings?.backgroundPatternClass ?? 'pattern-none',
     },
 });
 
@@ -175,12 +182,53 @@ const openTypeMenuQuestionId = ref<number | null>(null);
 const draggedQuestionId = ref<number | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const statusMessage = ref('All changes saved locally');
-const themeColor = ref('bg-indigo-600');
+const fonts = [
+    { name: 'Inter (Default)', value: "'Inter', sans-serif" },
+    { name: 'Outfit (Modern)', value: "'Outfit', sans-serif" },
+    { name: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', sans-serif" },
+    { name: 'Montserrat', value: "'Montserrat', sans-serif" },
+    { name: 'Roboto', value: "'Roboto', sans-serif" },
+    { name: 'Playfair Display', value: "'Playfair Display', serif" },
+    { name: 'Lora', value: "'Lora', serif" },
+    { name: 'Merriweather', value: "'Merriweather', serif" },
+    { name: 'Georgia', value: "'Georgia', serif" },
+    { name: 'Fira Code (Monospace)', value: "'Fira Code', monospace" }
+];
+
+const colorThemes = [
+    { name: 'Classic Indigo', theme: 'bg-indigo-600', bg: 'bg-[#f0efff]' },
+    { name: 'Emerald Garden', theme: 'bg-emerald-600', bg: 'bg-[#eefdf5]' },
+    { name: 'Rose Blush', theme: 'bg-rose-600', bg: 'bg-[#fff1f2]' },
+    { name: 'Amber Warmth', theme: 'bg-amber-600', bg: 'bg-[#fefaf0]' },
+    { name: 'Sky Breeze', theme: 'bg-sky-600', bg: 'bg-[#f0f9ff]' },
+    { name: 'Fuchsia Fantasy', theme: 'bg-fuchsia-600', bg: 'bg-[#fdf4ff]' },
+    { name: 'Violet Mystery', theme: 'bg-violet-600', bg: 'bg-[#f5f3ff]' },
+    { name: 'Teal Dream', theme: 'bg-teal-600', bg: 'bg-[#f0fdfa]' },
+    { name: 'Orange Warmth', theme: 'bg-orange-600', bg: 'bg-[#fff7ed]' },
+    { name: 'Slate Gray', theme: 'bg-slate-700', bg: 'bg-[#f8fafc]' }
+];
+
+const backgroundPatterns = [
+    { name: 'Solid Background', value: 'pattern-none' },
+    { name: 'Polka Dots', value: 'pattern-dots' },
+    { name: 'Grid Graph', value: 'pattern-grid' },
+    { name: 'Stripes', value: 'pattern-diagonal' },
+    { name: 'Waves Ripple', value: 'pattern-waves' },
+    { name: 'Zigzag Chevron', value: 'pattern-zigzag' },
+    { name: 'Hexagon Cell', value: 'pattern-hexagons' },
+    { name: 'Blueprint Grid', value: 'pattern-blueprint' },
+    { name: 'Bubbles Circle', value: 'pattern-bubbles' },
+    { name: 'Triangle Mesh', value: 'pattern-triangles' }
+];
+
+const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
 const publicSlug = ref(props.quizForm?.slug ?? 'untitled-form');
 const publicUrl = ref(props.quizForm?.publicUrl ?? 'http://alsenform.test/forms/untitled-form');
 const slugWarning = ref('');
 const isSaving = ref(false);
+const isPublished = ref(props.quizForm?.isPublished ?? false);
+const showStatusMenu = ref(false);
 const appOrigin = ref(typeof window === 'undefined' ? 'http://alsenform.test' : window.location.origin);
 
 const questionTypes = [
@@ -221,9 +269,44 @@ const markChanged = (message = 'Draft updated') => {
 const normalizePublicSlug = () => {
     publicSlug.value =
         publicSlug.value
-            .toLowerCase()
-            .replace(/[^a-z0-9_-]+/g, '-')
+            .replace(/[^a-zA-Z0-9_-]+/g, '-')
             .replace(/^-+|-+$/g, '') || 'untitled-form';
+    slugWarning.value = '';
+};
+
+const generateComplexSlug = (): string => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    
+    while (result.length < 59) {
+        const remaining = 59 - result.length;
+        let groupSize = Math.floor(Math.random() * (10 - 7 + 1)) + 7;
+        
+        if (groupSize >= remaining) {
+            groupSize = remaining;
+        } else if (remaining - groupSize <= 2) {
+            groupSize = remaining;
+        }
+        
+        let group = '';
+        for (let i = 0; i < groupSize; i++) {
+            group += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        
+        result += group;
+        if (result.length < 59) {
+            result += '-';
+        }
+    }
+    
+    if (result.length > 59) {
+        result = result.substring(0, 59);
+    }
+    return result;
+};
+
+const handleGenerateSlug = () => {
+    publicSlug.value = generateComplexSlug();
     slugWarning.value = '';
 };
 
@@ -233,6 +316,9 @@ const saveDraft = (publishAfterSave = false) => {
     }
 
     normalizePublicSlug();
+    if (!publicSlug.value) {
+        publicSlug.value = 'untitled-form';
+    }
     isSaving.value = true;
     slugWarning.value = '';
 
@@ -244,6 +330,7 @@ const saveDraft = (publishAfterSave = false) => {
             slug: publicSlug.value,
             questions: form.questions,
             settings: form.settings,
+            published: isPublished.value,
         },
         {
             preserveScroll: true,
@@ -252,6 +339,70 @@ const saveDraft = (publishAfterSave = false) => {
                 publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
                 markChanged('Draft saved');
                 showPublish.value = publishAfterSave;
+                // Update local storage in sync
+                localStorage.setItem(`quiz_draft_${props.quizForm.id}`, JSON.stringify({
+                    title: form.title,
+                    description: form.description,
+                    questions: form.questions,
+                    settings: form.settings,
+                    isPublished: isPublished.value,
+                }));
+            },
+            onError: (errors) => {
+                slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
+                markChanged('Link needs attention');
+                showPublish.value = true;
+            },
+            onFinish: () => {
+                isSaving.value = false;
+            },
+        },
+    );
+};
+
+const saveDraftAndCopy = () => {
+    if (!props.quizForm) {
+        return;
+    }
+
+    normalizePublicSlug();
+    if (!publicSlug.value) {
+        publicSlug.value = 'untitled-form';
+    }
+    isSaving.value = true;
+    slugWarning.value = '';
+
+    router.patch(
+        props.quizForm.updateUrl,
+        {
+            title: form.title,
+            description: form.description,
+            slug: publicSlug.value,
+            questions: form.questions,
+            settings: form.settings,
+            published: isPublished.value,
+        },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
+                markChanged('Draft saved');
+                
+                // Copy to clipboard
+                copyShareUrl();
+                
+                // Close modal
+                showPublish.value = false;
+
+                // Sync local storage
+                localStorage.setItem(`quiz_draft_${props.quizForm.id}`, JSON.stringify({
+                    title: form.title,
+                    description: form.description,
+                    questions: form.questions,
+                    settings: form.settings,
+                    isPublished: isPublished.value,
+                }));
             },
             onError: (errors) => {
                 slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
@@ -326,30 +477,44 @@ const addOption = (question: Question, label = `Option ${question.options.length
 };
 
 const updateOption = (question: Question, optionIndex: number, value: string) => {
-    const previousValue = question.options[optionIndex];
     question.options[optionIndex] = value;
-
-    if (Array.isArray(question.answer)) {
-        question.answer = question.answer.map((answer) => (answer === previousValue ? value : answer)).filter(Boolean);
-    } else if (question.answer === previousValue) {
-        question.answer = value;
-    }
-
     markChanged('Option updated');
 };
 
 const removeOption = (question: Question, optionIndex: number) => {
-    const removedOption = question.options[optionIndex];
     question.options.splice(optionIndex, 1);
     if (question.options.length === 0 && !noOptionQuestionTypes.includes(question.type)) {
         question.options.push('Option 1');
     }
-    if (Array.isArray(question.answer)) {
-        question.answer = question.answer.filter((answer) => answer !== removedOption);
-    } else if (question.answer === removedOption) {
-        question.answer = '';
+
+    if (question.type === 'Checkboxes') {
+        const currentAnswer = Array.isArray(question.answer) ? [...question.answer] : [];
+        const newAnswer: number[] = [];
+        currentAnswer.forEach((ansIdx) => {
+            const numIdx = Number(ansIdx);
+            if (numIdx < optionIndex) {
+                newAnswer.push(numIdx);
+            } else if (numIdx > optionIndex) {
+                newAnswer.push(numIdx - 1);
+            }
+        });
+        question.answer = newAnswer;
+    } else {
+        const numIdx = Number(question.answer);
+        if (numIdx === optionIndex) {
+            question.answer = '';
+        } else if (numIdx > optionIndex) {
+            question.answer = numIdx - 1;
+        }
     }
     markChanged('Option removed');
+};
+
+const isQuestionAnswered = (question: Question) => {
+    if (question.type === 'Checkboxes') {
+        return Array.isArray(question.answer) && question.answer.length > 0;
+    }
+    return question.answer !== '' && question.answer !== null && question.answer !== undefined;
 };
 
 const normalizeCorrectAnswer = (question: Question) => {
@@ -359,17 +524,29 @@ const normalizeCorrectAnswer = (question: Question) => {
     }
 
     if (question.type === 'Checkboxes') {
-        question.answer = Array.isArray(question.answer)
-            ? question.answer.filter((answer) => question.options.includes(answer))
-            : question.answer && question.options.includes(question.answer)
-              ? [question.answer]
-              : [];
-
+        let currentAnswer = Array.isArray(question.answer) ? [...question.answer] : [];
+        // Convert legacy string array to indices
+        if (currentAnswer.length && typeof currentAnswer[0] === 'string') {
+            currentAnswer = currentAnswer.map((val) => question.options.indexOf(val)).filter((idx) => idx >= 0);
+        }
+        question.answer = currentAnswer.map(Number).filter((idx) => idx >= 0 && idx < question.options.length);
         return;
     }
 
-    const currentAnswer = Array.isArray(question.answer) ? question.answer[0] : question.answer;
-    question.answer = currentAnswer && question.options.includes(currentAnswer) ? currentAnswer : '';
+    let currentAnswer = question.answer;
+    if (Array.isArray(currentAnswer)) {
+        currentAnswer = currentAnswer[0];
+    }
+    if (typeof currentAnswer === 'string' && currentAnswer !== '') {
+        const idx = question.options.indexOf(currentAnswer);
+        currentAnswer = idx >= 0 ? idx : '';
+    }
+    if (typeof currentAnswer === 'number') {
+        if (currentAnswer < 0 || currentAnswer >= question.options.length) {
+            currentAnswer = '';
+        }
+    }
+    question.answer = currentAnswer !== null && currentAnswer !== undefined ? currentAnswer : '';
 };
 
 const normalizeChoiceAnswer = (question: Question) => {
@@ -416,24 +593,28 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
     markChanged('Question type changed');
 };
 
-const isCorrectAnswer = (question: Question, option: string) => {
-    return Array.isArray(question.answer) ? question.answer.includes(option) : question.answer === option;
+const isCorrectAnswer = (question: Question, optionIndex: number) => {
+    if (question.type === 'Checkboxes') {
+        const currentAnswer = Array.isArray(question.answer) ? question.answer.map(Number) : [];
+        return currentAnswer.includes(optionIndex);
+    }
+    return question.answer !== '' && Number(question.answer) === optionIndex;
 };
 
-const setCorrectAnswer = (question: Question, option: string) => {
+const setCorrectAnswer = (question: Question, optionIndex: number) => {
     if (question.type === 'Checkboxes') {
-        const currentAnswer = Array.isArray(question.answer) ? [...question.answer] : [];
-        const optionIndex = currentAnswer.indexOf(option);
+        const currentAnswer = Array.isArray(question.answer) ? [...question.answer].map(Number) : [];
+        const idx = currentAnswer.indexOf(optionIndex);
 
-        if (optionIndex >= 0) {
-            currentAnswer.splice(optionIndex, 1);
+        if (idx >= 0) {
+            currentAnswer.splice(idx, 1);
         } else {
-            currentAnswer.push(option);
+            currentAnswer.push(optionIndex);
         }
 
         question.answer = currentAnswer;
     } else {
-        question.answer = question.answer === option ? '' : option;
+        question.answer = optionIndex;
     }
 
     markChanged('Answer key updated');
@@ -460,8 +641,7 @@ const toggleCheckboxAnswer = (question: Question, option: string) => {
 };
 
 const openPreview = () => {
-    form.questions.forEach((question) => normalizeChoiceAnswer(question));
-    showPreview.value = true;
+    window.open(publicUrl.value, '_blank');
 };
 
 const addSection = () => {
@@ -479,8 +659,57 @@ const addMediaToActiveQuestion = (type: 'image' | 'video') => {
     activeQuestion.value.media.push({
         type,
         url: '',
+        sourceType: 'upload',
+        isUploading: false,
+        uploadError: '',
     });
     markChanged(type === 'image' ? 'Image added to question' : 'Video added to question');
+};
+
+const handleMediaUpload = async (event: Event, media: any) => {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) {
+        return;
+    }
+
+    const file = input.files[0];
+    const limitMb = form.settings.maxUploadSize ?? 20;
+    const limitBytes = limitMb * 1024 * 1024;
+
+    if (file.size > limitBytes) {
+        media.uploadError = `Ukuran berkas melebihi batas maksimum yang ditentukan (${limitMb}MB).`;
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    media.isUploading = true;
+    media.uploadError = '';
+
+    try {
+        const response = await axios.post(route('forms.media.upload'), formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        media.url = response.data.url;
+        markChanged('Media uploaded successfully');
+    } catch (error: any) {
+        console.error(error);
+        const errMsg = error.response?.data?.message || '';
+        const hasPhpLimitError = errMsg.toLowerCase().includes('failed to upload') || 
+                                 errMsg.toLowerCase().includes('too large') || 
+                                 error.response?.status === 422;
+                                 
+        if (hasPhpLimitError) {
+            media.uploadError = 'Gagal mengunggah file. Ukuran berkas melebihi batas upload_max_filesize PHP server Anda (saat ini 40MB).';
+        } else {
+            media.uploadError = error.response?.data?.message || 'Gagal mengunggah file. Silakan coba lagi.';
+        }
+    } finally {
+        media.isUploading = false;
+    }
 };
 
 const moveQuestion = (fromId: number, toId: number) => {
@@ -593,13 +822,7 @@ const copyShareUrl = async () => {
     }
 };
 
-const cycleTheme = () => {
-    const colors = ['bg-indigo-600', 'bg-emerald-500', 'bg-fuchsia-500', 'bg-orange-500'];
-    const nextIndex = (colors.indexOf(themeColor.value) + 1) % colors.length;
-    themeColor.value = colors[nextIndex];
-    showPalette.value = true;
-    markChanged('Theme changed');
-};
+
 
 // Toast Notification State
 const toastMessage = ref('');
@@ -688,21 +911,74 @@ const redo = () => {
 const canUndo = computed(() => historyIndex.value > 0);
 const canRedo = computed(() => historyIndex.value < history.value.length - 1);
 
-// Record initial state
-recordHistory();
+const setStatus = (status: boolean) => {
+    isPublished.value = status;
+    showStatusMenu.value = false;
+    // Save to LocalStorage immediately
+    if (props.quizForm) {
+        localStorage.setItem(`quiz_draft_${props.quizForm.id}`, JSON.stringify({
+            title: form.title,
+            description: form.description,
+            questions: form.questions,
+            settings: form.settings,
+            isPublished: status,
+        }));
+    }
+    // Save to server immediately
+    saveDraft(false);
+    triggerToast(status ? 'Quiz berhasil dipublikasikan' : 'Quiz diubah menjadi Draft');
+};
 
-// Auto-save logic
+// Check and restore LocalStorage draft on load
+onMounted(() => {
+    if (props.quizForm) {
+        const localData = localStorage.getItem(`quiz_draft_${props.quizForm.id}`);
+        if (localData) {
+            try {
+                const parsed = JSON.parse(localData);
+                form.title = parsed.title;
+                form.description = parsed.description;
+                form.questions = parsed.questions;
+                form.settings = parsed.settings;
+                if (parsed.isPublished !== undefined) {
+                    isPublished.value = parsed.isPublished;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }
+    // Convert legacy correct answers to indices for all loaded questions
+    form.questions.forEach((q) => normalizeCorrectAnswer(q));
+    
+    // Record initial state in undo stack
+    recordHistory();
+});
+
+// Auto-save to server logic (every 10 seconds)
 const autoSave = useDebounceFn(() => {
     if (props.quizForm) {
         saveDraft(false);
     }
-}, 3000); // 3 seconds debounce
+}, 10000); // 10 seconds debounce
 
-// Watch form changes
+// Watch form changes (updates LocalStorage in real-time)
 watch(
     () => [form.title, form.description, form.questions, form.settings],
     () => {
-        statusMessage.value = 'Saving changes automatically...';
+        statusMessage.value = 'Saving changes...';
+        
+        // Save to LocalStorage immediately (real-time)
+        if (props.quizForm) {
+            localStorage.setItem(`quiz_draft_${props.quizForm.id}`, JSON.stringify({
+                title: form.title,
+                description: form.description,
+                questions: form.questions,
+                settings: form.settings,
+                isPublished: isPublished.value,
+            }));
+        }
+        
         autoSave();
         debouncedRecordHistory();
     },
@@ -713,7 +989,7 @@ watch(
 <template>
     <Head :title="form.title" />
 
-    <main class="min-h-screen bg-[#f0efff] text-slate-900">
+    <main :class="['min-h-screen text-slate-900 transition-all duration-300', form.settings.backgroundColorClass ?? 'bg-[#f0efff]', form.settings.backgroundPatternClass ?? 'pattern-none']">
         <header class="sticky top-0 z-30 border-b border-slate-200 bg-white">
             <div class="flex h-16 items-center gap-3 px-4 sm:px-5">
                 <Link
@@ -750,7 +1026,7 @@ watch(
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
                         aria-label="Theme"
-                        @click="cycleTheme"
+                        @click="showThemeSidebar = !showThemeSidebar"
                     >
                         <Palette class="h-5 w-5" />
                     </button>
@@ -780,8 +1056,8 @@ watch(
                     <button
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
-                        aria-label="Copy link"
-                        @click="copyShareUrl"
+                        aria-label="Copy & Edit link"
+                        @click="showPublish = true"
                     >
                         <Link2 class="h-5 w-5" />
                     </button>
@@ -793,22 +1069,40 @@ watch(
                     >
                         <UserPlus class="h-5 w-5" />
                     </button>
-                    <button
-                        type="button"
-                        class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 transition hover:-translate-y-0.5 hover:bg-slate-50"
-                        :disabled="isSaving"
-                        @click="saveDraft(false)"
-                    >
-                        {{ isSaving ? 'Saving...' : 'Save' }}
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-700 lg:px-6"
-                        :disabled="isSaving"
-                        @click="saveDraft(true)"
-                    >
-                        {{ isSaving ? 'Saving...' : 'Publish' }}
-                    </button>
+
+                    <!-- Status Dropdown (Draft / Published) -->
+                    <div class="relative">
+                        <button
+                            type="button"
+                            class="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-700 lg:px-6"
+                            @click="showStatusMenu = !showStatusMenu"
+                        >
+                            <span>{{ isPublished ? 'Published' : 'Draft' }}</span>
+                            <ChevronDown class="h-4 w-4" />
+                        </button>
+                        <div
+                            v-if="showStatusMenu"
+                            class="absolute right-0 top-11 z-50 w-40 rounded-2xl border border-slate-200 bg-white p-2 text-sm font-medium shadow-lg"
+                        >
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                                @click="setStatus(true)"
+                            >
+                                <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                                <span>Publish</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                                @click="setStatus(false)"
+                            >
+                                <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                                <span>Draft</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="relative">
                         <button
                             type="button"
@@ -822,13 +1116,13 @@ watch(
                             v-if="showMoreMenu"
                             class="absolute right-0 top-11 w-52 rounded-2xl border border-slate-200 bg-white p-2 text-sm font-medium shadow-lg"
                         >
-                            <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="copyShareUrl">
+                            <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="showPublish = true">
                                 Copy public link
                             </button>
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="openPreview">
                                 Open preview
                             </button>
-                            <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="cycleTheme">
+                            <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="showThemeSidebar = true; showMoreMenu = false;">
                                 Change theme
                             </button>
                         </div>
@@ -862,18 +1156,20 @@ watch(
 
                 <template v-if="activeTab === 'questions'">
                     <section class="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md">
-                        <div :class="['h-3', themeColor]"></div>
+                        <div :class="['h-3 transition-all duration-300', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                         <div class="grid gap-3 p-5 sm:p-6">
                             <input
                                 v-model="form.title"
                                 type="text"
                                 class="w-full border-0 border-b border-transparent bg-transparent p-0 text-2xl font-normal leading-tight outline-none transition focus:border-indigo-500 sm:text-3xl"
+                                :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                 @input="markChanged('Title updated')"
                             />
                             <input
                                 v-model="form.description"
                                 type="text"
                                 class="w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
+                                :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                 placeholder="Form description"
                                 @input="markChanged('Description updated')"
                             />
@@ -925,6 +1221,7 @@ watch(
                                         v-model="question.title"
                                         type="text"
                                         class="mb-6 w-full border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
+                                        :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                         @input="markChanged('Question updated')"
                                     />
 
@@ -933,6 +1230,7 @@ watch(
                                         type="text"
                                         class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
                                         placeholder="Description"
+                                        :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                         @input="markChanged('Description updated')"
                                     />
 
@@ -945,7 +1243,7 @@ watch(
                                         >
                                             <div class="flex items-center justify-between mb-2">
                                                 <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
-                                                    {{ media.type }}
+                                                    {{ media.type === 'image' ? 'Gambar' : 'Video' }}
                                                 </span>
                                                 <button
                                                     type="button"
@@ -956,13 +1254,72 @@ watch(
                                                     <Trash2 class="h-4 w-4" />
                                                 </button>
                                             </div>
-                                            <input
-                                                v-model="media.url"
-                                                type="text"
-                                                placeholder="Masukkan URL Gambar/Video (e.g. YouTube URL)"
-                                                class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs outline-none focus:border-indigo-500 bg-white mb-2"
-                                                @input="markChanged('Media URL updated')"
-                                            />
+
+                                            <!-- Source Selector Tabs -->
+                                            <div class="flex gap-2 mb-3 bg-slate-200/50 p-1 rounded-xl text-[10px] font-bold">
+                                                <button
+                                                    type="button"
+                                                    class="flex-1 py-1.5 rounded-lg text-center transition"
+                                                    :class="[
+                                                        (media.sourceType ?? 'upload') === 'upload'
+                                                            ? 'bg-white text-slate-800 shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                    ]"
+                                                    @click="media.sourceType = 'upload'"
+                                                >
+                                                    Upload File
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="flex-1 py-1.5 rounded-lg text-center transition"
+                                                    :class="[
+                                                        media.sourceType === 'link'
+                                                            ? 'bg-white text-slate-800 shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                    ]"
+                                                    @click="media.sourceType = 'link'"
+                                                >
+                                                    {{ media.type === 'video' ? 'Link YouTube' : 'Link URL' }}
+                                                </button>
+                                            </div>
+
+                                            <!-- Upload Interface -->
+                                            <div v-if="(media.sourceType ?? 'upload') === 'upload'" class="space-y-2">
+                                                <div v-if="media.isUploading" class="flex flex-col items-center justify-center p-4 border border-dashed border-indigo-300 rounded-xl bg-indigo-50/50">
+                                                    <span class="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent mb-1"></span>
+                                                    <span class="text-[10px] text-indigo-700 font-bold">Uploading...</span>
+                                                </div>
+                                                <div v-else class="flex flex-col gap-2">
+                                                    <label
+                                                        class="flex flex-col items-center justify-center p-4 border border-dashed border-slate-300 hover:border-indigo-400 rounded-xl bg-white cursor-pointer transition text-center"
+                                                    >
+                                                        <FileUp class="h-5 w-5 text-slate-400 mb-1" />
+                                                        <span class="text-[10px] font-bold text-slate-600">Pilih File {{ media.type === 'image' ? 'Gambar' : 'Video' }}</span>
+                                                        <span class="text-[8px] text-slate-400 mt-0.5">Maks. {{ form.settings.maxUploadSize ?? 20 }}MB</span>
+                                                        <span v-if="media.type === 'video'" class="text-[8px] text-amber-600 font-semibold mt-0.5">💡 Saran: tidak lebih dari 100MB</span>
+                                                        <input
+                                                            type="file"
+                                                            class="hidden"
+                                                            :accept="media.type === 'image' ? 'image/*' : 'video/*'"
+                                                            @change="handleMediaUpload($event, media)"
+                                                        />
+                                                    </label>
+                                                    <p v-if="media.uploadError" class="text-[9px] font-bold text-red-600">{{ media.uploadError }}</p>
+                                                </div>
+                                            </div>
+
+                                            <!-- Link Interface -->
+                                            <div v-else class="space-y-2">
+                                                <input
+                                                    v-model="media.url"
+                                                    type="text"
+                                                    :placeholder="media.type === 'image' ? 'Masukkan URL link gambar (http://...)' : 'Masukkan Link YouTube (https://youtube.com/...)'"
+                                                    class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs outline-none focus:border-indigo-500 bg-white"
+                                                    @input="markChanged('Media URL updated')"
+                                                />
+                                            </div>
+
+                                            <!-- Preview Display -->
                                             <div v-if="media.url" class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
                                                 <img v-if="media.type === 'image'" :src="media.url" class="max-h-48 w-full object-contain p-2" />
                                                 <iframe
@@ -972,6 +1329,12 @@ watch(
                                                     frameborder="0"
                                                     allowfullscreen
                                                 ></iframe>
+                                                <video
+                                                    v-else-if="media.type === 'video'"
+                                                    :src="media.url"
+                                                    controls
+                                                    class="w-full max-h-48 bg-slate-950"
+                                                ></video>
                                                 <div v-else class="p-2 text-xs text-slate-400 text-center">Format URL video tidak didukung (gunakan link YouTube)</div>
                                             </div>
                                         </div>
@@ -1038,7 +1401,7 @@ watch(
                                                         ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                                                         : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-300'
                                                 ]"
-                                                @click.stop="question.answer = question.answer === option ? '' : option; markChanged('Answer key updated');"
+                                                @click.stop="question.answer = option; markChanged('Answer key updated');"
                                             >
                                                 {{ option }}
                                             </button>
@@ -1068,7 +1431,7 @@ watch(
                                                     'transition',
                                                      Number(question.answer) >= Number(option) ? 'text-amber-400' : 'text-slate-300 hover:text-amber-200'
                                                 ]"
-                                                @click.stop="question.answer = question.answer === option ? '' : option; markChanged('Answer key updated');"
+                                                @click.stop="question.answer = option; markChanged('Answer key updated');"
                                             >
                                                 <Star class="h-8 w-8 fill-current" />
                                             </button>
@@ -1113,6 +1476,7 @@ watch(
                                         <div
                                             v-for="(option, optionIndex) in question.options"
                                             :key="`${question.id}-${optionIndex}`"
+                                            v-show="option !== 'Other' || !isQuestionAnswered(question)"
                                             class="flex items-center gap-3 text-base transition hover:translate-x-1 sm:text-lg"
                                         >
                                             <!-- Checkbox/Radio Correct Answer Selector on the left -->
@@ -1122,14 +1486,14 @@ watch(
                                                 :class="[
                                                     'flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
                                                     question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
-                                                    isCorrectAnswer(question, option)
+                                                    isCorrectAnswer(question, optionIndex)
                                                         ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                                                         : 'border-slate-300 bg-white hover:border-emerald-400'
                                                 ]"
-                                                @click.stop="setCorrectAnswer(question, option)"
+                                                @click.stop="setCorrectAnswer(question, optionIndex)"
                                             >
                                                 <span
-                                                    v-if="isCorrectAnswer(question, option)"
+                                                    v-if="isCorrectAnswer(question, optionIndex)"
                                                     :class="[
                                                         'block h-2 w-2 bg-white',
                                                         question.type === 'Checkboxes' ? 'rounded-sm' : 'rounded-full'
@@ -1146,6 +1510,7 @@ watch(
                                                 :value="question.options[optionIndex]"
                                                 type="text"
                                                 class="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
+                                                :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                                 @input="updateOption(question, optionIndex, ($event.target as HTMLInputElement).value)"
                                             />
                                             <button
@@ -1161,11 +1526,11 @@ watch(
                                             class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800"
                                         >
                                             <span class="font-bold">Jawaban benar:</span>
-                                            <span v-if="Array.isArray(question.answer) && question.answer.length" class="ml-1">
-                                                {{ question.answer.join(', ') }}
+                                            <span v-if="question.type === 'Checkboxes' && Array.isArray(question.answer) && question.answer.length" class="ml-1">
+                                                {{ question.answer.map(idx => question.options[Number(idx)]).filter(Boolean).join(', ') }}
                                             </span>
-                                            <span v-else-if="!Array.isArray(question.answer) && question.answer" class="ml-1">
-                                                {{ question.answer }}
+                                            <span v-else-if="question.type !== 'Checkboxes' && question.answer !== '' && question.answer !== null && question.answer !== undefined" class="ml-1">
+                                                {{ question.options[Number(question.answer)] }}
                                             </span>
                                             <span v-else class="ml-1 text-emerald-600">belum dipilih</span>
                                         </div>
@@ -1186,8 +1551,9 @@ watch(
                                             <button type="button" class="transition hover:text-indigo-600" @click.stop="addOption(question)">
                                                 Add option
                                             </button>
-                                            <span class="text-slate-900">or</span>
+                                            <span v-if="!question.options.includes('Other') && !isQuestionAnswered(question)" class="text-slate-900">or</span>
                                             <button
+                                                v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
                                                 type="button"
                                                 class="text-blue-600 transition hover:text-blue-700"
                                                 @click.stop="addOption(question, 'Other')"
@@ -1399,6 +1765,24 @@ watch(
                                 @change="markChanged('Settings updated')"
                             />
                         </label>
+                        <div class="rounded-2xl bg-slate-50 p-5 space-y-3">
+                            <div>
+                                <span class="block font-bold">Batas Ukuran Upload Media</span>
+                                <span class="text-xs text-slate-500 mt-0.5 block">Tentukan batas ukuran berkas maksimum untuk unggahan gambar/video.</span>
+                                <span class="text-xs text-amber-600 font-semibold mt-1 block">💡 Saran: Disarankan untuk mengunggah video dengan ukuran tidak lebih dari 100MB agar pemutaran berjalan lancar.</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input
+                                    v-model.number="form.settings.maxUploadSize"
+                                    type="number"
+                                    min="1"
+                                    max="500"
+                                    class="w-24 rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
+                                    @change="markChanged('Settings updated')"
+                                />
+                                <span class="text-sm font-bold text-slate-600">MB</span>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -1433,6 +1817,12 @@ watch(
                                     frameborder="0"
                                     allowfullscreen
                                 ></iframe>
+                                <video
+                                    v-else-if="media.type === 'video' && media.url"
+                                    :src="media.url"
+                                    controls
+                                    class="w-full max-h-48 bg-slate-950"
+                                ></video>
                             </div>
                         </div>
                         <div
@@ -1540,16 +1930,125 @@ watch(
                         type="button"
                         class="rounded-xl bg-emerald-500 px-4 py-2 font-bold text-white hover:bg-emerald-600"
                         :disabled="isSaving || Boolean(slugWarning)"
-                        @click="
-                            copyShareUrl();
-                            showPublish = false;
-                        "
+                        @click="saveDraftAndCopy()"
                     >
                         Copy
                     </button>
                 </div>
             </section>
         </div>
+
+        <!-- Elegant Theme Customizer Sidebar -->
+        <Transition
+            enter-active-class="transform transition ease-in-out duration-300"
+            enter-from-class="translate-x-full"
+            enter-to-class="translate-x-0"
+            leave-active-class="transform transition ease-in-out duration-300"
+            leave-from-class="translate-x-0"
+            leave-to-class="translate-x-full"
+        >
+            <div v-if="showThemeSidebar" class="fixed inset-y-0 right-0 z-50 w-80 border-l border-slate-200 bg-white p-6 shadow-2xl overflow-y-auto">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                    <h2 class="text-xl font-bold flex items-center gap-2">
+                        <Palette class="h-5 w-5 text-indigo-600" />
+                        <span>Kustomisasi Tema</span>
+                    </h2>
+                    <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" @click="showThemeSidebar = false">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- Fonts Configuration -->
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Gaya Font</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1.5">Font Pertanyaan</label>
+                                <select
+                                    v-model="form.settings.questionFont"
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 bg-white font-medium text-slate-700"
+                                    @change="markChanged('Theme font updated')"
+                                >
+                                    <option v-for="font in fonts" :key="font.value" :value="font.value">
+                                        {{ font.name }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1.5">Font Jawaban</label>
+                                <select
+                                    v-model="form.settings.answerFont"
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 bg-white font-medium text-slate-700"
+                                    @change="markChanged('Theme font updated')"
+                                >
+                                    <option v-for="font in fonts" :key="font.value" :value="font.value">
+                                        {{ font.name }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="border-slate-100" />
+
+                    <!-- Color Theme Picker (10 Options) -->
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Warna Tema & Background</h3>
+                        <div class="grid grid-cols-5 gap-2.5">
+                            <button
+                                v-for="theme in colorThemes"
+                                :key="theme.name"
+                                type="button"
+                                class="group relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 shadow-sm transition hover:scale-110"
+                                :class="[theme.theme]"
+                                :title="theme.name"
+                                @click="
+                                    form.settings.themeColorClass = theme.theme;
+                                    form.settings.backgroundColorClass = theme.bg;
+                                    markChanged('Theme color updated');
+                                "
+                            >
+                                <span
+                                    v-if="form.settings.themeColorClass === theme.theme"
+                                    class="h-3 w-3 rounded-full bg-white shadow-sm"
+                                ></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="border-slate-100" />
+
+                    <!-- Background Patterns Picker (10 Options) -->
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Pola Background (10 Jenis)</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button
+                                v-for="pattern in backgroundPatterns"
+                                :key="pattern.value"
+                                type="button"
+                                class="h-16 rounded-xl border relative overflow-hidden transition hover:border-indigo-400 p-2 text-left"
+                                :class="[
+                                    form.settings.backgroundPatternClass === pattern.value ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-slate-50' : 'border-slate-200 hover:bg-slate-50',
+                                    pattern.value,
+                                    form.settings.backgroundColorClass ?? 'bg-[#f0efff]'
+                                ]"
+                                @click="
+                                    form.settings.backgroundPatternClass = pattern.value;
+                                    markChanged('Background pattern updated');
+                                "
+                            >
+                                <span class="text-[10px] font-bold text-slate-700 bg-white/95 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 relative z-10 block w-fit">
+                                    {{ pattern.name }}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Transition>
 
         <!-- Floating Premium Toast -->
         <Transition
@@ -1572,6 +2071,63 @@ watch(
 </template>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+
+.pattern-none {
+    background-image: none;
+}
+.pattern-dots {
+    background-image: radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+}
+.pattern-grid {
+    background-image: linear-gradient(rgba(99, 102, 241, 0.08) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(99, 102, 241, 0.08) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.pattern-diagonal {
+    background-image: repeating-linear-gradient(45deg, rgba(99, 102, 241, 0.05) 0px, rgba(99, 102, 241, 0.05) 2px, transparent 2px, transparent 10px);
+}
+.pattern-waves {
+    background-image: radial-gradient(circle at 100% 150%, transparent 24%, rgba(99, 102, 241, 0.06) 24%, rgba(99, 102, 241, 0.06) 28%, transparent 28%, transparent),
+                      radial-gradient(circle at 0% 150%, transparent 24%, rgba(99, 102, 241, 0.06) 24%, rgba(99, 102, 241, 0.06) 28%, transparent 28%, transparent);
+    background-size: 20px 20px;
+}
+.pattern-zigzag {
+    background-image: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(225deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(45deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(315deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%);
+    background-position: 10px 0, 10px 0, 0 0, 0 0;
+    background-size: 20px 20px;
+    background-repeat: repeat;
+}
+.pattern-hexagons {
+    background-image: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.06) 10%, transparent 10%);
+    background-size: 30px 30px;
+}
+.pattern-blueprint {
+    background-image: linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.pattern-bubbles {
+    background-image: radial-gradient(circle, rgba(99, 102, 241, 0.04) 20%, transparent 20%),
+                      radial-gradient(circle, rgba(99, 102, 241, 0.05) 15%, transparent 15%);
+    background-size: 40px 40px;
+    background-position: 0 0, 20px 20px;
+}
+.pattern-triangles {
+    background-image: linear-gradient(30deg, rgba(99,102,241,0.04) 12%, transparent 12.5%, transparent 87%, rgba(99,102,241,0.04) 87.5%, rgba(99,102,241,0.04)),
+                      linear-gradient(150deg, rgba(99,102,241,0.04) 12%, transparent 12.5%, transparent 87%, rgba(99,102,241,0.04) 87.5%, rgba(99,102,241,0.04)),
+                      linear-gradient(270deg, rgba(99,102,241,0.04) 25%, transparent 25.5%, transparent 74%, rgba(99,102,241,0.04) 74.5%, rgba(99,102,241,0.04));
+    background-size: 30px 52px;
+}
+
 .tool-button {
     @apply flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:-translate-y-0.5 hover:bg-slate-100 hover:text-indigo-600;
 }

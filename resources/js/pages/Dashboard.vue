@@ -13,6 +13,7 @@ type RecentForm = {
     tone: string;
     stripe: string;
     accent: string;
+    isPublished: boolean;
 };
 
 const props = defineProps<{
@@ -202,7 +203,19 @@ const templates = [
                     </div>
 
                     <div class="border-t border-slate-200 p-4">
-                        <h3 class="truncate text-base font-semibold text-slate-800">{{ form.title }}</h3>
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <h3 class="truncate text-base font-semibold text-slate-800" :title="form.title">{{ form.title }}</h3>
+                            <span
+                                :class="[
+                                    'shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider',
+                                    form.isPublished
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                ]"
+                            >
+                                {{ form.isPublished ? 'Published' : 'Draft' }}
+                            </span>
+                        </div>
                         <div class="mt-3 flex items-center gap-2 text-sm font-medium text-slate-500">
                             <span :class="['flex h-6 w-6 items-center justify-center rounded-lg text-white', form.accent]">
                                 <ClipboardList class="h-4 w-4" />

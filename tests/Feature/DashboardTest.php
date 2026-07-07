@@ -94,6 +94,6 @@ test('users get a warning when public quiz link already exists', function () {
         'questions' => $quizForm->questions,
         'settings' => $quizForm->settings,
     ])->assertSessionHasErrors([
-        'slug' => 'Link quiz ini sudah dipakai. Gunakan link lain agar tidak sama.',
+        'slug' => 'Link sudah digunakan',
     ]);
 });

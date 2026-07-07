@@ -14,6 +14,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('forms/create/{template?}', [QuizFormController::class, 'create'])->name('forms.create');
     Route::get('forms/{quizForm:slug}/edit', [QuizFormController::class, 'edit'])->name('forms.edit');
     Route::patch('forms/{quizForm}', [QuizFormController::class, 'update'])->name('forms.update');
+    Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->name('forms.media.upload');
 });
 
 Route::get('forms/{quizForm:slug}', [QuizFormController::class, 'show'])->name('forms.public');

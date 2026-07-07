@@ -57,4 +57,39 @@ class QuizForm extends Model
 
         return $slug;
     }
+
+    public static function generateComplexSlug(): string
+    {
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+        do {
+            $result = '';
+            while (strlen($result) < 59) {
+                $remaining = 59 - strlen($result);
+                $groupSize = rand(7, 10);
+
+                if ($groupSize >= $remaining) {
+                    $groupSize = $remaining;
+                } elseif ($remaining - $groupSize <= 2) {
+                    $groupSize = $remaining;
+                }
+
+                $group = '';
+                for ($i = 0; $i < $groupSize; $i++) {
+                    $group .= $chars[rand(0, strlen($chars) - 1)];
+                }
+
+                $result .= $group;
+                if (strlen($result) < 59) {
+                    $result .= '-';
+                }
+            }
+
+            if (strlen($result) > 59) {
+                $result = substr($result, 0, 59);
+            }
+        } while (self::query()->where('slug', $result)->exists());
+
+        return $result;
+    }
 }

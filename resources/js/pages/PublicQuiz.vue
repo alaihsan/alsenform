@@ -23,6 +23,11 @@ const props = defineProps<{
             collectEmail: boolean;
             showProgress: boolean;
             shuffleQuestions: boolean;
+            questionFont?: string;
+            answerFont?: string;
+            themeColorClass?: string;
+            backgroundColorClass?: string;
+            backgroundPatternClass?: string;
         };
     };
 }>();
@@ -87,15 +92,15 @@ const isCheckboxChecked = (questionId: number, option: string) => {
 
     <!-- Progress bar at the top of the page if enabled -->
     <div v-if="quizForm.settings.showProgress" class="fixed top-0 left-0 right-0 z-50 h-2 bg-slate-100">
-        <div class="h-full bg-indigo-600 transition-all duration-300" :style="{ width: `${progress}%` }"></div>
+        <div :class="['h-full transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']" :style="{ width: `${progress}%` }"></div>
     </div>
 
-    <main class="min-h-screen bg-violet-50 px-4 py-8 text-slate-900 sm:px-6">
+    <main :class="['min-h-screen px-4 py-8 text-slate-900 sm:px-6 transition-all duration-300', quizForm.settings.backgroundColorClass ?? 'bg-violet-50', quizForm.settings.backgroundPatternClass ?? 'pattern-none']">
         <section class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div class="h-3 rounded-t-3xl bg-indigo-600"></div>
+            <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
             <div class="p-6 sm:p-8">
-                <h1 class="text-3xl font-semibold">{{ quizForm.title }}</h1>
-                <p v-if="quizForm.description" class="mt-3 text-slate-500">{{ quizForm.description }}</p>
+                <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">{{ quizForm.title }}</h1>
+                <p v-if="quizForm.description" class="mt-3 text-slate-500" :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }">{{ quizForm.description }}</p>
             </div>
         </section>
 
@@ -115,14 +120,14 @@ const isCheckboxChecked = (questionId: number, option: string) => {
 
         <section class="mx-auto mt-5 max-w-3xl space-y-4">
             <article v-for="question in displayQuestions" :key="question.id" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 class="text-lg font-semibold flex flex-wrap items-center">
+                <h2 class="text-lg font-semibold flex flex-wrap items-center" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
                     <span>{{ question.title }}</span>
                     <span v-if="question.required" class="text-red-500 ml-1">*</span>
                     <span v-if="question.points" class="ml-2 text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
                         {{ question.points }} Poin
                     </span>
                 </h2>
-                <p v-if="question.description" class="mt-2 text-sm text-slate-500">{{ question.description }}</p>
+                <p v-if="question.description" class="mt-2 text-sm text-slate-500" :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }">{{ question.description }}</p>
 
                 <!-- Media elements rendering -->
                 <div v-if="question.media && question.media.length" class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -135,6 +140,12 @@ const isCheckboxChecked = (questionId: number, option: string) => {
                             frameborder="0"
                             allowfullscreen
                         ></iframe>
+                        <video
+                            v-else-if="media.type === 'video' && media.url"
+                            :src="media.url"
+                            controls
+                            class="w-full max-h-72 bg-slate-950"
+                        ></video>
                     </div>
                 </div>
 
@@ -194,6 +205,7 @@ const isCheckboxChecked = (questionId: number, option: string) => {
                         v-for="option in question.options"
                         :key="option"
                         class="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 cursor-pointer hover:bg-slate-50 transition"
+                        :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
                     >
                         <input
                             :type="question.type === 'Checkboxes' ? 'checkbox' : 'radio'"
@@ -220,7 +232,66 @@ const isCheckboxChecked = (questionId: number, option: string) => {
                 <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
             </article>
 
-            <button type="button" class="rounded-2xl bg-indigo-600 px-6 py-3 font-bold text-white shadow-sm hover:bg-indigo-700">Submit</button>
+            <button type="button" :class="['rounded-2xl px-6 py-3 font-bold text-white shadow-sm transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600', 'hover:brightness-95']">Submit</button>
         </section>
     </main>
 </template>
+
+<style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+
+.pattern-none {
+    background-image: none;
+}
+.pattern-dots {
+    background-image: radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+}
+.pattern-grid {
+    background-image: linear-gradient(rgba(99, 102, 241, 0.08) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(99, 102, 241, 0.08) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.pattern-diagonal {
+    background-image: repeating-linear-gradient(45deg, rgba(99, 102, 241, 0.05) 0px, rgba(99, 102, 241, 0.05) 2px, transparent 2px, transparent 10px);
+}
+.pattern-waves {
+    background-image: radial-gradient(circle at 100% 150%, transparent 24%, rgba(99, 102, 241, 0.06) 24%, rgba(99, 102, 241, 0.06) 28%, transparent 28%, transparent),
+                      radial-gradient(circle at 0% 150%, transparent 24%, rgba(99, 102, 241, 0.06) 24%, rgba(99, 102, 241, 0.06) 28%, transparent 28%, transparent);
+    background-size: 20px 20px;
+}
+.pattern-zigzag {
+    background-image: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(225deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(45deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%), 
+                      linear-gradient(315deg, rgba(99, 102, 241, 0.05) 25%, transparent 25%);
+    background-position: 10px 0, 10px 0, 0 0, 0 0;
+    background-size: 20px 20px;
+    background-repeat: repeat;
+}
+.pattern-hexagons {
+    background-image: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 100% 0%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.06) 10%, transparent 10%),
+                      radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.06) 10%, transparent 10%);
+    background-size: 30px 30px;
+}
+.pattern-blueprint {
+    background-image: linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.pattern-bubbles {
+    background-image: radial-gradient(circle, rgba(99, 102, 241, 0.04) 20%, transparent 20%),
+                      radial-gradient(circle, rgba(99, 102, 241, 0.05) 15%, transparent 15%);
+    background-size: 40px 40px;
+    background-position: 0 0, 20px 20px;
+}
+.pattern-triangles {
+    background-image: linear-gradient(30deg, rgba(99,102,241,0.04) 12%, transparent 12.5%, transparent 87%, rgba(99,102,241,0.04) 87.5%, rgba(99,102,241,0.04)),
+                      linear-gradient(150deg, rgba(99,102,241,0.04) 12%, transparent 12.5%, transparent 87%, rgba(99,102,241,0.04) 87.5%, rgba(99,102,241,0.04)),
+                      linear-gradient(270deg, rgba(99,102,241,0.04) 25%, transparent 25.5%, transparent 74%, rgba(99,102,241,0.04) 74.5%, rgba(99,102,241,0.04));
+    background-size: 30px 52px;
+}
+</style>

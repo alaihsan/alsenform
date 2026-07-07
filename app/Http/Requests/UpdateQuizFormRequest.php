@@ -53,6 +53,13 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],
             'settings.shuffleQuestions' => ['boolean'],
+            'settings.maxUploadSize' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'settings.questionFont' => ['nullable', 'string', 'max:255'],
+            'settings.answerFont' => ['nullable', 'string', 'max:255'],
+            'settings.themeColorClass' => ['nullable', 'string', 'max:100'],
+            'settings.backgroundColorClass' => ['nullable', 'string', 'max:100'],
+            'settings.backgroundPatternClass' => ['nullable', 'string', 'max:100'],
+            'published' => ['nullable', 'boolean'],
         ];
     }
 
@@ -62,7 +69,7 @@ class UpdateQuizFormRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'slug.unique' => 'Link quiz ini sudah dipakai. Gunakan link lain agar tidak sama.',
+            'slug.unique' => 'Link sudah digunakan',
             'slug.alpha_dash' => 'Link hanya boleh berisi huruf, angka, tanda hubung, dan garis bawah.',
         ];
     }

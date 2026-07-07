@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateQuizFormRequest;
 use App\Models\QuizForm;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -31,7 +32,7 @@ class QuizFormController extends Controller
             'user_id' => $request->user()->id,
             'title' => $preset['title'],
             'description' => $preset['description'],
-            'slug' => QuizForm::uniqueSlug($preset['title']),
+            'slug' => QuizForm::generateComplexSlug(),
             'template' => $template ?? 'blank',
             'questions' => [
                 [
@@ -77,7 +78,7 @@ class QuizFormController extends Controller
             'slug' => $validated['slug'],
             'questions' => $validated['questions'],
             'settings' => $validated['settings'],
-            'published_at' => now(),
+            'published_at' => $request->boolean('published') ? ($quizForm->published_at ?? now()) : null,
         ]);
 
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
@@ -109,6 +110,7 @@ class QuizFormController extends Controller
             'settings' => $quizForm->settings,
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
+            'isPublished' => ! is_null($quizForm->published_at),
         ];
     }
 
@@ -124,6 +126,7 @@ class QuizFormController extends Controller
             'editUrl' => route('forms.edit', ['quizForm' => $quizForm->slug]),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
             'updatedLabel' => 'Opened '.$quizForm->updated_at->format('j M Y'),
+            'isPublished' => ! is_null($quizForm->published_at),
             'tone' => match ($quizForm->template) {
                 'party-invite' => 'bg-fuchsia-50',
                 'work-request' => 'bg-cyan-50',
@@ -189,5 +192,18 @@ class QuizFormController extends Controller
                 'options' => ['Option 1'],
             ],
         };
+    }
+
+    public function uploadMedia(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:jpg,jpeg,png,gif,webp,mp4,webm,mov', 'max:512000'],
+        ]);
+
+        $path = $request->file('file')->store('media', 'public');
+
+        return response()->json([
+            'url' => asset('storage/'.$path),
+        ]);
     }
 }
