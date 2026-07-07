@@ -45,6 +45,8 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.description' => ['nullable', 'string', 'max:1000'],
             'questions.*.type' => ['required', 'string', 'max:100'],
             'questions.*.options' => ['array'],
+            'questions.*.rows' => ['array'],
+            'questions.*.columns' => ['array'],
             'questions.*.answer' => ['nullable'],
             'questions.*.required' => ['boolean'],
             'questions.*.media' => ['array'],
@@ -71,6 +73,8 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.themeColorClass' => ['nullable', 'string', 'max:100'],
             'settings.backgroundColorClass' => ['nullable', 'string', 'max:100'],
             'settings.backgroundPatternClass' => ['nullable', 'string', 'max:100'],
+            'settings.lockOnBlur' => ['nullable', 'boolean'],
+            'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'published' => ['nullable', 'boolean'],
         ];
     }

@@ -4,15 +4,18 @@ import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
 import {
     CalendarDays,
+    Check,
     CheckSquare,
     ChevronDown,
     Circle,
     Clock,
+    Download,
     Eye,
     FileText,
     FileUp,
     Grid3X3,
     Image,
+    Key,
     Link2,
     List,
     Menu,
@@ -27,10 +30,11 @@ import {
     Trash2,
     Type,
     Undo2,
+    UploadCloud,
     UserPlus,
     Video,
 } from 'lucide-vue-next';
-import { computed, onMounted, reactive, ref, watch, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch, type Component } from 'vue';
 
 type QuestionType =
     | 'Short answer'
@@ -52,13 +56,15 @@ type Question = {
     description: string;
     type: QuestionType;
     options: string[];
+    rows?: string[];
+    columns?: string[];
     answer: any;
     required: boolean;
     media: { type: 'image' | 'video'; url: string }[];
     points: number;
 };
 
-type PreviewAnswer = string | string[];
+type PreviewAnswer = string | string[] | Record<number, any>;
 
 type QuizFormPayload = {
     id: number;
@@ -66,6 +72,7 @@ type QuizFormPayload = {
     description: string;
     slug: string;
     questions: Question[];
+    isPublished?: boolean;
     settings: {
         collectEmail: boolean;
         showProgress: boolean;
@@ -82,6 +89,14 @@ type QuizFormPayload = {
         defaultCollectEmailMode?: 'none' | 'verified' | 'responder';
         defaultQuestionRequired?: boolean;
         defaultQuestionPoints?: number;
+        maxUploadSize?: number;
+        questionFont?: string;
+        answerFont?: string;
+        themeColorClass?: string;
+        backgroundColorClass?: string;
+        backgroundPatternClass?: string;
+        lockOnBlur?: boolean;
+        timeLimit?: number;
     };
     responses: {
         total: number;
@@ -106,13 +121,13 @@ type QuizFormPayload = {
     publicUrl: string;
 };
 
-const getYoutubeEmbedUrl = (url: string): string | null => {
+const getYoutubeEmbedUrl = (url: string): string | undefined => {
     if (!url) {
-        return null;
+        return undefined;
     }
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
-    return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : null;
+    return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : undefined;
 };
 
 const props = defineProps<{
@@ -160,7 +175,7 @@ const templatePresets: Record<string, { title: string; description: string; ques
 };
 
 const preset = templatePresets[props.template] ?? templatePresets.blank;
-let nextQuestionId = Math.max(...(props.quizForm?.questions?.map((question) => Number(question.id)) ?? [1])) + 1;
+let nextQuestionId = Math.max(...(props.quizForm?.questions?.map((question: Question) => Number(question.id)) ?? [1])) + 1;
 
 const form = reactive({
     title: props.quizForm?.title ?? preset.title,
@@ -172,6 +187,8 @@ const form = reactive({
             description: q.description ?? '',
             type: q.type,
             options: q.options ? [...q.options] : [],
+            rows: q.rows ? [...q.rows] : [],
+            columns: q.columns ? [...q.columns] : [],
             answer: q.answer,
             required: Boolean(q.required),
             media: (q.media ?? []).map((m: any) => ({ type: m.type, url: m.url ?? '' })),
@@ -184,9 +201,9 @@ const form = reactive({
                 type: 'Multiple choice' as QuestionType,
                 options: [...preset.options],
                 answer: '',
-                required: Boolean(form.settings.defaultQuestionRequired),
+                required: Boolean(props.quizForm?.settings?.defaultQuestionRequired ?? false),
                 media: [],
-                points: form.settings.defaultQuestionPoints ?? 10,
+                points: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
             },
         ]),
     ] as Question[],
@@ -212,18 +229,25 @@ const form = reactive({
         themeColorClass: props.quizForm?.settings?.themeColorClass ?? 'bg-indigo-600',
         backgroundColorClass: props.quizForm?.settings?.backgroundColorClass ?? 'bg-[#f0efff]',
         backgroundPatternClass: props.quizForm?.settings?.backgroundPatternClass ?? 'pattern-none',
+        lockOnBlur: props.quizForm?.settings?.lockOnBlur ?? false,
+        timeLimit: props.quizForm?.settings?.timeLimit ?? 0,
     },
 });
 
-const activeTab = ref<'questions' | 'responses' | 'settings'>('questions');
+const activeTab = ref<'questions' | 'responses' | 'settings' | 'keamanan'>('questions');
 const activeQuestionId = ref(1);
 const showPreview = ref(false);
 const showPublish = ref(false);
 const showMoreMenu = ref(false);
 const showPalette = ref(false);
 const openTypeMenuQuestionId = ref<number | null>(null);
+const editingAnswerKeyQuestionId = ref<number | null>(null);
 const draggedQuestionId = ref<number | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const docxFileInput = ref<HTMLInputElement | null>(null);
+const isImportModalOpen = ref(false);
+const isImportingFile = ref(false);
+const importError = ref('');
 const statusMessage = ref('All changes saved locally');
 const fonts = [
     { name: 'Inter (Default)', value: "'Inter', sans-serif" },
@@ -277,6 +301,52 @@ const isResponsesSettingsOpen = ref(true);
 const isPresentationSettingsOpen = ref(true);
 const isFormDefaultsOpen = ref(true);
 const isQuestionDefaultsOpen = ref(true);
+const isSecuritySettingsOpen = ref(true);
+
+const unlockRequests = ref<any[]>([]);
+
+const fetchUnlockRequests = async () => {
+    if (!props.quizForm?.id) {
+        return;
+    }
+    try {
+        const response = await axios.get(`/forms/${props.quizForm.id}/unlock-requests`);
+        unlockRequests.value = response.data.requests || [];
+    } catch (error) {
+        console.error('Failed to fetch unlock requests', error);
+    }
+};
+
+const approveUnlockRequest = async (requestId: number) => {
+    try {
+        await axios.post(`/unlock-requests/${requestId}/approve`);
+        fetchUnlockRequests();
+        markChanged('Unlock request approved');
+    } catch (error) {
+        console.error('Failed to approve unlock request', error);
+    }
+};
+
+let unlockRequestsInterval: any = null;
+onMounted(() => {
+    unlockRequestsInterval = setInterval(() => {
+        if (activeTab.value === 'keamanan') {
+            fetchUnlockRequests();
+        }
+    }, 5000);
+});
+
+onUnmounted(() => {
+    if (unlockRequestsInterval) {
+        clearInterval(unlockRequestsInterval);
+    }
+});
+
+watch(activeTab, (newTab) => {
+    if (newTab === 'keamanan') {
+        fetchUnlockRequests();
+    }
+});
 
 const markSettingsChanged = () => {
     form.settings.collectEmail = form.settings.emailCollectionMode !== 'none';
@@ -311,7 +381,7 @@ const gridQuestionTypes: QuestionType[] = ['Multiple-choice grid', 'Tick box gri
 
 const questionTypeIcon = (type: QuestionType) => questionTypes.find((questionType) => questionType.value === type)?.icon ?? Circle;
 
-const activeQuestion = computed(() => form.questions.find((question) => question.id === activeQuestionId.value) ?? form.questions[0]);
+const activeQuestion = computed(() => form.questions.find((question: Question) => question.id === activeQuestionId.value) ?? form.questions[0]);
 const responseCount = computed(() => props.quizForm?.responses?.total ?? 0);
 const shareUrl = computed(() => publicUrl.value);
 const responseQuestions = computed(() => props.quizForm?.responses?.questions ?? []);
@@ -508,7 +578,9 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         description: '',
         type,
         options: noOptionQuestionTypes.includes(type) ? [] : scaleQuestionTypes.includes(type) ? ['1', '2', '3', '4', '5'] : ['Option 1'],
-        answer: type === 'Checkboxes' ? [] : '',
+        rows: gridQuestionTypes.includes(type) ? ['Baris 1', 'Baris 2'] : [],
+        columns: gridQuestionTypes.includes(type) ? ['Kolom 1', 'Kolom 2'] : [],
+        answer: gridQuestionTypes.includes(type) ? {} : (type === 'Checkboxes' ? [] : ''),
         required: false,
         media: [],
         points: 10,
@@ -526,7 +598,11 @@ const duplicateQuestion = (question: Question) => {
         id: nextQuestionId++,
         title: `${question.title} copy`,
         options: [...question.options],
-        answer: Array.isArray(question.answer) ? [...question.answer] : question.answer,
+        rows: question.rows ? [...question.rows] : [],
+        columns: question.columns ? [...question.columns] : [],
+        answer: typeof question.answer === 'object' && question.answer !== null
+            ? (Array.isArray(question.answer) ? [...question.answer] : JSON.parse(JSON.stringify(question.answer)))
+            : question.answer,
         media: (question.media ?? []).map((m) => ({ ...m })),
         points: question.points ?? 10,
     };
@@ -603,7 +679,17 @@ const isQuestionAnswered = (question: Question) => {
 };
 
 const normalizeCorrectAnswer = (question: Question) => {
+    if (gridQuestionTypes.includes(question.type)) {
+        if (typeof question.answer !== 'object' || question.answer === null) {
+            question.answer = {};
+        }
+        return;
+    }
+
     if (!optionQuestionTypes.includes(question.type)) {
+        if (['Linear scale', 'Rating', 'Date', 'Time'].includes(question.type)) {
+            return;
+        }
         question.answer = '';
         return;
     }
@@ -670,39 +756,65 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
         question.options = ['1', '2', '3', '4', '5'];
         question.answer = '';
     } else if (gridQuestionTypes.includes(type)) {
-        question.options = ['Row 1', 'Row 2', 'Column 1', 'Column 2'];
-        question.answer = '';
+        question.options = [];
+        if (!question.rows || question.rows.length === 0) {
+            question.rows = ['Baris 1', 'Baris 2'];
+        }
+        if (!question.columns || question.columns.length === 0) {
+            question.columns = ['Kolom 1', 'Kolom 2'];
+        }
+        question.answer = {};
     } else {
         question.answer = '';
     }
     markChanged('Question type changed');
 };
 
-const isCorrectAnswer = (question: Question, optionIndex: number) => {
-    if (question.type === 'Checkboxes') {
-        const currentAnswer = Array.isArray(question.answer) ? question.answer.map(Number) : [];
-        return currentAnswer.includes(optionIndex);
+const setGridAnswer = (question: Question, rowIndex: number, colIndex: number, mode: 'single' | 'multiple') => {
+    if (!question.answer || typeof question.answer !== 'object') {
+        question.answer = {};
     }
-    return question.answer !== '' && Number(question.answer) === optionIndex;
+    if (mode === 'single') {
+        question.answer[rowIndex] = colIndex;
+    } else {
+        if (!Array.isArray(question.answer[rowIndex])) {
+            question.answer[rowIndex] = [];
+        }
+        const idx = question.answer[rowIndex].indexOf(colIndex);
+        if (idx >= 0) {
+            question.answer[rowIndex].splice(idx, 1);
+        } else {
+            question.answer[rowIndex].push(colIndex);
+        }
+    }
+    markChanged('Grid answer key updated');
 };
 
-const setCorrectAnswer = (question: Question, optionIndex: number) => {
+const isCorrectAnswer = (question: Question, optionIndex: number | string) => {
+    const idx = Number(optionIndex);
+    if (question.type === 'Checkboxes') {
+        const currentAnswer = Array.isArray(question.answer) ? question.answer.map(Number) : [];
+        return currentAnswer.includes(idx);
+    }
+    return question.answer !== '' && Number(question.answer) === idx;
+};
+
+const setCorrectAnswer = (question: Question, optionIndex: number | string) => {
+    const idx = Number(optionIndex);
     if (question.type === 'Checkboxes') {
         const currentAnswer = Array.isArray(question.answer) ? [...question.answer].map(Number) : [];
-        const idx = currentAnswer.indexOf(optionIndex);
+        const ansIdx = currentAnswer.indexOf(idx);
 
-        if (idx >= 0) {
-            currentAnswer.splice(idx, 1);
+        if (ansIdx >= 0) {
+            currentAnswer.splice(ansIdx, 1);
         } else {
-            currentAnswer.push(optionIndex);
+            currentAnswer.push(idx);
         }
-
         question.answer = currentAnswer;
     } else {
-        question.answer = optionIndex;
+        question.answer = idx;
     }
-
-    markChanged('Answer key updated');
+    markChanged('Correct answer updated');
 };
 
 const checkboxAnswerIncludes = (question: Question, option: string) => {
@@ -723,6 +835,25 @@ const toggleCheckboxAnswer = (question: Question, option: string) => {
     }
 
     previewAnswers[question.id] = selectedOptions;
+};
+
+const selectPreviewGridAnswer = (questionId: number, rowIndex: number, colIndex: number, mode: 'single' | 'multiple') => {
+    if (!previewAnswers[questionId] || typeof previewAnswers[questionId] !== 'object' || Array.isArray(previewAnswers[questionId])) {
+        previewAnswers[questionId] = {};
+    }
+    if (mode === 'single') {
+        previewAnswers[questionId][rowIndex] = colIndex;
+    } else {
+        if (!Array.isArray(previewAnswers[questionId][rowIndex])) {
+            previewAnswers[questionId][rowIndex] = [];
+        }
+        const idx = previewAnswers[questionId][rowIndex].indexOf(colIndex);
+        if (idx >= 0) {
+            previewAnswers[questionId][rowIndex].splice(idx, 1);
+        } else {
+            previewAnswers[questionId][rowIndex].push(colIndex);
+        }
+    }
 };
 
 const openPreview = () => {
@@ -801,8 +932,8 @@ const moveQuestion = (fromId: number, toId: number) => {
         return;
     }
 
-    const fromIndex = form.questions.findIndex((question) => question.id === fromId);
-    const toIndex = form.questions.findIndex((question) => question.id === toId);
+    const fromIndex = form.questions.findIndex((question: Question) => question.id === fromId);
+    const toIndex = form.questions.findIndex((question: Question) => question.id === toId);
 
     if (fromIndex < 0 || toIndex < 0) {
         return;
@@ -833,58 +964,14 @@ const handleDrop = (question: Question, event: DragEvent) => {
 };
 
 const downloadImportTemplate = () => {
-    const content = [
-        'Alsen Form Question Import Template',
-        '',
-        'Tulis satu soal per baris.',
-        'Gunakan format: Pertanyaan | Opsi 1 | Opsi 2 | Opsi 3',
-        '',
-        'Contoh:',
-        'Apa ibu kota Indonesia? | Jakarta | Bandung | Surabaya',
-        'Jelaskan proses daur air.',
-    ].join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = 'alsenform-question-template.txt';
+    link.href = '/templates/template_import_soal.docx';
+    link.download = 'template_import_soal.docx';
     link.click();
-    URL.revokeObjectURL(url);
-    markChanged('TXT template downloaded');
+    markChanged('DOCX template downloaded');
 };
 
-const importQuestionsFromText = (content: string) => {
-    const lines = content
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line && !line.toLowerCase().includes('template') && !line.toLowerCase().startsWith('contoh'));
-
-    const importedLines = lines.length ? lines : ['Pertanyaan dari file TXT | Option 1 | Option 2'];
-
-    importedLines.forEach((line) => {
-        const parts = line
-            .split('|')
-            .map((part) => part.trim())
-            .filter(Boolean);
-        const question: Question = {
-            id: nextQuestionId++,
-            title: parts[0] ?? 'Imported Question',
-            description: '',
-            type: parts.length > 1 ? 'Multiple choice' : 'Paragraph',
-            options: parts.length > 1 ? parts.slice(1) : [],
-            required: false,
-            media: [],
-            points: 10,
-        };
-        form.questions.push(question);
-        activeQuestionId.value = question.id;
-    });
-
-    activeTab.value = 'questions';
-    markChanged(`${importedLines.length} question(s) imported`);
-};
-
-const handleImportFile = async (event: Event) => {
+const handleImportDocxFile = async (event: Event) => {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
 
@@ -892,9 +979,53 @@ const handleImportFile = async (event: Event) => {
         return;
     }
 
-    const content = await file.text().catch(() => '');
-    importQuestionsFromText(content);
-    input.value = '';
+    isImportingFile.value = true;
+    importError.value = '';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await axios.post('/questions/import', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        const importedQuestions = response.data.questions;
+        if (Array.isArray(importedQuestions) && importedQuestions.length > 0) {
+            importedQuestions.forEach((q: any) => {
+                const question: Question = {
+                    id: nextQuestionId++,
+                    title: q.title || 'Untitled Question',
+                    description: q.description || '',
+                    type: q.type || 'Multiple choice',
+                    options: Array.isArray(q.options) ? [...q.options] : [],
+                    rows: Array.isArray(q.rows) ? [...q.rows] : [],
+                    columns: Array.isArray(q.columns) ? [...q.columns] : [],
+                    answer: typeof q.answer === 'object' && q.answer !== null
+                        ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
+                        : q.answer,
+                    required: !!q.required,
+                    media: [],
+                    points: q.points ?? 10,
+                };
+                form.questions.push(question);
+                activeQuestionId.value = question.id;
+            });
+
+            isImportModalOpen.value = false;
+            activeTab.value = 'questions';
+            markChanged(`${importedQuestions.length} pertanyaan berhasil diimpor`);
+        } else {
+            importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas.';
+        }
+    } catch (error: any) {
+        importError.value = error.response?.data?.message || 'Gagal mengimpor file. Pastikan format berkas benar.';
+    } finally {
+        isImportingFile.value = false;
+        input.value = '';
+    }
 };
 
 const copyShareUrl = async () => {
@@ -1034,7 +1165,7 @@ onMounted(() => {
         }
     }
     // Convert legacy correct answers to indices for all loaded questions
-    form.questions.forEach((q) => normalizeCorrectAnswer(q));
+    form.questions.forEach((q: Question) => normalizeCorrectAnswer(q));
 
     // Record initial state in undo stack
     recordHistory();
@@ -1236,22 +1367,22 @@ watch(
 
             <nav class="flex h-10 items-end justify-center gap-5 bg-white sm:gap-8">
                 <button
-                    v-for="tab in ['questions', 'responses', 'settings']"
+                    v-for="tab in ['questions', 'responses', 'settings', 'keamanan']"
                     :key="tab"
                     type="button"
                     :class="[
                         'px-3 pb-2.5 text-sm font-bold capitalize transition',
                         activeTab === tab ? 'border-b-4 border-indigo-600 text-indigo-700' : 'text-slate-700 hover:text-indigo-600',
                     ]"
-                    @click="activeTab = tab as 'questions' | 'responses' | 'settings'"
+                    @click="activeTab = tab as 'questions' | 'responses' | 'settings' | 'keamanan'"
                 >
-                    {{ tab }}
+                    {{ tab === 'keamanan' ? 'keamanan & kunci' : tab }}
                 </button>
             </nav>
         </header>
 
         <section class="mx-auto grid max-w-[980px] grid-cols-1 gap-4 px-4 py-5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_60px]">
-            <input ref="fileInput" type="file" accept=".txt,.md" class="hidden" @change="handleImportFile" />
+            <input ref="docxFileInput" type="file" accept=".docx" class="hidden" @change="handleImportDocxFile" />
             <div class="space-y-4">
                 <p class="text-sm font-medium text-slate-500">{{ statusMessage }}</p>
 
@@ -1308,506 +1439,714 @@ watch(
                                     activeQuestionId === question.id ? 'border-l-4 border-blue-500' : 'border-l-4 border-transparent',
                                 ]"
                             >
-                                <div>
-                                    <div
-                                        class="mx-auto mb-3 flex w-10 cursor-grab justify-center gap-1 text-slate-300 active:cursor-grabbing"
-                                        title="Drag untuk pindahkan soal"
-                                    >
-                                        <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                                        <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                                        <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                                    </div>
-
-                                    <input
-                                        v-model="question.title"
-                                        type="text"
-                                        class="mb-6 w-full border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
-                                        :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
-                                        @input="markChanged('Question updated')"
-                                    />
-
-                                    <input
-                                        v-model="question.description"
-                                        type="text"
-                                        class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
-                                        placeholder="Description"
-                                        :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                        @input="markChanged('Description updated')"
-                                    />
-
-                                    <!-- Media Rendering and Editing -->
-                                    <div v-if="question.media && question.media.length" class="mb-4 grid gap-4 sm:grid-cols-2">
-                                        <div
-                                            v-for="(media, mediaIndex) in question.media"
-                                            :key="mediaIndex"
-                                            class="relative rounded-xl border border-slate-200 bg-slate-50 p-4"
-                                        >
-                                            <div class="mb-2 flex items-center justify-between">
-                                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
-                                                    {{ media.type === 'image' ? 'Gambar' : 'Video' }}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    class="text-slate-400 transition hover:text-red-500"
-                                                    title="Hapus media"
-                                                    @click.stop="
-                                                        question.media.splice(mediaIndex, 1);
-                                                        markChanged('Media removed');
-                                                    "
-                                                >
-                                                    <Trash2 class="h-4 w-4" />
-                                                </button>
+                                <template v-if="editingAnswerKeyQuestionId === question.id">
+                                    <!-- ANSWER KEY EDIT MODE -->
+                                    <div class="col-span-full border border-indigo-100 rounded-2xl overflow-hidden bg-white">
+                                        <div class="flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-6 py-4">
+                                            <div class="flex items-center gap-2">
+                                                <Key class="h-5 w-5 text-indigo-600 animate-pulse" />
+                                                <span class="text-sm font-extrabold text-indigo-950">Pengaturan Kunci Jawaban</span>
                                             </div>
-
-                                            <!-- Source Selector Tabs -->
-                                            <div class="mb-3 flex gap-2 rounded-xl bg-slate-200/50 p-1 text-[10px] font-bold">
-                                                <button
-                                                    type="button"
-                                                    class="flex-1 rounded-lg py-1.5 text-center transition"
-                                                    :class="[
-                                                        (media.sourceType ?? 'upload') === 'upload'
-                                                            ? 'bg-white text-slate-800 shadow-sm'
-                                                            : 'text-slate-500 hover:text-slate-700',
-                                                    ]"
-                                                    @click="media.sourceType = 'upload'"
-                                                >
-                                                    Upload File
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    class="flex-1 rounded-lg py-1.5 text-center transition"
-                                                    :class="[
-                                                        media.sourceType === 'link'
-                                                            ? 'bg-white text-slate-800 shadow-sm'
-                                                            : 'text-slate-500 hover:text-slate-700',
-                                                    ]"
-                                                    @click="media.sourceType = 'link'"
-                                                >
-                                                    {{ media.type === 'video' ? 'Link YouTube' : 'Link URL' }}
-                                                </button>
-                                            </div>
-
-                                            <!-- Upload Interface -->
-                                            <div v-if="(media.sourceType ?? 'upload') === 'upload'" class="space-y-2">
-                                                <div
-                                                    v-if="media.isUploading"
-                                                    class="flex flex-col items-center justify-center rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 p-4"
-                                                >
-                                                    <span
-                                                        class="mb-1 h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"
-                                                    ></span>
-                                                    <span class="text-[10px] font-bold text-indigo-700">Uploading...</span>
-                                                </div>
-                                                <div v-else class="flex flex-col gap-2">
-                                                    <label
-                                                        class="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-indigo-400"
-                                                    >
-                                                        <FileUp class="mb-1 h-5 w-5 text-slate-400" />
-                                                        <span class="text-[10px] font-bold text-slate-600"
-                                                            >Pilih File {{ media.type === 'image' ? 'Gambar' : 'Video' }}</span
-                                                        >
-                                                        <span class="mt-0.5 text-[8px] text-slate-400"
-                                                            >Maks. {{ form.settings.maxUploadSize ?? 20 }}MB</span
-                                                        >
-                                                        <span v-if="media.type === 'video'" class="mt-0.5 text-[8px] font-semibold text-amber-600"
-                                                            >💡 Saran: tidak lebih dari 100MB</span
-                                                        >
-                                                        <input
-                                                            type="file"
-                                                            class="hidden"
-                                                            :accept="media.type === 'image' ? 'image/*' : 'video/*'"
-                                                            @change="handleMediaUpload($event, media)"
-                                                        />
-                                                    </label>
-                                                    <p v-if="media.uploadError" class="text-[9px] font-bold text-red-600">{{ media.uploadError }}</p>
-                                                </div>
-                                            </div>
-
-                                            <!-- Link Interface -->
-                                            <div v-else class="space-y-2">
-                                                <input
-                                                    v-model="media.url"
-                                                    type="text"
-                                                    :placeholder="
-                                                        media.type === 'image'
-                                                            ? 'Masukkan URL link gambar (http://...)'
-                                                            : 'Masukkan Link YouTube (https://youtube.com/...)'
-                                                    "
-                                                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-indigo-500"
-                                                    @input="markChanged('Media URL updated')"
-                                                />
-                                            </div>
-
-                                            <!-- Preview Display -->
-                                            <div v-if="media.url" class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                                <img v-if="media.type === 'image'" :src="media.url" class="max-h-48 w-full object-contain p-2" />
-                                                <iframe
-                                                    v-else-if="media.type === 'video' && getYoutubeEmbedUrl(media.url)"
-                                                    :src="getYoutubeEmbedUrl(media.url)"
-                                                    class="aspect-video w-full"
-                                                    frameborder="0"
-                                                    allowfullscreen
-                                                ></iframe>
-                                                <video
-                                                    v-else-if="media.type === 'video'"
-                                                    :src="media.url"
-                                                    controls
-                                                    class="max-h-48 w-full bg-slate-950"
-                                                ></video>
-                                                <div v-else class="p-2 text-center text-xs text-slate-400">
-                                                    Format URL video tidak didukung (gunakan link YouTube)
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="question.type === 'Short answer'" class="space-y-4">
-                                        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-400">
-                                            Short answer text
-                                        </div>
-                                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                                            <label class="mb-1 block text-xs font-bold text-emerald-800"
-                                                >Kunci Jawaban Benar (Pencocokan Teks):</label
-                                            >
-                                            <input
-                                                v-model="question.answer"
-                                                type="text"
-                                                placeholder="Masukkan kunci jawaban benar..."
-                                                class="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500"
-                                                @input="markChanged('Answer key updated')"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        v-else-if="question.type === 'Paragraph'"
-                                        class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-400"
-                                    >
-                                        Long answer text
-                                    </div>
-
-                                    <div
-                                        v-else-if="question.type === 'File upload'"
-                                        class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600"
-                                        >
-                                            Add file
-                                        </button>
-                                    </div>
-
-                                    <div
-                                        v-else-if="question.type === 'Date'"
-                                        class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
-                                    >
-                                        <input type="date" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-500" />
-                                    </div>
-
-                                    <div
-                                        v-else-if="question.type === 'Time'"
-                                        class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
-                                    >
-                                        <input type="time" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-500" />
-                                    </div>
-
-                                    <div v-else-if="question.type === 'Linear scale'" class="space-y-4">
-                                        <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
-                                            <button
-                                                v-for="option in question.options"
-                                                :key="option"
-                                                type="button"
-                                                :class="[
-                                                    'flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold transition',
-                                                    question.answer === option
-                                                        ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                                                        : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-300',
-                                                ]"
-                                                @click.stop="
-                                                    question.answer = option;
-                                                    markChanged('Answer key updated');
-                                                "
-                                            >
-                                                {{ option }}
-                                            </button>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="text-sm font-bold text-indigo-600"
-                                            @click.stop="
-                                                question.options.push(String(question.options.length + 1));
-                                                markChanged('Scale extended');
-                                            "
-                                        >
-                                            Add scale point
-                                        </button>
-                                        <div
-                                            v-if="question.answer"
-                                            class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
-                                        >
-                                            <span class="font-bold">Kunci jawaban benar:</span> {{ question.answer }}
-                                        </div>
-                                    </div>
-
-                                    <div v-else-if="question.type === 'Rating'" class="space-y-4">
-                                        <div class="flex gap-2 rounded-xl bg-slate-50 p-3 text-slate-300">
-                                            <button
-                                                v-for="option in question.options"
-                                                :key="option"
-                                                type="button"
-                                                :class="[
-                                                    'transition',
-                                                    Number(question.answer) >= Number(option)
-                                                        ? 'text-amber-400'
-                                                        : 'text-slate-300 hover:text-amber-200',
-                                                ]"
-                                                @click.stop="
-                                                    question.answer = option;
-                                                    markChanged('Answer key updated');
-                                                "
-                                            >
-                                                <Star class="h-8 w-8 fill-current" />
-                                            </button>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="text-sm font-bold text-indigo-600"
-                                            @click.stop="
-                                                question.options.push(String(question.options.length + 1));
-                                                markChanged('Rating extended');
-                                            "
-                                        >
-                                            Add rating point
-                                        </button>
-                                        <div
-                                            v-if="question.answer"
-                                            class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
-                                        >
-                                            <span class="font-bold">Kunci jawaban benar (Rating):</span> {{ question.answer }} bintang
-                                        </div>
-                                    </div>
-
-                                    <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-3">
-                                        <div class="grid grid-cols-[1fr_1fr_1fr] gap-2 rounded-xl bg-slate-50 p-3 text-sm">
-                                            <span></span>
-                                            <span class="font-bold text-slate-500">Column 1</span>
-                                            <span class="font-bold text-slate-500">Column 2</span>
-                                            <span class="font-bold text-slate-500">Row 1</span>
-                                            <span class="h-5 w-5 rounded-full border-2 border-slate-300"></span>
-                                            <span class="h-5 w-5 rounded-full border-2 border-slate-300"></span>
-                                            <span class="font-bold text-slate-500">Row 2</span>
-                                            <span class="h-5 w-5 rounded-full border-2 border-slate-300"></span>
-                                            <span class="h-5 w-5 rounded-full border-2 border-slate-300"></span>
-                                        </div>
-                                    </div>
-
-                                    <div v-else class="space-y-5">
-                                        <div
-                                            v-if="question.type === 'Drop-down'"
-                                            class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500"
-                                        >
-                                            <ChevronDown class="h-4 w-4" />
-                                            Responden memilih satu jawaban dari daftar
-                                        </div>
-                                        <div
-                                            v-for="(option, optionIndex) in question.options"
-                                            :key="`${question.id}-${optionIndex}`"
-                                            v-show="option !== 'Other' || !isQuestionAnswered(question)"
-                                            class="flex items-center gap-3 text-base transition hover:translate-x-1 sm:text-lg"
-                                        >
-                                            <!-- Checkbox/Radio Correct Answer Selector on the left -->
-                                            <button
-                                                type="button"
-                                                :aria-label="`Pilih ${option || `Opsi ${optionIndex + 1}`} sebagai jawaban benar`"
-                                                :class="[
-                                                    'flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
-                                                    question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
-                                                    isCorrectAnswer(question, optionIndex)
-                                                        ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                                                        : 'border-slate-300 bg-white hover:border-emerald-400',
-                                                ]"
-                                                @click.stop="setCorrectAnswer(question, optionIndex)"
-                                            >
-                                                <span
-                                                    v-if="isCorrectAnswer(question, optionIndex)"
-                                                    :class="[
-                                                        'block h-2 w-2 bg-white',
-                                                        question.type === 'Checkboxes' ? 'rounded-sm' : 'rounded-full',
-                                                    ]"
-                                                ></span>
-                                            </button>
-
-                                            <!-- Dropdown number index if it is a Drop-down type -->
-                                            <span v-if="question.type === 'Drop-down'" class="text-xs font-bold text-slate-400">
-                                                #{{ optionIndex + 1 }}
-                                            </span>
-
-                                            <input
-                                                :value="question.options[optionIndex]"
-                                                type="text"
-                                                class="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
-                                                :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                                @input="updateOption(question, optionIndex, ($event.target as HTMLInputElement).value)"
-                                            />
-                                            <button
-                                                type="button"
-                                                class="rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
-                                                @click.stop="removeOption(question, optionIndex)"
-                                            >
-                                                x
-                                            </button>
-                                        </div>
-                                        <div
-                                            v-if="optionQuestionTypes.includes(question.type)"
-                                            class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800"
-                                        >
-                                            <span class="font-bold">Jawaban benar:</span>
-                                            <span
-                                                v-if="question.type === 'Checkboxes' && Array.isArray(question.answer) && question.answer.length"
-                                                class="ml-1"
-                                            >
-                                                {{
-                                                    question.answer
-                                                        .map((idx) => question.options[Number(idx)])
-                                                        .filter(Boolean)
-                                                        .join(', ')
-                                                }}
-                                            </span>
-                                            <span
-                                                v-else-if="
-                                                    question.type !== 'Checkboxes' &&
-                                                    question.answer !== '' &&
-                                                    question.answer !== null &&
-                                                    question.answer !== undefined
-                                                "
-                                                class="ml-1"
-                                            >
-                                                {{ question.options[Number(question.answer)] }}
-                                            </span>
-                                            <span v-else class="ml-1 text-emerald-600">belum dipilih</span>
-                                        </div>
-                                        <div
-                                            v-if="optionQuestionTypes.includes(question.type)"
-                                            class="flex flex-wrap items-center gap-3 text-base text-slate-500 sm:text-lg"
-                                        >
-                                            <span
-                                                :class="[
-                                                    'h-5 w-5 border-2 border-slate-300',
-                                                    question.type === 'Checkboxes'
-                                                        ? 'rounded'
-                                                        : question.type === 'Drop-down'
-                                                          ? 'rounded-lg'
-                                                          : 'rounded-full',
-                                                ]"
-                                            ></span>
-                                            <button type="button" class="transition hover:text-indigo-600" @click.stop="addOption(question)">
-                                                Add option
-                                            </button>
-                                            <span v-if="!question.options.includes('Other') && !isQuestionAnswered(question)" class="text-slate-900"
-                                                >or</span
-                                            >
-                                            <button
-                                                v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
-                                                type="button"
-                                                class="text-blue-600 transition hover:text-blue-700"
-                                                @click.stop="addOption(question, 'Other')"
-                                            >
-                                                Add "Other"
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <aside class="flex flex-col gap-6">
-                                    <div class="relative">
-                                        <button
-                                            type="button"
-                                            class="flex h-12 w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 outline-none transition hover:border-indigo-300 focus:border-indigo-500 sm:text-base"
-                                            @click.stop="openTypeMenuQuestionId = openTypeMenuQuestionId === question.id ? null : question.id"
-                                        >
-                                            <span class="flex min-w-0 items-center gap-3">
-                                                <component :is="questionTypeIcon(question.type)" class="h-5 w-5 shrink-0 text-slate-500" />
-                                                <span class="truncate">{{ question.type }}</span>
-                                            </span>
-                                            <ChevronDown class="h-5 w-5 shrink-0 text-slate-500" />
-                                        </button>
-
-                                        <div
-                                            v-if="openTypeMenuQuestionId === question.id"
-                                            class="absolute right-0 top-14 z-30 max-h-[480px] w-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
-                                            @click.stop
-                                        >
-                                            <template v-for="(type, index) in questionTypes" :key="type.value">
-                                                <div
-                                                    v-if="index > 0 && questionTypes[index - 1].group !== type.group"
-                                                    class="my-2 border-t border-slate-200"
-                                                ></div>
-                                                <button
-                                                    type="button"
-                                                    :class="[
-                                                        'flex w-full items-center gap-4 px-4 py-3 text-left text-base transition hover:bg-slate-100',
-                                                        question.type === type.value ? 'bg-blue-50 text-slate-950' : 'text-slate-700',
-                                                    ]"
-                                                    @click="updateQuestionType(question, type.value)"
-                                                >
-                                                    <component :is="type.icon" class="h-6 w-6 shrink-0 text-slate-500" />
-                                                    <span>{{ type.value }}</span>
-                                                </button>
-                                            </template>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-auto border-t border-slate-200 pt-6">
-                                        <div class="flex items-center justify-end gap-4 text-slate-600 sm:gap-5">
-                                            <button
-                                                type="button"
-                                                aria-label="Duplicate question"
-                                                class="transition hover:text-indigo-600"
-                                                @click.stop="duplicateQuestion(question)"
-                                            >
-                                                <FileText class="h-6 w-6" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                aria-label="Delete question"
-                                                class="transition hover:text-red-500"
-                                                @click.stop="deleteQuestion(question)"
-                                            >
-                                                <Trash2 class="h-6 w-6" />
-                                            </button>
-                                            <span class="h-8 border-l border-slate-200"></span>
-                                            <div v-if="form.settings.isQuiz" class="flex items-center gap-1.5">
-                                                <span class="text-xs font-semibold text-slate-500 text-slate-700">Poin:</span>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-bold text-slate-600">Poin:</span>
                                                 <input
                                                     v-model.number="question.points"
                                                     type="number"
                                                     min="0"
-                                                    class="w-14 rounded-lg border border-slate-300 bg-white px-2 py-1 text-center text-xs font-bold outline-none focus:border-indigo-500"
+                                                    class="w-16 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-center text-sm font-extrabold outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                                                     @input="markChanged('Points updated')"
                                                 />
                                             </div>
-                                            <span class="h-8 border-l border-slate-200"></span>
-                                            <span class="text-sm font-medium">Required</span>
-                                            <button
-                                                type="button"
-                                                aria-label="Toggle required"
-                                                @click.stop="
-                                                    question.required = !question.required;
-                                                    markChanged('Required setting changed');
-                                                "
-                                            >
-                                                <ToggleRight
-                                                    :class="[
-                                                        'h-8 w-8 transition',
-                                                        question.required ? 'text-indigo-600' : 'rotate-180 text-slate-300',
-                                                    ]"
+                                        </div>
+                                        
+                                        <div class="p-6 space-y-4">
+                                            <div class="text-sm font-bold text-slate-800">
+                                                Pertanyaan: <span class="font-normal text-slate-600">{{ question.title || 'Tanpa Judul' }}</span>
+                                            </div>
+
+                                            <!-- Short Answer Kunci Jawaban -->
+                                            <div v-if="question.type === 'Short answer'" class="space-y-2">
+                                                <label class="text-xs font-bold text-slate-600">Tuliskan jawaban yang benar:</label>
+                                                <input
+                                                    v-model="question.answer"
+                                                    type="text"
+                                                    class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 bg-slate-50/30"
+                                                    placeholder="Masukkan teks jawaban yang benar..."
+                                                    @input="markChanged('Answer key updated')"
                                                 />
-                                            </button>
-                                            <MoreVertical class="h-6 w-6" />
+                                            </div>
+
+                                            <!-- Paragraph Kunci Jawaban Info -->
+                                            <div v-else-if="question.type === 'Paragraph'" class="rounded-xl bg-slate-50 p-4 border border-slate-200 text-xs text-slate-500 leading-relaxed font-medium">
+                                                💡 Pertanyaan bertipe <strong>Paragraf</strong> akan dinilai secara manual oleh Anda setelah responden mengirimkan jawaban. Tidak ada kunci jawaban otomatis.
+                                            </div>
+
+                                            <!-- Multiple choice / Checkboxes / Drop-down Kunci Jawaban -->
+                                            <div v-else-if="optionQuestionTypes.includes(question.type)" class="space-y-2.5">
+                                                <span class="text-xs font-bold text-slate-600 block">Pilih satu atau lebih opsi jawaban yang benar:</span>
+                                                <div class="space-y-2">
+                                                    <button
+                                                        v-for="(option, optionIndex) in question.options"
+                                                        :key="`anskey-opt-${optionIndex}`"
+                                                        type="button"
+                                                        :class="[
+                                                            'w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-semibold transition-all text-left',
+                                                            isCorrectAnswer(question, optionIndex)
+                                                                ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-100'
+                                                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                                        ]"
+                                                        @click="setCorrectAnswer(question, optionIndex)"
+                                                    >
+                                                        <span
+                                                            :class="[
+                                                                'flex h-5 w-5 shrink-0 items-center justify-center border-2',
+                                                                question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
+                                                                isCorrectAnswer(question, optionIndex) ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'
+                                                            ]"
+                                                        >
+                                                            <Check v-if="isCorrectAnswer(question, optionIndex)" class="h-3.5 w-3.5 text-white" />
+                                                        </span>
+                                                        <span>{{ option }}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Linear scale Kunci Jawaban -->
+                                            <div v-else-if="question.type === 'Linear scale'" class="space-y-3">
+                                                <span class="text-xs font-bold text-slate-600 block">Pilih titik skala yang benar:</span>
+                                                <div class="flex items-center gap-2">
+                                                    <button
+                                                        v-for="option in question.options"
+                                                        :key="`anskey-scale-${option}`"
+                                                        type="button"
+                                                        :class="[
+                                                            'flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition-all',
+                                                            question.answer === option
+                                                                ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                                                                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-400'
+                                                        ]"
+                                                        @click="question.answer = option; markChanged('Answer key updated')"
+                                                    >
+                                                        {{ option }}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Rating Kunci Jawaban -->
+                                            <div v-else-if="question.type === 'Rating'" class="space-y-3">
+                                                <span class="text-xs font-bold text-slate-600 block">Pilih rating bintang yang benar:</span>
+                                                <div class="flex gap-2 text-slate-300">
+                                                    <button
+                                                        v-for="option in question.options"
+                                                        :key="`anskey-rating-${option}`"
+                                                        type="button"
+                                                        :class="[
+                                                            'transition-colors',
+                                                            Number(question.answer) >= Number(option) ? 'text-amber-400' : 'text-slate-300 hover:text-amber-200'
+                                                        ]"
+                                                        @click="question.answer = option; markChanged('Answer key updated')"
+                                                    >
+                                                        <Star class="h-8 w-8 fill-current" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Date Kunci Jawaban -->
+                                            <div v-else-if="question.type === 'Date'" class="space-y-2">
+                                                <label class="text-xs font-bold text-slate-600">Pilih tanggal yang benar:</label>
+                                                <input
+                                                    v-model="question.answer"
+                                                    type="date"
+                                                    class="h-10 rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 bg-white"
+                                                    @change="markChanged('Answer key updated')"
+                                                />
+                                            </div>
+
+                                            <!-- Time Kunci Jawaban -->
+                                            <div v-else-if="question.type === 'Time'" class="space-y-2">
+                                                <label class="text-xs font-bold text-slate-600">Pilih waktu yang benar:</label>
+                                                <input
+                                                    v-model="question.answer"
+                                                    type="time"
+                                                    class="h-10 rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 bg-white"
+                                                    @change="markChanged('Answer key updated')"
+                                                />
+                                            </div>
+
+                                            <!-- Grid types Kunci Jawaban -->
+                                            <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-4">
+                                                <span class="text-xs font-bold text-slate-600 block">Pilih jawaban benar untuk setiap baris:</span>
+                                                <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/50">
+                                                    <table class="w-full text-left border-collapse text-sm">
+                                                        <thead>
+                                                            <tr class="border-b border-slate-200 bg-slate-100">
+                                                                <th class="p-3 font-bold text-slate-700">Baris / Kolom</th>
+                                                                <th v-for="(col, cIndex) in question.columns" :key="`header-col-${cIndex}`" class="p-3 text-center font-bold text-slate-700">
+                                                                    {{ col }}
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr v-for="(row, rIndex) in question.rows" :key="`row-key-${rIndex}`" class="border-b border-slate-150 last:border-0 hover:bg-slate-50 transition-colors">
+                                                                <td class="p-3 font-semibold text-slate-800">{{ row }}</td>
+                                                                <td v-for="(col, cIndex) in question.columns" :key="`cell-${rIndex}-${cIndex}`" class="p-3 text-center">
+                                                                    <label class="inline-flex items-center justify-center cursor-pointer">
+                                                                        <input
+                                                                            :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
+                                                                            :name="`anskey-grid-row-${question.id}-${rIndex}`"
+                                                                            :checked="question.type === 'Tick box grid' ? question.answer?.[rIndex]?.includes(cIndex) : question.answer?.[rIndex] === cIndex"
+                                                                            class="h-4 w-4 accent-emerald-600"
+                                                                            @change="setGridAnswer(question, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')"
+                                                                        />
+                                                                    </label>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                                                <button
+                                                    type="button"
+                                                    class="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-md"
+                                                    @click="editingAnswerKeyQuestionId = null"
+                                                >
+                                                    Selesai
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                </aside>
+                                </template>
+
+                                <template v-else>
+                                    <!-- NORMAL EDIT MODE -->
+                                    <div>
+                                        <div
+                                            class="mx-auto mb-3 flex w-10 cursor-grab justify-center gap-1 text-slate-300 active:cursor-grabbing"
+                                            title="Drag untuk pindahkan soal"
+                                        >
+                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                                        </div>
+
+                                        <input
+                                            v-model="question.title"
+                                            type="text"
+                                            class="mb-6 w-full border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
+                                            :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
+                                            @input="markChanged('Question updated')"
+                                        />
+
+                                        <input
+                                            v-model="question.description"
+                                            type="text"
+                                            class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
+                                            placeholder="Description"
+                                            :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
+                                            @input="markChanged('Description updated')"
+                                        />
+
+                                        <!-- Media Rendering and Editing -->
+                                        <div v-if="question.media && question.media.length" class="mb-4 grid gap-4 sm:grid-cols-2">
+                                            <div
+                                                v-for="(media, mediaIndex) in question.media"
+                                                :key="mediaIndex"
+                                                class="relative rounded-xl border border-slate-200 bg-slate-50 p-4"
+                                            >
+                                                <div class="mb-2 flex items-center justify-between">
+                                                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                                                        {{ media.type === 'image' ? 'Gambar' : 'Video' }}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        class="text-slate-400 transition hover:text-red-500"
+                                                        title="Hapus media"
+                                                        @click.stop="
+                                                            question.media.splice(mediaIndex, 1);
+                                                            markChanged('Media removed');
+                                                        "
+                                                    >
+                                                        <Trash2 class="h-4 w-4" />
+                                                    </button>
+                                                </div>
+
+                                                <!-- Source Selector Tabs -->
+                                                <div class="mb-3 flex gap-2 rounded-xl bg-slate-200/50 p-1 text-[10px] font-bold">
+                                                    <button
+                                                        type="button"
+                                                        class="flex-1 rounded-lg py-1.5 text-center transition"
+                                                        :class="[
+                                                            (media.sourceType ?? 'upload') === 'upload'
+                                                                ? 'bg-white text-slate-800 shadow-sm'
+                                                                : 'text-slate-500 hover:text-slate-700',
+                                                        ]"
+                                                        @click="media.sourceType = 'upload'"
+                                                    >
+                                                        Upload File
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="flex-1 rounded-lg py-1.5 text-center transition"
+                                                        :class="[
+                                                            media.sourceType === 'link'
+                                                                ? 'bg-white text-slate-800 shadow-sm'
+                                                                : 'text-slate-500 hover:text-slate-700',
+                                                        ]"
+                                                        @click="media.sourceType = 'link'"
+                                                    >
+                                                        {{ media.type === 'video' ? 'Link YouTube' : 'Link URL' }}
+                                                    </button>
+                                                </div>
+
+                                                <!-- Upload Interface -->
+                                                <div v-if="(media.sourceType ?? 'upload') === 'upload'" class="space-y-2">
+                                                    <div
+                                                        v-if="media.isUploading"
+                                                        class="flex flex-col items-center justify-center rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 p-4"
+                                                    >
+                                                        <span
+                                                            class="mb-1 h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"
+                                                        ></span>
+                                                        <span class="text-[10px] font-bold text-indigo-700">Uploading...</span>
+                                                    </div>
+                                                    <div v-else class="flex flex-col gap-2">
+                                                        <label
+                                                            class="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-indigo-400"
+                                                        >
+                                                            <FileUp class="mb-1 h-5 w-5 text-slate-400" />
+                                                            <span class="text-[10px] font-bold text-slate-600"
+                                                                >Pilih File {{ media.type === 'image' ? 'Gambar' : 'Video' }}</span
+                                                            >
+                                                            <span class="mt-0.5 text-[8px] text-slate-400"
+                                                                >Maks. {{ form.settings.maxUploadSize ?? 20 }}MB</span
+                                                            >
+                                                            <span v-if="media.type === 'video'" class="mt-0.5 text-[8px] font-semibold text-amber-600"
+                                                                >💡 Saran: tidak lebih dari 100MB</span
+                                                            >
+                                                            <input
+                                                                type="file"
+                                                                class="hidden"
+                                                                :accept="media.type === 'image' ? 'image/*' : 'video/*'"
+                                                                @change="handleMediaUpload($event, media)"
+                                                            />
+                                                        </label>
+                                                        <p v-if="media.uploadError" class="text-[9px] font-bold text-red-600">{{ media.uploadError }}</p>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Link Interface -->
+                                                <div v-else class="space-y-2">
+                                                    <input
+                                                        media.url
+                                                        v-model="media.url"
+                                                        type="text"
+                                                        :placeholder="
+                                                            media.type === 'image'
+                                                                ? 'Masukkan URL link gambar (http://...)'
+                                                                : 'Masukkan Link YouTube (https://youtube.com/...)'
+                                                        "
+                                                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-indigo-500"
+                                                        @input="markChanged('Media URL updated')"
+                                                    />
+                                                </div>
+
+                                                <!-- Preview Display -->
+                                                <div v-if="media.url" class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                                    <img v-if="media.type === 'image'" :src="media.url" class="max-h-48 w-full object-contain p-2" />
+                                                    <iframe
+                                                        v-else-if="media.type === 'video' && getYoutubeEmbedUrl(media.url)"
+                                                        :src="getYoutubeEmbedUrl(media.url)"
+                                                        class="aspect-video w-full"
+                                                        frameborder="0"
+                                                        allowfullscreen
+                                                    ></iframe>
+                                                    <video
+                                                        v-else-if="media.type === 'video'"
+                                                        :src="media.url"
+                                                        controls
+                                                        class="max-h-48 w-full bg-slate-950"
+                                                    ></video>
+                                                    <div v-else class="p-2 text-center text-xs text-slate-400">
+                                                        Format URL video tidak didukung (gunakan link YouTube)
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="question.type === 'Short answer'" class="space-y-4">
+                                            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-400">
+                                                Responden memasukkan jawaban teks singkat
+                                            </div>
+                                            <div v-if="form.settings.isQuiz" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-800">
+                                                <span class="font-bold">Kunci jawaban benar:</span> {{ question.answer || 'belum diisi' }}
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            v-else-if="question.type === 'Paragraph'"
+                                            class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-400"
+                                        >
+                                            Responden memasukkan jawaban teks panjang (paragraf)
+                                        </div>
+
+                                        <div
+                                            v-else-if="question.type === 'File upload'"
+                                            class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
+                                        >
+                                            <button
+                                                type="button"
+                                                class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600"
+                                            >
+                                                Add file
+                                            </button>
+                                        </div>
+
+                                        <div
+                                            v-else-if="question.type === 'Date'"
+                                            class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
+                                        >
+                                            <input type="date" disabled class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400 cursor-not-allowed" />
+                                            <div v-if="form.settings.isQuiz && question.answer" class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                                <span class="font-bold">Kunci tanggal benar:</span> {{ question.answer }}
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            v-else-if="question.type === 'Time'"
+                                            class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
+                                        >
+                                            <input type="time" disabled class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400 cursor-not-allowed" />
+                                            <div v-if="form.settings.isQuiz && question.answer" class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                                <span class="font-bold">Kunci waktu benar:</span> {{ question.answer }}
+                                            </div>
+                                        </div>
+
+                                        <div v-else-if="question.type === 'Linear scale'" class="space-y-4">
+                                            <div class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
+                                                <span
+                                                    v-for="option in question.options"
+                                                    :key="option"
+                                                    class="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold bg-white text-slate-700"
+                                                >
+                                                    {{ option }}
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    class="text-xs font-bold text-indigo-600 hover:underline"
+                                                    @click.stop="
+                                                        question.options.push(String(question.options.length + 1));
+                                                        markChanged('Scale extended');
+                                                    "
+                                                >
+                                                    + Tambah Poin Skala
+                                                </button>
+                                                <button
+                                                    v-if="question.options.length > 2"
+                                                    type="button"
+                                                    class="text-xs font-bold text-red-600 hover:underline ml-4"
+                                                    @click.stop="
+                                                        question.options.pop();
+                                                        markChanged('Scale reduced');
+                                                    "
+                                                >
+                                                    Kurangi Skala
+                                                </button>
+                                            </div>
+                                            <div
+                                                v-if="form.settings.isQuiz && question.answer"
+                                                class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
+                                            >
+                                                <span class="font-bold">Kunci jawaban benar:</span> {{ question.answer }}
+                                            </div>
+                                        </div>
+
+                                        <div v-else-if="question.type === 'Rating'" class="space-y-4">
+                                            <div class="flex gap-2 rounded-xl bg-slate-50 p-3 text-slate-300">
+                                                <Star v-for="option in question.options" :key="option" class="h-8 w-8" />
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    class="text-xs font-bold text-indigo-600 hover:underline"
+                                                    @click.stop="
+                                                        question.options.push(String(question.options.length + 1));
+                                                        markChanged('Rating extended');
+                                                    "
+                                                >
+                                                    + Tambah Skala Rating
+                                                </button>
+                                                <button
+                                                    v-if="question.options.length > 1"
+                                                    type="button"
+                                                    class="text-xs font-bold text-red-600 hover:underline ml-4"
+                                                    @click.stop="
+                                                        question.options.pop();
+                                                        markChanged('Rating reduced');
+                                                    "
+                                                >
+                                                    Kurangi Rating
+                                                </button>
+                                            </div>
+                                            <div
+                                                v-if="form.settings.isQuiz && question.answer"
+                                                class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
+                                            >
+                                                <span class="font-bold">Kunci jawaban benar (Rating):</span> {{ question.answer }} bintang
+                                            </div>
+                                        </div>
+
+                                        <!-- Rows & Columns Editor for Grid types -->
+                                        <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-4">
+                                            <div class="grid grid-cols-2 gap-4 border border-slate-200 rounded-2xl p-4 bg-slate-50/30">
+                                                <!-- Rows list -->
+                                                <div class="space-y-2">
+                                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Baris (Rows)</span>
+                                                    <div v-for="(row, rIndex) in question.rows" :key="`row-${rIndex}`" class="flex items-center gap-2">
+                                                        <span class="text-xs text-slate-400 font-bold">#{{ rIndex + 1 }}</span>
+                                                        <input
+                                                            v-model="question.rows[rIndex]"
+                                                            type="text"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 outline-none text-xs py-1 focus:border-indigo-500 bg-transparent"
+                                                            @input="markChanged('Row label updated')"
+                                                        />
+                                                        <button type="button" class="text-slate-400 hover:text-red-500 font-bold text-xs px-1" @click="question.rows.splice(rIndex, 1)">x</button>
+                                                    </div>
+                                                    <button type="button" class="text-xs font-bold text-indigo-600 hover:underline flex items-center" @click="question.rows.push(`Baris ${question.rows.length + 1}`)">
+                                                        + Tambah Baris
+                                                    </button>
+                                                </div>
+
+                                                <!-- Columns list -->
+                                                <div class="space-y-2">
+                                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Kolom (Columns)</span>
+                                                    <div v-for="(col, cIndex) in question.columns" :key="`col-${cIndex}`" class="flex items-center gap-2">
+                                                        <span class="text-xs text-slate-400 font-bold">#{{ cIndex + 1 }}</span>
+                                                        <input
+                                                            v-model="question.columns[cIndex]"
+                                                            type="text"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 outline-none text-xs py-1 focus:border-indigo-500 bg-transparent"
+                                                            @input="markChanged('Column label updated')"
+                                                        />
+                                                        <button type="button" class="text-slate-400 hover:text-red-500 font-bold text-xs px-1" @click="question.columns.splice(cIndex, 1)">x</button>
+                                                    </div>
+                                                    <button type="button" class="text-xs font-bold text-indigo-600 hover:underline flex items-center" @click="question.columns.push(`Kolom ${question.columns.length + 1}`)">
+                                                        + Tambah Kolom
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <!-- Preview of correct answers in Grid -->
+                                            <div v-if="form.settings.isQuiz && question.answer && Object.keys(question.answer).length" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-800 space-y-1">
+                                                <span class="font-bold block">Kunci jawaban benar:</span>
+                                                <div v-for="(colIdx, rowIdx) in question.answer" :key="`ans-${rowIdx}`" class="ml-2 font-medium">
+                                                    - {{ question.rows?.[rowIdx] }}: 
+                                                    <span class="font-bold">
+                                                        {{ Array.isArray(colIdx) ? colIdx.map(c => question.columns?.[c]).join(', ') : question.columns?.[colIdx] }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-else class="space-y-5">
+                                            <div
+                                                v-if="question.type === 'Drop-down'"
+                                                class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500"
+                                            >
+                                                <ChevronDown class="h-4 w-4" />
+                                                Responden memilih satu jawaban dari daftar
+                                            </div>
+                                            <div
+                                                v-for="(option, optionIndex) in question.options"
+                                                :key="`${question.id}-${optionIndex}`"
+                                                v-show="option !== 'Other' || !isQuestionAnswered(question)"
+                                                class="flex items-center gap-3 text-base transition hover:translate-x-1 sm:text-lg"
+                                            >
+                                                <!-- Visual icon only for checkboxes/radio in edit mode -->
+                                                <span
+                                                    :class="[
+                                                        'flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
+                                                        question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
+                                                        form.settings.isQuiz && isCorrectAnswer(question, optionIndex)
+                                                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                                                            : 'border-slate-300 bg-white'
+                                                    ]"
+                                                >
+                                                    <Check v-if="form.settings.isQuiz && isCorrectAnswer(question, optionIndex)" class="h-3.5 w-3.5 text-white" />
+                                                </span>
+
+                                                <!-- Dropdown number index if it is a Drop-down type -->
+                                                <span v-if="question.type === 'Drop-down'" class="text-xs font-bold text-slate-400">
+                                                    #{{ optionIndex + 1 }}
+                                                </span>
+
+                                                <input
+                                                    v-model="question.options[optionIndex]"
+                                                    type="text"
+                                                    class="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
+                                                    :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
+                                                    @input="markChanged('Option updated')"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    class="rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
+                                                    @click.stop="removeOption(question, optionIndex)"
+                                                >
+                                                    x
+                                                </button>
+                                            </div>
+                                            <div
+                                                v-if="form.settings.isQuiz && optionQuestionTypes.includes(question.type)"
+                                                class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-800"
+                                            >
+                                                <span class="font-bold">Jawaban benar:</span>
+                                                <span
+                                                    v-if="question.type === 'Checkboxes' && Array.isArray(question.answer) && question.answer.length"
+                                                    class="ml-1"
+                                                >
+                                                    {{
+                                                        question.answer
+                                                            .map((idx: any) => question.options[Number(idx)])
+                                                            .filter(Boolean)
+                                                            .join(', ')
+                                                    }}
+                                                </span>
+                                                <span
+                                                    v-else-if="
+                                                        question.type !== 'Checkboxes' &&
+                                                        question.answer !== '' &&
+                                                        question.answer !== null &&
+                                                        question.answer !== undefined
+                                                    "
+                                                    class="ml-1"
+                                                >
+                                                    {{ question.options[Number(question.answer)] }}
+                                                </span>
+                                                <span v-else class="ml-1 text-emerald-600">belum dipilih</span>
+                                            </div>
+                                            <div
+                                                v-if="optionQuestionTypes.includes(question.type)"
+                                                class="flex flex-wrap items-center gap-3 text-base text-slate-500 sm:text-lg"
+                                            >
+                                                <span
+                                                    :class="[
+                                                        'h-5 w-5 border-2 border-slate-300',
+                                                        question.type === 'Checkboxes'
+                                                            ? 'rounded'
+                                                            : question.type === 'Drop-down'
+                                                              ? 'rounded-lg'
+                                                              : 'rounded-full',
+                                                    ]"
+                                                ></span>
+                                                <button type="button" class="transition hover:text-indigo-600" @click.stop="addOption(question)">
+                                                    Add option
+                                                </button>
+                                                <span v-if="!question.options.includes('Other') && !isQuestionAnswered(question)" class="text-slate-900"
+                                                    >or</span
+                                                >
+                                                <button
+                                                    v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
+                                                    type="button"
+                                                    class="text-blue-600 transition hover:text-blue-700"
+                                                    @click.stop="addOption(question, 'Other')"
+                                                >
+                                                    Add "Other"
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <aside class="flex flex-col gap-6">
+                                        <div class="relative">
+                                            <button
+                                                type="button"
+                                                class="flex h-12 w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 outline-none transition hover:border-indigo-300 focus:border-indigo-500 sm:text-base"
+                                                @click.stop="openTypeMenuQuestionId = openTypeMenuQuestionId === question.id ? null : question.id"
+                                            >
+                                                <span class="flex min-w-0 items-center gap-3">
+                                                    <component :is="questionTypeIcon(question.type)" class="h-5 w-5 shrink-0 text-slate-500" />
+                                                    <span class="truncate">{{ question.type }}</span>
+                                                </span>
+                                                <ChevronDown class="h-5 w-5 shrink-0 text-slate-500" />
+                                            </button>
+
+                                            <div
+                                                v-if="openTypeMenuQuestionId === question.id"
+                                                class="absolute right-0 top-14 z-30 max-h-[480px] w-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-2 shadow-xl"
+                                                @click.stop
+                                            >
+                                                <template v-for="(type, index) in questionTypes" :key="type.value">
+                                                    <div
+                                                        v-if="index > 0 && questionTypes[index - 1].group !== type.group"
+                                                        class="my-2 border-t border-slate-200"
+                                                    ></div>
+                                                    <button
+                                                        type="button"
+                                                        :class="[
+                                                            'flex w-full items-center gap-4 px-4 py-3 text-left text-base transition hover:bg-slate-100',
+                                                            question.type === type.value ? 'bg-blue-50 text-slate-950' : 'text-slate-700',
+                                                        ]"
+                                                        @click="updateQuestionType(question, type.value)"
+                                                    >
+                                                        <component :is="type.icon" class="h-6 w-6 shrink-0 text-slate-500" />
+                                                        <span>{{ type.value }}</span>
+                                                    </button>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-auto border-t border-slate-200 pt-6">
+                                            <div class="flex items-center justify-end gap-4 text-slate-600 sm:gap-5">
+                                                <button
+                                                    type="button"
+                                                    aria-label="Duplicate question"
+                                                    class="transition hover:text-indigo-600"
+                                                    @click.stop="duplicateQuestion(question)"
+                                                >
+                                                    <FileText class="h-6 w-6" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    aria-label="Delete question"
+                                                    class="transition hover:text-red-500"
+                                                    @click.stop="deleteQuestion(question)"
+                                                >
+                                                    <Trash2 class="h-6 w-6" />
+                                                </button>
+                                                <span class="h-8 border-l border-slate-200"></span>
+                                                <button
+                                                    v-if="form.settings.isQuiz"
+                                                    type="button"
+                                                    class="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-sm shrink-0"
+                                                    @click.stop="editingAnswerKeyQuestionId = question.id"
+                                                >
+                                                    <Key class="h-3.5 w-3.5" />
+                                                    Kunci Jawaban
+                                                </button>
+                                                <span v-if="form.settings.isQuiz" class="h-8 border-l border-slate-200"></span>
+                                                <span class="text-sm font-medium">Required</span>
+                                                <button
+                                                    type="button"
+                                                    aria-label="Toggle required"
+                                                    @click.stop="
+                                                        question.required = !question.required;
+                                                        markChanged('Required setting changed');
+                                                    "
+                                                >
+                                                    <ToggleRight
+                                                        :class="[
+                                                            'h-8 w-8 transition',
+                                                            question.required ? 'text-indigo-600' : 'rotate-180 text-slate-300',
+                                                        ]"
+                                                    />
+                                                </button>
+                                                <MoreVertical class="h-6 w-6" />
+                                            </div>
+                                        </div>
+                                    </aside>
+                                </template>
                             </div>
                             <Transition
                                 enter-active-class="motion-safe:transition motion-safe:duration-200 motion-safe:ease-out"
@@ -1824,7 +2163,7 @@ watch(
                                     <button type="button" aria-label="Tambah pertanyaan" class="tool-button-primary" @click.stop="addQuestion()">
                                         <PlusCircle class="h-5 w-5" />
                                     </button>
-                                    <button type="button" aria-label="Import question" class="tool-button" @click.stop="fileInput?.click()">
+                                    <button type="button" aria-label="Import question" class="tool-button" @click.stop="isImportModalOpen = true">
                                         <FileUp class="h-5 w-5" />
                                     </button>
                                     <button
@@ -1967,7 +2306,7 @@ watch(
                     </div>
                 </section>
 
-                <template v-else>
+                <template v-else-if="activeTab === 'settings'">
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-7 py-7">
                             <h2 class="text-2xl font-normal text-slate-950">Settings</h2>
@@ -2217,6 +2556,51 @@ watch(
                         </div>
                     </section>
 
+                    <section class="rounded-xl border border-slate-300 bg-white shadow-sm mt-5">
+                        <div class="px-7 py-7">
+                            <h2 class="text-2xl font-normal text-slate-950">Security & Limits</h2>
+                            <div class="mt-7 border-t border-slate-200"></div>
+
+                            <div class="flex items-center justify-between gap-6 px-11 py-12">
+                                <div>
+                                    <h3 class="text-xl font-normal text-slate-950">Lock quiz on tab switch</h3>
+                                    <p class="mt-2 text-lg text-slate-600">Automatically lock attempt if respondent switches tab or blurs window. Requires approval to unlock.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    :class="['relative h-5 w-11 rounded-full transition', form.settings.lockOnBlur ? 'bg-indigo-500' : 'bg-slate-300']"
+                                    @click="toggleSetting('lockOnBlur')"
+                                >
+                                    <span
+                                        :class="[
+                                            'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                            form.settings.lockOnBlur ? 'left-5' : '-left-1',
+                                        ]"
+                                    ></span>
+                                </button>
+                            </div>
+
+                            <div class="border-t border-slate-200"></div>
+
+                            <div class="flex items-center justify-between gap-6 px-11 py-12">
+                                <div>
+                                    <h3 class="text-xl font-normal text-slate-950">Batas Waktu Pengerjaan (Menit)</h3>
+                                    <p class="mt-2 text-lg text-slate-600">Batasi waktu pengisian kuis (0 atau kosong untuk tanpa batas waktu)</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        v-model.number="form.settings.timeLimit"
+                                        type="number"
+                                        min="0"
+                                        class="h-12 w-28 rounded border border-slate-300 px-4 text-lg focus:border-indigo-500 focus:ring-indigo-500"
+                                        @change="markSettingsChanged"
+                                    />
+                                    <span class="text-lg text-slate-600">menit</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-7 py-7">
                             <h2 class="text-2xl font-normal text-slate-950">Defaults</h2>
@@ -2327,6 +2711,63 @@ watch(
                         </div>
                     </section>
                 </template>
+
+                <section v-else-if="activeTab === 'keamanan'" class="space-y-5">
+                    <div class="rounded-xl border border-slate-300 bg-white p-7 shadow-sm">
+                        <div class="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                            <div>
+                                <h2 class="text-2xl font-normal text-slate-950">Keamanan & Buka Kunci Kuis</h2>
+                                <p class="mt-2 text-base text-slate-500">Lihat dan setujui permintaan pengerjaan ulang / buka kunci kuis akibat pemindahan tab oleh responden.</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="rounded-xl bg-indigo-50 hover:bg-indigo-100 px-4 py-2 text-xs font-bold text-indigo-700 transition"
+                                @click="fetchUnlockRequests"
+                            >
+                                Segarkan List
+                            </button>
+                        </div>
+
+                        <div v-if="unlockRequests.length" class="mt-6 divide-y divide-slate-150 border border-slate-200 rounded-2xl overflow-hidden">
+                            <div v-for="req in unlockRequests" :key="req.id" class="flex items-center justify-between gap-4 p-5 hover:bg-slate-50 transition-colors">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-base text-slate-800">{{ req.email ?? 'Responden Anonim' }}</span>
+                                        <span :class="['text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider', req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">
+                                            {{ req.status === 'approved' ? 'Terbuka' : 'Terkunci' }}
+                                        </span>
+                                    </div>
+                                    <span class="block text-xs text-slate-500 font-mono mt-1">ID: {{ req.respondent_identifier }}</span>
+                                    <span class="block text-xs text-slate-400 mt-0.5">Meminta pada: {{ new Date(req.created_at).toLocaleString('id-ID') }}</span>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <div class="text-right">
+                                        <span class="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Kode Buka</span>
+                                        <span class="block text-xl font-black text-indigo-600 font-mono tracking-wider">{{ req.unlock_code }}</span>
+                                    </div>
+                                    <button
+                                        v-if="req.status === 'pending'"
+                                        type="button"
+                                        class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 shadow transition-all"
+                                        @click="approveUnlockRequest(req.id)"
+                                    >
+                                        Setujui
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center mt-6">
+                            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50">
+                                <Key class="h-6 w-6 text-indigo-500" />
+                            </div>
+                            <h3 class="mt-4 text-lg font-semibold text-slate-700">Belum ada request masuk</h3>
+                            <p class="mt-2 text-sm text-slate-500">
+                                Jika ada responden yang pindah tab saat mengerjakan kuis, permintaan persetujuan akan muncul di sini.
+                            </p>
+                        </div>
+                    </div>
+                </section>
             </div>
         </section>
 
@@ -2336,7 +2777,7 @@ watch(
                     <h2 class="text-2xl font-bold">Preview</h2>
                     <button type="button" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100" @click="showPreview = false">Close</button>
                 </div>
-                <div :class="['mb-5 h-3 rounded-full', themeColor]"></div>
+                <div :class="['mb-5 h-3 rounded-full', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                 <h3 class="text-3xl font-semibold">{{ form.title }}</h3>
                 <p class="mt-2 text-slate-500">{{ form.description }}</p>
                 <div class="mt-6 space-y-5">
@@ -2407,8 +2848,31 @@ watch(
                                 {{ question.type === 'Rating' ? '★' : option }}
                             </span>
                         </div>
-                        <div v-else-if="gridQuestionTypes.includes(question.type)" class="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                            Grid answer preview
+                        <div v-else-if="gridQuestionTypes.includes(question.type)" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/50">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="border-b border-slate-200 bg-slate-100">
+                                        <th class="p-2.5 font-bold text-slate-600">Baris / Kolom</th>
+                                        <th v-for="col in question.columns" :key="col" class="p-2.5 text-center font-bold text-slate-600">{{ col }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(row, rIndex) in question.rows" :key="row" class="border-b border-slate-150 last:border-0 hover:bg-slate-50 transition-colors">
+                                        <td class="p-2.5 font-semibold text-slate-700">{{ row }}</td>
+                                        <td v-for="(col, cIndex) in question.columns" :key="col" class="p-2.5 text-center">
+                                            <label class="inline-flex items-center justify-center cursor-pointer">
+                                                <input
+                                                    :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
+                                                    :name="`preview-question-grid-row-${question.id}-${rIndex}`"
+                                                    :checked="question.type === 'Tick box grid' ? (previewAnswers[question.id]?.[rIndex]?.includes(cIndex)) : (previewAnswers[question.id]?.[rIndex] === cIndex)"
+                                                    class="h-4 w-4 accent-indigo-600 cursor-pointer"
+                                                    @change="selectPreviewGridAnswer(question.id, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')"
+                                                />
+                                            </label>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                         <div v-else-if="question.type === 'Multiple choice'" class="mt-4 space-y-3">
                             <label v-for="option in question.options" :key="option" class="flex items-center gap-3">
@@ -2440,6 +2904,75 @@ watch(
                             placeholder="Your answer"
                         />
                     </div>
+                </div>
+            </section>
+        </div>
+
+        <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+            <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-extrabold text-slate-900">Import Soal dari Word</h2>
+                    <button type="button" class="text-slate-400 hover:text-slate-600 transition font-bold text-lg" @click="isImportModalOpen = false">x</button>
+                </div>
+                
+                <p class="text-sm text-slate-500 leading-relaxed">
+                    Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di bawah ini.
+                </p>
+
+                <!-- Clean style template download section -->
+                <div class="flex items-center justify-between rounded-2xl bg-indigo-50/50 border border-indigo-100 p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                            <FileText class="h-5 w-5" />
+                        </div>
+                        <div>
+                            <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
+                            <span class="block text-[11px] text-slate-500 font-medium">Format: Soal, Opsi, Kunci</span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white border border-indigo-200 px-3.5 py-2 rounded-xl shadow-sm transition hover:bg-slate-50"
+                        @click="downloadImportTemplate"
+                    >
+                        <Download class="h-3.5 w-3.5" />
+                        Unduh
+                    </button>
+                </div>
+
+                <!-- Import / Upload Box -->
+                <div class="space-y-3">
+                    <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas</label>
+                    <div 
+                        class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
+                        @click="docxFileInput?.click()"
+                    >
+                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
+                            <UploadCloud class="h-6 w-6" />
+                        </div>
+                        <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
+                        <span class="text-[11px] text-slate-500 mt-1">Dukung file format .docx (maks. 5MB)</span>
+                    </div>
+
+                    <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
+                        <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
+                        Sedang mengimpor dan memproses soal...
+                    </div>
+
+                    <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
+                        <span class="font-extrabold">Gagal:</span>
+                        <span>{{ importError }}</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-150">
+                    <button 
+                        type="button" 
+                        class="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition" 
+                        @click="isImportModalOpen = false"
+                    >
+                        Batal
+                    </button>
                 </div>
             </section>
         </div>

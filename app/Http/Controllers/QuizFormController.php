@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateQuizFormRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Models\UnlockRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -448,5 +449,97 @@ class QuizFormController extends Controller
         return response()->json([
             'url' => asset('storage/'.$path),
         ]);
+    }
+
+    public function getUnlockRequests(QuizForm $quizForm): JsonResponse
+    {
+        abort_unless($quizForm->user_id === auth()->id(), 403);
+
+        $requests = UnlockRequest::where('quiz_form_id', $quizForm->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'requests' => $requests,
+        ]);
+    }
+
+    public function approveUnlockRequest(UnlockRequest $unlockRequest): JsonResponse
+    {
+        $quizForm = $unlockRequest->quizForm;
+        abort_unless($quizForm->user_id === auth()->id(), 403);
+
+        $unlockRequest->update([
+            'status' => 'approved',
+        ]);
+
+        return response()->json([
+            'message' => 'Request berhasil disetujui.',
+            'request' => $unlockRequest,
+        ]);
+    }
+
+    public function storeUnlockRequest(Request $request, QuizForm $quizForm): JsonResponse
+    {
+        $validated = $request->validate([
+            'respondent_identifier' => ['required', 'string'],
+            'email' => ['nullable', 'email'],
+        ]);
+
+        $code = (string) rand(100000, 999999);
+
+        $unlockRequest = UnlockRequest::updateOrCreate(
+            [
+                'quiz_form_id' => $quizForm->id,
+                'respondent_identifier' => $validated['respondent_identifier'],
+            ],
+            [
+                'email' => $validated['email'] ?? null,
+                'unlock_code' => $code,
+                'status' => 'pending',
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Permintaan buka kunci berhasil dikirim.',
+            'request' => $unlockRequest,
+        ]);
+    }
+
+    public function checkUnlockRequestStatus(QuizForm $quizForm, string $identifier): JsonResponse
+    {
+        $unlockRequest = UnlockRequest::where('quiz_form_id', $quizForm->id)
+            ->where('respondent_identifier', $identifier)
+            ->first();
+
+        return response()->json([
+            'status' => $unlockRequest ? $unlockRequest->status : 'none',
+        ]);
+    }
+
+    public function verifyUnlockCode(Request $request, QuizForm $quizForm): JsonResponse
+    {
+        $validated = $request->validate([
+            'respondent_identifier' => ['required', 'string'],
+            'code' => ['required', 'string'],
+        ]);
+
+        $unlockRequest = UnlockRequest::where('quiz_form_id', $quizForm->id)
+            ->where('respondent_identifier', $validated['respondent_identifier'])
+            ->first();
+
+        if ($unlockRequest && $unlockRequest->unlock_code === trim($validated['code'])) {
+            $unlockRequest->update(['status' => 'approved']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Kode benar. Kuis terbuka.',
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Kode salah. Silakan coba lagi.',
+        ], 422);
     }
 }

@@ -430,3 +430,39 @@ test('authenticated users can update google forms style settings', function () {
     expect($quizForm->refresh()->settings)
         ->toMatchArray($settings);
 });
+
+test('authenticated users can update quiz questions with rows and columns for grid question types', function () {
+    $user = User::factory()->create();
+    $quizForm = QuizForm::factory()->for($user)->create([
+        'slug' => 'grid-quiz',
+    ]);
+
+    $this->actingAs($user);
+
+    $questions = [
+        [
+            'id' => 1,
+            'title' => 'Sample Grid Question',
+            'description' => '',
+            'type' => 'Multiple-choice grid',
+            'options' => [],
+            'rows' => ['Row 1', 'Row 2'],
+            'columns' => ['Column 1', 'Column 2'],
+            'answer' => ['0' => 1, '1' => 0],
+            'required' => true,
+            'points' => 15,
+        ],
+    ];
+
+    $this->patch(route('forms.update', $quizForm), [
+        'title' => 'Grid Quiz Form',
+        'description' => 'Quiz with grid question',
+        'slug' => 'grid-quiz',
+        'questions' => $questions,
+        'settings' => $quizForm->settings,
+    ])->assertRedirect(route('forms.edit', ['quizForm' => 'grid-quiz']));
+
+    $updatedForm = $quizForm->refresh();
+    expect($updatedForm->questions[0])
+        ->toMatchArray($questions[0]);
+});
