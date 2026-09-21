@@ -48,43 +48,49 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
     Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
 
-    // Cohort Management Routes
-    Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');
-    Route::post('cohorts', [CohortController::class, 'store'])->name('cohorts.store');
-    Route::post('cohorts/sync-from-classes', [CohortController::class, 'syncFromClasses'])->name('cohorts.sync-from-classes');
-    Route::get('cohorts/{cohort}', [CohortController::class, 'show'])->name('cohorts.show');
-    Route::put('cohorts/{cohort}', [CohortController::class, 'update'])->name('cohorts.update');
-    Route::delete('cohorts/{cohort}', [CohortController::class, 'destroy'])->name('cohorts.destroy');
-    Route::post('cohorts/{cohort}/members', [CohortController::class, 'addMembers'])->name('cohorts.members.add');
-    Route::delete('cohorts/{cohort}/members/{user}', [CohortController::class, 'removeMember'])->name('cohorts.members.remove');
+    // User Management (Admin Only)
+    Route::middleware('can:admin-only')->group(function (): void {
+        Route::get('users', [UserController::class, 'index'])->name('users.index');
+        Route::post('users', [UserController::class, 'store'])->name('users.store');
+        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+        Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
+        Route::post('users/{user}/change-password', [UserController::class, 'changePassword'])->name('users.change-password');
+        Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+        Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
+        Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
+    });
 
-    // User Management (Admin, Guru, Murid)
-    Route::get('users', [UserController::class, 'index'])->name('users.index');
-    Route::post('users', [UserController::class, 'store'])->name('users.store');
-    Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
-    Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
-    Route::post('users/{user}/change-password', [UserController::class, 'changePassword'])->name('users.change-password');
-    Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
-    Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
-    Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
+    // Cohort & Student Management (Teacher & Admin Only)
+    Route::middleware('can:teacher-or-admin')->group(function (): void {
+        // Cohort Management Routes
+        Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');
+        Route::post('cohorts', [CohortController::class, 'store'])->name('cohorts.store');
+        Route::post('cohorts/sync-from-classes', [CohortController::class, 'syncFromClasses'])->name('cohorts.sync-from-classes');
+        Route::get('cohorts/{cohort}', [CohortController::class, 'show'])->name('cohorts.show');
+        Route::put('cohorts/{cohort}', [CohortController::class, 'update'])->name('cohorts.update');
+        Route::delete('cohorts/{cohort}', [CohortController::class, 'destroy'])->name('cohorts.destroy');
+        Route::post('cohorts/{cohort}/members', [CohortController::class, 'addMembers'])->name('cohorts.members.add');
+        Route::delete('cohorts/{cohort}/members/{user}', [CohortController::class, 'removeMember'])->name('cohorts.members.remove');
 
-    // Student Management & Import Routes
-    Route::get('students', [StudentController::class, 'index'])->name('students.index');
-    Route::post('students', [StudentController::class, 'store'])->name('students.store');
-    Route::put('students/{student}', [StudentController::class, 'update'])->name('students.update');
-    Route::delete('students/{student}', [StudentController::class, 'destroy'])->name('students.destroy');
-    Route::post('students/import', [StudentController::class, 'import'])->name('students.import');
-    Route::get('students/template', [StudentController::class, 'downloadTemplate'])->name('students.template');
-    Route::post('students/{student}/reset-password', [StudentController::class, 'resetPassword'])->name('students.reset-password');
-    Route::post('students/{student}/change-password', [StudentController::class, 'changePassword'])->name('students.change-password');
+        // Student Management & Import Routes
+        Route::get('students', [StudentController::class, 'index'])->name('students.index');
+        Route::post('students', [StudentController::class, 'store'])->name('students.store');
+        Route::put('students/{student}', [StudentController::class, 'update'])->name('students.update');
+        Route::delete('students/{student}', [StudentController::class, 'destroy'])->name('students.destroy');
+        Route::post('students/import', [StudentController::class, 'import'])->name('students.import');
+        Route::get('students/template', [StudentController::class, 'downloadTemplate'])->name('students.template');
+        Route::post('students/{student}/reset-password', [StudentController::class, 'resetPassword'])->name('students.reset-password');
+        Route::post('students/{student}/change-password', [StudentController::class, 'changePassword'])->name('students.change-password');
+    });
 });
 
 Route::get('forms/{quizForm:slug}', [QuizResponseController::class, 'show'])->name('forms.public');
 Route::post('forms/{quizForm:slug}/responses', [QuizResponseController::class, 'store'])->middleware('throttle:20,1')->name('forms.responses.store');
+Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:30,1')->name('forms.responses.lock');
 Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:5,1')->name('forms.public.unlock-requests.store');
-Route::get('forms/{quizForm:slug}/unlock-requests/status/{identifier}', [UnlockRequestController::class, 'status'])->middleware('throttle:60,1')->name('forms.public.unlock-requests.status');
 Route::post('forms/{quizForm:slug}/unlock', [UnlockRequestController::class, 'verify'])->middleware('throttle:5,1')->name('forms.public.unlock-verify');
+Route::get('forms/{quizForm:slug}/unlock-requests/status/{identifier}', [UnlockRequestController::class, 'status'])->middleware('throttle:60,1')->name('forms.public.unlock-requests.status');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

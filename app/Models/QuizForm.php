@@ -59,6 +59,11 @@ class QuizForm extends Model
         return $this->hasMany(QuizResponse::class);
     }
 
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(QuizSession::class);
+    }
+
     public function cohorts(): BelongsToMany
     {
         return $this->belongsToMany(Cohort::class, 'cohort_quiz_form')

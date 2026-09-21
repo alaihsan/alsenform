@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreUnlockRequestRequest;
 use App\Http\Requests\VerifyUnlockCodeRequest;
 use App\Models\QuizForm;
+use App\Models\QuizSession;
 use App\Models\UnlockRequest;
 use App\Support\UnlockCode;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,7 @@ class UnlockRequestController extends Controller
 {
     public function index(QuizForm $quizForm): JsonResponse
     {
-        abort_unless($quizForm->user_id === auth()->id(), 403);
+        abort_unless($quizForm->canBeEditedBy(auth()->user()), 403);
 
         $requests = UnlockRequest::query()
             ->whereBelongsTo($quizForm)
@@ -28,11 +29,16 @@ class UnlockRequestController extends Controller
     public function approve(UnlockRequest $unlockRequest): JsonResponse
     {
         $quizForm = $unlockRequest->quizForm;
-        abort_unless($quizForm->user_id === auth()->id(), 403);
+        abort_unless($quizForm->canBeEditedBy(auth()->user()), 403);
 
         $unlockRequest->update([
             'status' => 'approved',
         ]);
+
+        // Unlock quiz session on server
+        QuizSession::where('quiz_form_id', $quizForm->id)
+            ->where('respondent_identifier', $unlockRequest->respondent_identifier)
+            ->update(['is_locked' => false]);
 
         return response()->json([
             'message' => 'Request berhasil disetujui.',
@@ -59,9 +65,13 @@ class UnlockRequestController extends Controller
             ]
         );
 
+        // Lock session on server
+        QuizSession::where('quiz_form_id', $quizForm->id)
+            ->where('respondent_identifier', $validated['respondent_identifier'])
+            ->update(['is_locked' => true]);
+
         return response()->json([
             'message' => 'Permintaan buka kunci berhasil dikirim.',
-            'code' => $code,
             'request' => $unlockRequest->only(['id', 'quiz_form_id', 'respondent_identifier', 'email', 'status']),
         ]);
     }
@@ -74,6 +84,12 @@ class UnlockRequestController extends Controller
             ->whereBelongsTo($quizForm)
             ->where('respondent_identifier', $identifier)
             ->first();
+
+        if ($unlockRequest && $unlockRequest->status === 'approved') {
+            QuizSession::where('quiz_form_id', $quizForm->id)
+                ->where('respondent_identifier', $identifier)
+                ->update(['is_locked' => false]);
+        }
 
         return response()->json([
             'status' => $unlockRequest ? $unlockRequest->status : 'none',
@@ -91,8 +107,12 @@ class UnlockRequestController extends Controller
             ->where('respondent_identifier', $validated['respondent_identifier'])
             ->first();
 
-        if ($unlockRequest && $unlockCode->verify(trim($validated['code']), $unlockRequest->unlock_code)) {
-            $unlockRequest->update(['status' => 'approved']);
+        if ($unlockRequest && $unlockRequest->status !== 'used' && $unlockCode->verify(trim($validated['code']), $unlockRequest->unlock_code)) {
+            $unlockRequest->update(['status' => 'used']);
+
+            QuizSession::where('quiz_form_id', $quizForm->id)
+                ->where('respondent_identifier', $validated['respondent_identifier'])
+                ->update(['is_locked' => false]);
 
             return response()->json([
                 'success' => true,
@@ -102,7 +122,7 @@ class UnlockRequestController extends Controller
 
         return response()->json([
             'success' => false,
-            'message' => 'Kode salah. Silakan coba lagi.',
+            'message' => 'Kode salah atau sudah tidak berlaku. Silakan coba lagi.',
         ], 422);
     }
 }

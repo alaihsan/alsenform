@@ -282,9 +282,15 @@ const newPasswordInput = ref('');
 const showPasswordText = ref(true);
 const isUpdatingPassword = ref(false);
 
+function defaultPasswordForNis(nis?: string | null): string {
+    if (!nis) return '';
+    const clean = String(nis).trim();
+    return clean.length >= 6 ? clean.slice(-6) : clean.padStart(6, '0');
+}
+
 function openPasswordModal(item: UserItem): void {
     userToManagePassword.value = item;
-    newPasswordInput.value = item.default_password || '';
+    newPasswordInput.value = '';
     showPasswordText.value = true;
     isPasswordModalOpen.value = true;
 }
@@ -296,7 +302,7 @@ function generateRandomPassword(): void {
 
 function setPasswordToNisDefault(): void {
     if (!userToManagePassword.value) return;
-    newPasswordInput.value = userToManagePassword.value.default_password || '';
+    newPasswordInput.value = defaultPasswordForNis(userToManagePassword.value.nis);
 }
 
 function submitCustomPassword(): void {
@@ -331,7 +337,7 @@ function directResetToNisDefault(): void {
             onFinish: () => {
                 isUpdatingPassword.value = false;
                 isPasswordModalOpen.value = false;
-                showToast(`Password murid berhasil direset ke: ${userToManagePassword.value?.default_password}`);
+                showToast(`Password murid berhasil direset ke password default 6 digit NIS.`);
                 userToManagePassword.value = null;
             },
         }
@@ -790,23 +796,8 @@ async function executeImport(): Promise<void> {
 
                                 <!-- Password Info -->
                                 <td class="px-4 py-3.5">
-                                    <div v-if="u.role === 'siswa' && u.default_password" class="flex items-center gap-2">
-                                        <div class="rounded-lg bg-slate-100 px-2 py-1 font-mono font-bold text-slate-800 tracking-wider">
-                                            {{ u.default_password }}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            @click="copyPassword(u.default_password, u.nis || '')"
-                                            class="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-white hover:text-slate-800 transition"
-                                            :title="copiedNis === u.nis ? 'Tersalin!' : 'Salin Password Default (6 digit NIS)'"
-                                        >
-                                            <Check v-if="copiedNis === u.nis" class="h-3.5 w-3.5 text-emerald-600 stroke-[3]" />
-                                            <Copy v-else class="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                    <div v-else class="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                                        <Key class="h-3 w-3 text-slate-300" />
-                                        <span>Terenkripsi</span>
+                                    <div class="flex items-center gap-1.5 text-slate-400 text-xs font-mono">
+                                        <span>••••••</span>
                                     </div>
                                 </td>
 
@@ -1312,7 +1303,7 @@ async function executeImport(): Promise<void> {
                 <div class="mt-5 space-y-4">
                     <!-- Quick reset for student if NIS available -->
                     <div
-                        v-if="userToManagePassword?.role === 'siswa' && userToManagePassword?.default_password"
+                        v-if="userToManagePassword?.role === 'siswa' && userToManagePassword?.nis"
                         class="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-900"
                     >
                         <div class="flex items-center justify-between">
@@ -1321,7 +1312,7 @@ async function executeImport(): Promise<void> {
                                 <p class="text-[11px] text-emerald-700">NIS: {{ userToManagePassword.nis }}</p>
                             </div>
                             <span class="font-mono text-sm font-black bg-white px-2 py-1 rounded-lg border border-emerald-300 text-emerald-800">
-                                {{ userToManagePassword.default_password }}
+                                {{ defaultPasswordForNis(userToManagePassword.nis) }}
                             </span>
                         </div>
                         <button
@@ -1349,7 +1340,7 @@ async function executeImport(): Promise<void> {
                                     <span>Acak (6 Angka)</span>
                                 </button>
                                 <button
-                                    v-if="userToManagePassword?.default_password"
+                                    v-if="userToManagePassword?.nis"
                                     type="button"
                                     @click="setPasswordToNisDefault"
                                     class="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
@@ -1607,7 +1598,7 @@ async function executeImport(): Promise<void> {
                                     <td class="px-3 py-2 font-mono font-bold text-slate-800">{{ row.nis }}</td>
                                     <td class="px-3 py-2 font-semibold text-slate-800">{{ row.name }}</td>
                                     <td class="px-3 py-2">{{ row.kelas || '-' }}</td>
-                                    <td class="px-3 py-2 font-mono font-bold text-emerald-700">{{ row.default_password }}</td>
+                                    <td class="px-3 py-2 font-mono font-bold text-emerald-700">{{ defaultPasswordForNis(row.nis) }}</td>
                                     <td class="px-3 py-2">
                                         <span
                                             class="rounded px-1.5 py-0.5 text-[10px] font-bold"

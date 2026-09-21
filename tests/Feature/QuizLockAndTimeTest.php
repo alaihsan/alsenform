@@ -3,6 +3,7 @@
 use App\Models\QuizForm;
 use App\Models\UnlockRequest;
 use App\Models\User;
+use App\Support\UnlockCode;
 use Illuminate\Support\Facades\Hash;
 
 test('guests are unauthorized to get unlock requests of a form', function () {
@@ -51,12 +52,12 @@ test('respondents can create unlock request, check status and verify code', func
         'published_at' => now(),
     ]);
 
-    // 1. Create request
+    // 1. Create request - code MUST NOT be leaked in JSON
     $createResponse = $this->postJson(route('forms.public.unlock-requests.store', $form->slug), [
         'respondent_identifier' => 'test-resp-789',
         'email' => 'anon@gmail.com',
     ])->assertStatus(200)
-        ->assertJsonStructure(['code']);
+        ->assertJsonMissing(['code']);
 
     $req = UnlockRequest::where('quiz_form_id', $form->id)
         ->where('respondent_identifier', 'test-resp-789')
@@ -64,12 +65,16 @@ test('respondents can create unlock request, check status and verify code', func
 
     expect($req)->not->toBeNull();
     expect($req->status)->toBe('pending');
-    expect($req->unlock_code)->not->toBe($createResponse->json('code'));
 
     // 2. Check status
     $this->getJson(route('forms.public.unlock-requests.status', [$form->slug, 'test-resp-789']))
         ->assertStatus(200)
         ->assertJsonPath('status', 'pending');
+
+    // Simulate known code in unlock_code hash
+    $req->update([
+        'unlock_code' => app(UnlockCode::class)->hash('123456'),
+    ]);
 
     // 3. Verify wrong code fails
     $this->postJson(route('forms.public.unlock-verify', $form->slug), [
@@ -77,14 +82,20 @@ test('respondents can create unlock request, check status and verify code', func
         'code' => '000000',
     ])->assertStatus(422);
 
-    // 4. Verify correct code succeeds
+    // 4. Verify correct code succeeds and marks status as used
     $this->postJson(route('forms.public.unlock-verify', $form->slug), [
         'respondent_identifier' => 'test-resp-789',
-        'code' => $createResponse->json('code'),
+        'code' => '123456',
     ])->assertStatus(200)
         ->assertJsonPath('success', true);
 
-    expect($req->refresh()->status)->toBe('approved');
+    expect($req->refresh()->status)->toBe('used');
+
+    // 5. Reusing the code should fail
+    $this->postJson(route('forms.public.unlock-verify', $form->slug), [
+        'respondent_identifier' => 'test-resp-789',
+        'code' => '123456',
+    ])->assertStatus(422);
 });
 
 test('owners can update lockOnBlur and timeLimit settings', function () {

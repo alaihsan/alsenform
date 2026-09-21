@@ -14,8 +14,12 @@ class QuizResponse extends Model
 
     protected $fillable = [
         'quiz_form_id',
+        'user_id',
+        'respondent_identifier',
         'email',
         'answers',
+        'score',
+        'is_timeout',
         'ip_address',
         'user_agent',
     ];
@@ -27,11 +31,18 @@ class QuizResponse extends Model
     {
         return [
             'answers' => 'array',
+            'score' => 'integer',
+            'is_timeout' => 'boolean',
         ];
     }
 
     public function quizForm(): BelongsTo
     {
         return $this->belongsTo(QuizForm::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

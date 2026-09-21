@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -21,6 +22,8 @@ class UserController extends Controller
      */
     public function index(Request $request): Response
     {
+        Gate::authorize('admin-only');
+
         $search = trim((string) $request->input('search', ''));
         $selectedRole = trim((string) $request->input('role', 'all'));
         $selectedClass = trim((string) $request->input('kelas', ''));
@@ -64,7 +67,6 @@ class UserController extends Controller
                 'kelas' => $u->kelas,
                 'role' => $u->is_admin ? 'admin' : ($u->role ?: ($u->nis ? 'siswa' : 'guru')),
                 'is_admin' => (bool) $u->is_admin,
-                'default_password' => $u->nis ? User::defaultPasswordForNis($u->nis) : '',
                 'created_at' => $u->created_at?->format('d M Y H:i'),
             ]);
 
@@ -104,6 +106,8 @@ class UserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         $role = $request->input('role', 'siswa');
 
         $rules = [
@@ -142,6 +146,7 @@ class UserController extends Controller
             'nis' => $nis,
             'kelas' => $kelas,
             'password' => $password,
+            'must_change_password' => $role === 'siswa',
             'role' => $role,
             'is_admin' => $isAdmin,
         ]);
@@ -160,6 +165,8 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         $role = $request->input('role', $user->role ?: 'siswa');
 
         $rules = [
@@ -195,6 +202,8 @@ class UserController extends Controller
      */
     public function updateRole(Request $request, User $user): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         $validated = $request->validate([
             'role' => ['required', 'string', Rule::in(['admin', 'guru', 'siswa'])],
         ]);
@@ -226,6 +235,8 @@ class UserController extends Controller
      */
     public function changePassword(Request $request, User $user): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:6'],
         ]);
@@ -242,6 +253,8 @@ class UserController extends Controller
      */
     public function resetPassword(User $user): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         if (empty($user->nis)) {
             return back()->withErrors(['error' => 'Pengguna tidak memiliki NIS untuk membuat password default.']);
         }
@@ -249,9 +262,10 @@ class UserController extends Controller
         $defaultPassword = User::defaultPasswordForNis($user->nis);
         $user->update([
             'password' => Hash::make($defaultPassword),
+            'must_change_password' => true,
         ]);
 
-        return back()->with('success', "Password '{$user->name}' berhasil direset ke default 6 digit NIS: {$defaultPassword}.");
+        return back()->with('success', "Password '{$user->name}' berhasil direset ke password default.");
     }
 
     /**
@@ -259,6 +273,8 @@ class UserController extends Controller
      */
     public function destroy(User $user): RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         if ($user->id === Auth::id()) {
             return back()->withErrors(['error' => 'Anda tidak dapat menghapus akun Anda sendiri.']);
         }
@@ -274,6 +290,8 @@ class UserController extends Controller
      */
     public function importStudents(Request $request, StudentImportService $service): JsonResponse|RedirectResponse
     {
+        Gate::authorize('admin-only');
+
         if ($request->has('students') && is_array($request->input('students'))) {
             $students = $request->input('students');
             $result = $service->import($students);
@@ -332,6 +350,8 @@ class UserController extends Controller
      */
     public function downloadStudentTemplate(): StreamedResponse
     {
+        Gate::authorize('admin-only');
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="template_impor_murid.csv"',

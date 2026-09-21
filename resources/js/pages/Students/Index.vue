@@ -218,16 +218,22 @@ const newPasswordInput = ref('');
 const showPasswordText = ref(false);
 const isUpdatingPassword = ref(false);
 
+function defaultPasswordForNis(nis?: string | null): string {
+    if (!nis) return '';
+    const clean = String(nis).trim();
+    return clean.length >= 6 ? clean.slice(-6) : clean.padStart(6, '0');
+}
+
 function openPasswordModal(student: Student): void {
     studentToManagePassword.value = student;
-    newPasswordInput.value = student.default_password || '';
+    newPasswordInput.value = '';
     showPasswordText.value = true;
     isPasswordModalOpen.value = true;
 }
 
 function setPasswordToNisDefault(): void {
     if (!studentToManagePassword.value) return;
-    newPasswordInput.value = studentToManagePassword.value.default_password || '';
+    newPasswordInput.value = defaultPasswordForNis(studentToManagePassword.value.nis);
 }
 
 function generateRandomPassword(): void {
@@ -267,7 +273,7 @@ function directResetToNisDefault(): void {
             onFinish: () => {
                 isUpdatingPassword.value = false;
                 isPasswordModalOpen.value = false;
-                showToast(`Password murid berhasil direset ke: ${studentToManagePassword.value?.default_password}`);
+                showToast(`Password murid berhasil direset ke password default 6 digit NIS.`);
                 studentToManagePassword.value = null;
             },
         }
@@ -616,20 +622,8 @@ async function executeImport(): Promise<void> {
 
                                 <!-- Password Default (6 digit) -->
                                 <td class="px-4 py-3.5">
-                                    <div class="flex items-center gap-2">
-                                        <code class="rounded bg-amber-50 px-2 py-0.5 font-mono text-xs font-bold text-amber-800 border border-amber-200/60">
-                                            {{ student.default_password || '******' }}
-                                        </code>
-                                        <button
-                                            v-if="student.default_password"
-                                            type="button"
-                                            @click="copyPassword(student.default_password, student.nis)"
-                                            class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
-                                            title="Salin Password"
-                                        >
-                                            <Check v-if="copiedNis === student.nis" class="h-3.5 w-3.5 text-emerald-600" />
-                                            <Copy v-else class="h-3.5 w-3.5" />
-                                        </button>
+                                    <div class="flex items-center gap-1.5 text-slate-400 text-xs font-mono">
+                                        <span>••••••</span>
                                     </div>
                                 </td>
 
@@ -930,7 +924,7 @@ async function executeImport(): Promise<void> {
                                         </td>
                                         <td class="px-2 py-2">
                                             <code class="rounded bg-amber-50 px-1.5 py-0.5 font-mono text-amber-800 font-bold border border-amber-200/60">
-                                                {{ row.default_password }}
+                                                {{ defaultPasswordForNis(row.nis) }}
                                             </code>
                                         </td>
                                         <td class="py-2 pl-2 pr-3 text-right">
@@ -1161,7 +1155,7 @@ async function executeImport(): Promise<void> {
                                 class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition"
                             >
                                 <Key class="h-3 w-3 text-amber-600" />
-                                <span>Pakai 6 Digit NIS ({{ studentToManagePassword?.default_password }})</span>
+                                <span>Pakai 6 Digit NIS ({{ defaultPasswordForNis(studentToManagePassword?.nis) }})</span>
                             </button>
                             <button
                                 type="button"

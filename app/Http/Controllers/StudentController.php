@@ -7,6 +7,7 @@ use App\Services\StudentImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -20,6 +21,8 @@ class StudentController extends Controller
      */
     public function index(Request $request): Response
     {
+        Gate::authorize('teacher-or-admin');
+
         $search = trim((string) $request->input('search', ''));
         $selectedClass = trim((string) $request->input('kelas', ''));
 
@@ -47,7 +50,6 @@ class StudentController extends Controller
                 'name' => $student->name,
                 'kelas' => $student->kelas,
                 'email' => $student->email,
-                'default_password' => $student->nis ? User::defaultPasswordForNis($student->nis) : '',
                 'created_at' => $student->created_at?->format('d M Y H:i'),
             ]);
 
@@ -79,6 +81,8 @@ class StudentController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+
         $validated = $request->validate([
             'nis' => ['required', 'string', 'max:50', 'unique:users,nis'],
             'name' => ['required', 'string', 'max:255'],
@@ -98,6 +102,7 @@ class StudentController extends Controller
             'password' => Hash::make($defaultPassword),
             'role' => 'siswa',
             'is_admin' => false,
+            'must_change_password' => true,
         ]);
 
         return back()->with('success', "Murid '{$validated['name']}' berhasil ditambahkan dengan password default 6 digit NIS: {$defaultPassword}.");
@@ -108,6 +113,9 @@ class StudentController extends Controller
      */
     public function update(Request $request, User $student): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+
         $validated = $request->validate([
             'nis' => ['required', 'string', 'max:50', Rule::unique('users', 'nis')->ignore($student->id)],
             'name' => ['required', 'string', 'max:255'],
@@ -133,6 +141,9 @@ class StudentController extends Controller
      */
     public function destroy(User $student): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+
         $name = $student->name;
         $student->delete();
 
@@ -144,6 +155,9 @@ class StudentController extends Controller
      */
     public function resetPassword(User $student): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+
         if (empty($student->nis)) {
             return back()->withErrors(['error' => 'Murid tidak memiliki NIS untuk membuat password default.']);
         }
@@ -151,6 +165,7 @@ class StudentController extends Controller
         $defaultPassword = User::defaultPasswordForNis($student->nis);
         $student->update([
             'password' => Hash::make($defaultPassword),
+            'must_change_password' => true,
         ]);
 
         return back()->with('success', "Password murid '{$student->name}' berhasil direset ke password default: {$defaultPassword}.");
@@ -161,12 +176,16 @@ class StudentController extends Controller
      */
     public function changePassword(Request $request, User $student): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:6'],
         ]);
 
         $student->update([
             'password' => Hash::make($validated['password']),
+            'must_change_password' => false,
         ]);
 
         return back()->with('success', "Password murid '{$student->name}' berhasil diubah.");
@@ -177,6 +196,8 @@ class StudentController extends Controller
      */
     public function import(Request $request, StudentImportService $service): JsonResponse|RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+
         // Check if pre-parsed students array was submitted directly
         if ($request->has('students') && is_array($request->input('students'))) {
             $students = $request->input('students');
@@ -239,6 +260,8 @@ class StudentController extends Controller
      */
     public function downloadTemplate(): StreamedResponse
     {
+        Gate::authorize('teacher-or-admin');
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="template_impor_murid.csv"',

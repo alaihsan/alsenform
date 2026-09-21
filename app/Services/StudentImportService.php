@@ -107,14 +107,12 @@ class StudentImportService
             }
 
             $seenNis[$nis] = true;
-            $defaultPassword = User::defaultPasswordForNis($nis);
             $isUpdate = isset($existingNis[$nis]);
 
             $valid[] = [
                 'nis' => (string) $nis,
                 'name' => (string) $name,
                 'kelas' => (string) $kelas,
-                'default_password' => $defaultPassword,
                 'email' => ! empty($columns[3]) && filter_var($columns[3], FILTER_VALIDATE_EMAIL) ? $columns[3] : null,
                 'is_update' => $isUpdate,
             ];
@@ -182,6 +180,7 @@ class StudentImportService
                     'kelas' => $kelas,
                     'email' => $email,
                     'password' => Hash::make($defaultPassword),
+                    'must_change_password' => true,
                     'role' => 'siswa',
                     'is_admin' => false,
                 ]);

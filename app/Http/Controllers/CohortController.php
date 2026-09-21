@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -19,6 +20,8 @@ class CohortController extends Controller
      */
     public function index(Request $request): Response
     {
+        Gate::authorize('teacher-or-admin');
+
         $search = trim((string) $request->input('search', ''));
 
         $query = Cohort::query()
@@ -66,6 +69,8 @@ class CohortController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['nullable', 'string', 'max:50', 'unique:cohorts,code'],
@@ -96,7 +101,7 @@ class CohortController extends Controller
 
         // Auto-populate from class if requested
         if (! empty($validated['source_class'])) {
-            $studentIds = User::where('kelas', $validated['source_class'])->pluck('id');
+            $studentIds = User::query()->students()->where('kelas', $validated['source_class'])->pluck('id');
             if ($studentIds->isNotEmpty()) {
                 $cohort->users()->attach($studentIds);
             }
@@ -110,6 +115,8 @@ class CohortController extends Controller
      */
     public function show(Request $request, Cohort $cohort): Response
     {
+        Gate::authorize('teacher-or-admin');
+
         $search = trim((string) $request->input('search', ''));
         $selectedClass = trim((string) $request->input('kelas', ''));
 
@@ -166,6 +173,9 @@ class CohortController extends Controller
      */
     public function update(Request $request, Cohort $cohort): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        $this->authorizeCohortManagement($request, $cohort);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['nullable', 'string', 'max:50', Rule::unique('cohorts', 'code')->ignore($cohort->id)],
@@ -184,8 +194,11 @@ class CohortController extends Controller
     /**
      * Delete cohort.
      */
-    public function destroy(Cohort $cohort): RedirectResponse
+    public function destroy(Request $request, Cohort $cohort): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        $this->authorizeCohortManagement($request, $cohort);
+
         $name = $cohort->name;
         $cohort->delete();
 
@@ -197,6 +210,9 @@ class CohortController extends Controller
      */
     public function addMembers(Request $request, Cohort $cohort): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        $this->authorizeCohortManagement($request, $cohort);
+
         $validated = $request->validate([
             'user_ids' => ['nullable', 'array'],
             'user_ids.*' => ['integer', 'exists:users,id'],
@@ -210,19 +226,22 @@ class CohortController extends Controller
         }
 
         if (! empty($validated['class_name'])) {
-            $classStudentIds = User::where('kelas', $validated['class_name'])->pluck('id')->all();
+            $classStudentIds = User::query()->students()->where('kelas', $validated['class_name'])->pluck('id')->all();
             $idsToAdd = array_merge($idsToAdd, $classStudentIds);
         }
 
         $idsToAdd = array_unique($idsToAdd);
 
-        if (empty($idsToAdd)) {
-            return back()->withErrors(['error' => 'Tidak ada anggota yang dipilih untuk ditambahkan.']);
+        // Ensure only students are attached
+        $validStudentIds = User::query()->students()->whereIn('id', $idsToAdd)->pluck('id')->all();
+
+        if (empty($validStudentIds)) {
+            return back()->withErrors(['error' => 'Tidak ada anggota murid yang valid untuk ditambahkan.']);
         }
 
-        $cohort->users()->syncWithoutDetaching($idsToAdd);
+        $cohort->users()->syncWithoutDetaching($validStudentIds);
 
-        $count = count($idsToAdd);
+        $count = count($validStudentIds);
 
         return back()->with('success', "Berhasil menambahkan {$count} murid ke dalam Cohort '{$cohort->name}'.");
     }
@@ -230,11 +249,27 @@ class CohortController extends Controller
     /**
      * Remove a member from cohort.
      */
-    public function removeMember(Cohort $cohort, User $user): RedirectResponse
+    public function removeMember(Request $request, Cohort $cohort, User $user): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
+        $this->authorizeCohortManagement($request, $cohort);
+
         $cohort->users()->detach($user->id);
 
         return back()->with('success', "Murid '{$user->name}' berhasil dikeluarkan dari Cohort '{$cohort->name}'.");
+    }
+
+    /**
+     * Authorize that the user is the creator of the cohort or an administrator.
+     */
+    protected function authorizeCohortManagement(Request $request, Cohort $cohort): void
+    {
+        $user = $request->user();
+        abort_unless(
+            $user && ($user->isAdmin() || $cohort->created_by === $user->id),
+            403,
+            'Hanya pembuat cohort atau admin yang dapat mengelola cohort ini.'
+        );
     }
 
     /**
@@ -242,6 +277,7 @@ class CohortController extends Controller
      */
     public function syncFromClasses(): RedirectResponse
     {
+        Gate::authorize('teacher-or-admin');
         $classes = User::query()
             ->whereNotNull('kelas')
             ->where('kelas', '!=', '')

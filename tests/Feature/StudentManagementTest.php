@@ -33,7 +33,7 @@ test('authenticated user can view students dashboard', function () {
             ->where('students.data.0.nis', '202401001')
             ->where('students.data.0.name', 'Budi Santoso')
             ->where('students.data.0.kelas', 'X IPA 1')
-            ->where('students.data.0.default_password', '401001')
+            ->missing('students.data.0.default_password')
             ->has('classes')
             ->where('stats.total_students', 1)
             ->where('stats.total_classes', 1)
@@ -149,9 +149,9 @@ test('can preview student import with dry run', function () {
             'error_count' => 0,
         ])
         ->assertJsonPath('preview.0.nis', '2025001122')
-        ->assertJsonPath('preview.0.default_password', '001122')
+        ->assertJsonMissingPath('preview.0.default_password')
         ->assertJsonPath('preview.1.nis', '2025003344')
-        ->assertJsonPath('preview.1.default_password', '003344');
+        ->assertJsonMissingPath('preview.1.default_password');
 
     // Ensure not saved yet because dry_run = true
     expect(User::where('nis', '2025001122')->exists())->toBeFalse();

@@ -42,6 +42,14 @@ const props = defineProps<{
         };
         submitUrl: string;
     };
+    session?: {
+        token?: string;
+        respondent_identifier?: string;
+        started_at?: string;
+        expires_at?: string | null;
+        server_time?: string;
+        is_locked?: boolean;
+    };
     accessRestricted?: boolean;
     restrictionReason?: string;
     allowedCohorts?: string[];
@@ -52,6 +60,7 @@ const email = ref('');
 const displayQuestions = ref<Question[]>([]);
 const isSubmitted = ref(false);
 const isSubmitting = ref(false);
+const submissionError = ref('');
 
 // Anti-Cheat (Focus Lock) Refs & Logic
 const isLocked = ref(false);
@@ -60,11 +69,13 @@ const isRequestingUnlock = ref(false);
 const hasRequestedUnlock = ref(false);
 const unlockRequestStatus = ref<'none' | 'pending' | 'approved'>('none');
 const manualUnlockCode = ref('');
-const generatedUnlockCode = ref('');
 const unlockError = ref('');
 const showRequestSuccess = ref(false);
 
 const getRespondentIdentifier = () => {
+    if (props.session?.respondent_identifier) {
+        return props.session.respondent_identifier;
+    }
     let id = localStorage.getItem(`respondent_id_${props.quizForm.id}`);
     if (!id) {
         id = 'resp_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
@@ -103,13 +114,12 @@ const requestUnlock = async () => {
     isRequestingUnlock.value = true;
     unlockError.value = '';
     try {
-        const response = await axios.post(`/forms/${props.quizForm.slug}/unlock-requests`, {
+        await axios.post(`/forms/${props.quizForm.slug}/unlock-requests`, {
             respondent_identifier: respondentIdentifier,
             email: unlockRequestEmail.value || email.value || null,
         });
         hasRequestedUnlock.value = true;
         unlockRequestStatus.value = 'pending';
-        generatedUnlockCode.value = response.data.code ?? '';
         showRequestSuccess.value = true;
     } catch (err: any) {
         unlockError.value = err.response?.data?.message || 'Gagal mengirim permintaan buka kunci.';
@@ -142,6 +152,10 @@ const lockQuiz = () => {
     }
     isLocked.value = true;
     localStorage.setItem(`is_locked_${props.quizForm.id}`, 'true');
+    axios.post(`/forms/${props.quizForm.slug}/lock`, {
+        respondent_identifier: respondentIdentifier,
+    }).catch(() => {});
+
     checkLockStatus();
     if (!pollInterval) {
         pollInterval = setInterval(checkLockStatus, 5000);
@@ -152,7 +166,6 @@ const unlockQuiz = () => {
     isLocked.value = false;
     localStorage.setItem(`is_locked_${props.quizForm.id}`, 'false');
     manualUnlockCode.value = '';
-    generatedUnlockCode.value = '';
     unlockError.value = '';
     showRequestSuccess.value = false;
     if (pollInterval) {
@@ -187,43 +200,38 @@ onMounted(() => {
     if (props.quizForm.settings?.lockOnBlur) {
         window.addEventListener('blur', handleBlur);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        if (localStorage.getItem(`is_locked_${props.quizForm.id}`) === 'true') {
+        if (props.session?.is_locked || localStorage.getItem(`is_locked_${props.quizForm.id}`) === 'true') {
             lockQuiz();
         }
     }
 
-    // Time Limiter Initialization
-    const timeLimit = props.quizForm.settings?.timeLimit;
-    if (timeLimit && timeLimit > 0) {
-        let startTime = localStorage.getItem(`form_start_time_${props.quizForm.id}`);
-        if (!startTime) {
-            startTime = Date.now().toString();
-            localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
-        }
-        
-        const endTime = parseInt(startTime) + timeLimit * 60 * 1000;
-        
+    // Server-enforced Time Limiter Initialization
+    if (props.session?.expires_at) {
+        const targetEnd = new Date(props.session.expires_at).getTime();
+        const clockOffset = props.session.server_time ? new Date(props.session.server_time).getTime() - Date.now() : 0;
+
         const updateTimer = () => {
-            const now = Date.now();
-            const remaining = endTime - now;
-            
+            const now = Date.now() + clockOffset;
+            const remaining = targetEnd - now;
+
             if (remaining <= 0) {
                 timeRemaining.value = 0;
                 formattedTime.value = '00:00';
                 if (timerInterval) {
                     clearInterval(timerInterval);
+                    timerInterval = null;
                 }
                 if (!isSubmitted.value && !isSubmitting.value) {
-                    submitResponse();
+                    submitOnTimeout();
                 }
             } else {
                 timeRemaining.value = remaining;
-                
+
                 const totalSeconds = Math.floor(remaining / 1000);
                 const hrs = Math.floor(totalSeconds / 3600);
                 const mins = Math.floor((totalSeconds % 3600) / 60);
                 const secs = totalSeconds % 60;
-                
+
                 if (hrs > 0) {
                     formattedTime.value = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 } else {
@@ -231,9 +239,53 @@ onMounted(() => {
                 }
             }
         };
-        
+
         updateTimer();
         timerInterval = setInterval(updateTimer, 1000);
+    } else {
+        const timeLimit = props.quizForm.settings?.timeLimit;
+        if (timeLimit && timeLimit > 0) {
+            let startTime = localStorage.getItem(`form_start_time_${props.quizForm.id}`);
+            if (!startTime) {
+                startTime = Date.now().toString();
+                localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
+            }
+
+            const endTime = parseInt(startTime) + timeLimit * 60 * 1000;
+
+            const updateTimer = () => {
+                const now = Date.now();
+                const remaining = endTime - now;
+
+                if (remaining <= 0) {
+                    timeRemaining.value = 0;
+                    formattedTime.value = '00:00';
+                    if (timerInterval) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                    }
+                    if (!isSubmitted.value && !isSubmitting.value) {
+                        submitOnTimeout();
+                    }
+                } else {
+                    timeRemaining.value = remaining;
+
+                    const totalSeconds = Math.floor(remaining / 1000);
+                    const hrs = Math.floor(totalSeconds / 3600);
+                    const mins = Math.floor((totalSeconds % 3600) / 60);
+                    const secs = totalSeconds % 60;
+
+                    if (hrs > 0) {
+                        formattedTime.value = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    } else {
+                        formattedTime.value = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+                }
+            };
+
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
     }
 });
 
@@ -350,6 +402,50 @@ const selectGridAnswer = (questionId: number, rowIndex: number, colIndex: number
     }
 };
 
+const submitOnTimeout = async (retries = 3) => {
+    if (isSubmitted.value) {
+        return;
+    }
+    isSubmitting.value = true;
+    submissionError.value = '';
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            await axios.post(
+                props.quizForm.submitUrl,
+                {
+                    email: email.value || null,
+                    answers: answers.value,
+                    respondent_identifier: respondentIdentifier,
+                    session_token: props.session?.token ?? null,
+                    is_timeout: true,
+                },
+                {
+                    headers: { Accept: 'application/json' },
+                }
+            );
+            isSubmitted.value = true;
+            localStorage.removeItem(`is_locked_${props.quizForm.id}`);
+            localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        } catch (err: any) {
+            console.error(`Auto-submit on timeout attempt ${attempt} failed:`, err);
+            if (attempt < retries) {
+                await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+            } else {
+                submissionError.value =
+                    'Waktu pengerjaan telah habis. Gagal mengirim jawaban otomatis karena kendala jaringan. Silakan klik tombol "Coba Kirim Ulang Jawaban" di bawah.';
+            }
+        } finally {
+            if (isSubmitted.value) {
+                isSubmitting.value = false;
+            }
+        }
+    }
+    isSubmitting.value = false;
+};
+
 const submitResponse = () => {
     if (isSubmitting.value) {
         return;
@@ -367,11 +463,15 @@ const submitResponse = () => {
     }
 
     isSubmitting.value = true;
+    submissionError.value = '';
     router.post(
         props.quizForm.submitUrl,
         {
             email: email.value || null,
             answers: answers.value,
+            respondent_identifier: respondentIdentifier,
+            session_token: props.session?.token ?? null,
+            is_timeout: false,
         },
         {
             preserveScroll: true,
@@ -380,6 +480,11 @@ const submitResponse = () => {
                 localStorage.removeItem(`is_locked_${props.quizForm.id}`);
                 localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+            },
+            onError: (errors: any) => {
+                if (errors.error) {
+                    submissionError.value = errors.error;
+                }
             },
             onFinish: () => {
                 isSubmitting.value = false;
@@ -682,6 +787,18 @@ const submitAnotherResponse = () => {
                     <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
                 </article>
 
+                <!-- Submission / Timeout Error Alert -->
+                <div v-if="submissionError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 space-y-2">
+                    <p class="font-semibold">{{ submissionError }}</p>
+                    <button
+                        type="button"
+                        class="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
+                        @click="submitOnTimeout"
+                    >
+                        Coba Kirim Ulang Jawaban
+                    </button>
+                </div>
+
                 <button
                     type="button"
                     :disabled="isSubmitting"
@@ -718,12 +835,8 @@ const submitAnotherResponse = () => {
                         <span>Menunggu Persetujuan...</span>
                     </div>
                     <p class="mt-1.5 text-xs text-slate-400 leading-relaxed">
-                        Permintaan buka kunci telah dikirim. Halaman ini akan terbuka otomatis begitu disetujui oleh pembuat kuis.
+                        Permintaan buka kunci telah dikirim ke guru / pengawas. Halaman ini akan terbuka otomatis begitu disetujui oleh guru.
                     </p>
-                    <div v-if="generatedUnlockCode" class="mt-4 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-center">
-                        <span class="block text-[11px] font-bold uppercase tracking-wider text-indigo-300">Kode satu kali</span>
-                        <span class="mt-1 block font-mono text-2xl font-black tracking-[0.3em] text-white">{{ generatedUnlockCode }}</span>
-                    </div>
                 </div>
 
                 <div v-else class="space-y-3">
