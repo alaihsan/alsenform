@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import {
     backgroundPatterns,
@@ -40,7 +40,10 @@ import {
     Undo2,
     UploadCloud,
     UserPlus,
+    Users,
+    School,
     Video,
+    X,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
@@ -120,6 +123,26 @@ const form = reactive({
 
 const activeTab = ref<'questions' | 'responses' | 'settings' | 'keamanan'>('questions');
 const activeQuestionId = ref(1);
+const selectedCohortIds = ref<number[]>([...(props.quizForm?.cohortIds ?? [])]);
+const isCohortRestricted = ref(selectedCohortIds.value.length > 0);
+const isCohortSettingsOpen = ref(true);
+
+const toggleCohort = (id: number) => {
+    if (selectedCohortIds.value.includes(id)) {
+        selectedCohortIds.value = selectedCohortIds.value.filter((cid) => cid !== id);
+    } else {
+        selectedCohortIds.value.push(id);
+    }
+    markChanged('Cohort updated');
+};
+
+const setCohortRestriction = (restricted: boolean) => {
+    isCohortRestricted.value = restricted;
+    if (!restricted) {
+        selectedCohortIds.value = [];
+    }
+    markChanged('Cohort restriction updated');
+};
 const showPreview = ref(false);
 const showPublish = ref(false);
 const showMoreMenu = ref(false);
@@ -132,6 +155,83 @@ const docxFileInput = ref<HTMLInputElement | null>(null);
 const isImportModalOpen = ref(false);
 const isImportingFile = ref(false);
 const importError = ref('');
+const page = usePage<any>();
+const currentUser = computed(() => page.props.auth?.user);
+const isCollaboratorModalOpen = ref(false);
+const selectedTeacherId = ref<number | ''>('');
+const isInvitingCollaborator = ref(false);
+const collaboratorError = ref('');
+
+const openCollaboratorModal = () => {
+    if (!props.quizForm?.id) {
+        triggerToast('Simpan kuis terlebih dahulu sebelum mengundang kolaborator.');
+        return;
+    }
+    collaboratorError.value = '';
+    selectedTeacherId.value = '';
+    isCollaboratorModalOpen.value = true;
+};
+
+const inviteCollaborator = () => {
+    if (!selectedTeacherId.value || !props.quizForm?.inviteCollaboratorUrl) {
+        return;
+    }
+
+    isInvitingCollaborator.value = true;
+    collaboratorError.value = '';
+
+    router.post(
+        props.quizForm.inviteCollaboratorUrl,
+        { user_id: selectedTeacherId.value },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                selectedTeacherId.value = '';
+                triggerToast('Kolaborator berhasil ditambahkan');
+            },
+            onError: (errors: any) => {
+                collaboratorError.value = errors.user_id || 'Gagal menambahkan kolaborator.';
+            },
+            onFinish: () => {
+                isInvitingCollaborator.value = false;
+            },
+        },
+    );
+};
+
+const removeCollaborator = (collaboratorId: number, isSelf = false) => {
+    if (!props.quizForm?.id) {
+        return;
+    }
+
+    const confirmMsg = isSelf
+        ? 'Apakah Anda yakin ingin keluar dari kolaborasi kuis ini?'
+        : 'Hapus guru ini dari daftar kolaborator?';
+
+    if (!window.confirm(confirmMsg)) {
+        return;
+    }
+
+    router.delete(
+        route('forms.collaborators.destroy', {
+            quizForm: props.quizForm.id,
+            user: collaboratorId,
+        }),
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                triggerToast(isSelf ? 'Anda telah keluar dari kolaborasi' : 'Kolaborator berhasil dihapus');
+                if (isSelf) {
+                    router.visit(route('dashboard'));
+                }
+            },
+            onError: () => {
+                triggerToast('Gagal menghapus kolaborator');
+            },
+        },
+    );
+};
+
 const statusMessage = ref('All changes saved locally');
 const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
@@ -304,6 +404,7 @@ const saveDraft = (publishAfterSave = false) => {
             questions: form.questions,
             settings: form.settings,
             published: isPublished.value,
+            cohort_ids: selectedCohortIds.value,
         },
         {
             preserveScroll: true,
@@ -357,6 +458,7 @@ const saveDraftAndCopy = () => {
             questions: form.questions,
             settings: form.settings,
             published: isPublished.value,
+            cohort_ids: selectedCohortIds.value,
         },
         {
             preserveScroll: true,
@@ -1112,11 +1214,18 @@ watch(
                     </button>
                     <button
                         type="button"
-                        class="hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
+                        class="relative hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
                         aria-label="Invite collaborators"
-                        @click="markChanged('Invite collaborator opened')"
+                        title="Kolaborasi Kuis Antar Guru"
+                        @click="openCollaboratorModal"
                     >
                         <UserPlus class="h-5 w-5" />
+                        <span
+                            v-if="props.quizForm?.collaborators?.length"
+                            class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white shadow-xs"
+                        >
+                            {{ props.quizForm.collaborators.length }}
+                        </span>
                     </button>
 
                     <!-- Status Dropdown (Draft / Published) -->
@@ -1167,6 +1276,17 @@ watch(
                         >
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="showPublish = true">
                                 Copy public link
+                            </button>
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50 md:hidden"
+                                @click="
+                                    openCollaboratorModal();
+                                    showMoreMenu = false;
+                                "
+                            >
+                                <UserPlus class="h-4 w-4 text-indigo-600" />
+                                Kolaborasi Kuis
                             </button>
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="openPreview">
                                 Open preview
@@ -2252,6 +2372,109 @@ watch(
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
+                                    @click="isCohortSettingsOpen = !isCohortSettingsOpen"
+                                >
+                                    <span>
+                                        <span class="flex items-center gap-2 text-xl font-normal text-slate-950">
+                                            <span>Peserta & Kelompok (Cohort)</span>
+                                            <span
+                                                v-if="selectedCohortIds.length > 0"
+                                                class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800"
+                                            >
+                                                {{ selectedCohortIds.length }} Cohort Terpilih
+                                            </span>
+                                        </span>
+                                        <span class="mt-2 block text-lg text-slate-600">
+                                            Batasi kuis agar hanya dapat dikerjakan oleh anggota kelompok/rombel tertentu
+                                        </span>
+                                    </span>
+                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isCohortSettingsOpen ? 'rotate-180' : '']" />
+                                </button>
+
+                                <div v-if="isCohortSettingsOpen" class="mt-10 space-y-6 pl-11">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                                        <label
+                                            class="flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition"
+                                            :class="!isCohortRestricted ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="cohort_restriction_type"
+                                                :checked="!isCohortRestricted"
+                                                @change="setCohortRestriction(false)"
+                                                class="mt-1 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <div>
+                                                <span class="block text-base font-bold text-slate-900">Terbuka untuk Semua (Publik)</span>
+                                                <span class="text-sm text-slate-500">Siapapun yang memiliki link dapat mengisi dan mengerjakan kuis ini.</span>
+                                            </div>
+                                        </label>
+
+                                        <label
+                                            class="flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition"
+                                            :class="isCohortRestricted ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="cohort_restriction_type"
+                                                :checked="isCohortRestricted"
+                                                @change="setCohortRestriction(true)"
+                                                class="mt-1 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <div>
+                                                <span class="block text-base font-bold text-slate-900">Khusus Cohort Tertentu</span>
+                                                <span class="text-sm text-slate-500">Hanya murid yang terdaftar di kelompok terpilih yang dapat mengakses kuis.</span>
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <!-- Cohort Checklist when restricted -->
+                                    <div v-if="isCohortRestricted" class="mt-5 space-y-3">
+                                        <p class="text-sm font-bold uppercase tracking-wider text-slate-500">
+                                            Pilih Cohort yang Diizinkan:
+                                        </p>
+
+                                        <div v-if="props.quizForm?.availableCohorts?.length" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                            <div
+                                                v-for="c in props.quizForm.availableCohorts"
+                                                :key="c.id"
+                                                @click="toggleCohort(c.id)"
+                                                class="flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition select-none"
+                                                :class="selectedCohortIds.includes(c.id) ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                            >
+                                                <div class="flex items-center gap-3">
+                                                    <div
+                                                        class="flex h-5 w-5 items-center justify-center rounded-md border"
+                                                        :class="selectedCohortIds.includes(c.id) ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'"
+                                                    >
+                                                        <Check v-if="selectedCohortIds.includes(c.id)" class="h-3.5 w-3.5 stroke-[3]" />
+                                                    </div>
+                                                    <div>
+                                                        <div class="text-sm font-bold text-slate-900">{{ c.name }}</div>
+                                                        <div v-if="c.code" class="text-xs font-mono text-slate-400">{{ c.code }}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-else class="rounded-2xl bg-amber-50 p-4 border border-amber-200 text-sm text-amber-900 flex items-center justify-between">
+                                            <span>Belum ada Cohort yang tersedia di sistem. Buat Cohort terlebih dahulu di menu Kelompok Belajar.</span>
+                                            <Link :href="route('cohorts.index')" class="font-bold underline ml-2">Kelola Cohort</Link>
+                                        </div>
+
+                                        <p v-if="selectedCohortIds.length === 0" class="text-sm font-medium text-red-600">
+                                            * Harap pilih minimal satu Cohort jika pembatasan aktif, atau pilih "Terbuka untuk Semua".
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <div class="border-t border-slate-200"></div>
+
+                            <section class="px-11 py-12">
+                                <button
+                                    type="button"
+                                    class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isPresentationSettingsOpen = !isPresentationSettingsOpen"
                                 >
                                     <span>
@@ -2746,6 +2969,163 @@ watch(
                         @click="isImportModalOpen = false"
                     >
                         Batal
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Modal Kolaborasi Kuis (Antar Guru) -->
+        <div v-if="isCollaboratorModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs">
+            <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                            <UserPlus class="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-slate-900">Kolaborasi Kuis</h2>
+                            <p class="text-xs text-slate-500">Kelola guru yang dapat melihat dan mengedit kuis ini.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                        @click="isCollaboratorModalOpen = false"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <!-- Info callout: Only teachers -->
+                <div class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs text-indigo-950 flex items-start gap-2.5">
+                    <School class="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                    <div class="leading-relaxed">
+                        <span class="font-bold">Khusus Antar Guru:</span>
+                        Kolaborasi kuis hanya dapat dilakukan antar sesama akun Guru. Akun Murid (Siswa) tidak dapat ditambahkan ke kuis.
+                    </div>
+                </div>
+
+                <!-- Section: Pemilik (Owner) -->
+                <div class="space-y-2">
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pemilik Kuis</label>
+                    <div class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-800 text-xs">
+                                {{ (props.quizForm?.owner?.name || 'G')[0].toUpperCase() }}
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-slate-900">{{ props.quizForm?.owner?.name ?? 'Pemilik Form' }}</div>
+                                <div class="text-xs text-slate-500">{{ props.quizForm?.owner?.email ?? '-' }}</div>
+                            </div>
+                        </div>
+                        <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                            Pemilik
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Section: Daftar Kolaborator -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Kolaborator ({{ props.quizForm?.collaborators?.length ?? 0 }})
+                        </label>
+                    </div>
+
+                    <div v-if="props.quizForm?.collaborators && props.quizForm.collaborators.length > 0" class="max-h-48 overflow-y-auto space-y-2 pr-1">
+                        <div
+                            v-for="collab in props.quizForm.collaborators"
+                            :key="collab.id"
+                            class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 hover:border-slate-300 transition"
+                        >
+                            <div class="flex items-center gap-3 min-w-0 flex-1">
+                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700 text-xs">
+                                    {{ collab.name ? collab.name[0].toUpperCase() : 'G' }}
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate text-xs font-bold text-slate-900">{{ collab.name }}</div>
+                                    <div class="truncate text-[11px] text-slate-500">{{ collab.email || '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                                    Editor
+                                </span>
+                                <button
+                                    v-if="props.quizForm?.isOwner || currentUser?.is_admin"
+                                    type="button"
+                                    class="rounded-lg p-1.5 text-red-500 hover:bg-red-50 transition"
+                                    title="Hapus kolaborator"
+                                    @click="removeCollaborator(collab.id, false)"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                </button>
+                                <button
+                                    v-else-if="currentUser?.id === collab.id"
+                                    type="button"
+                                    class="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 transition"
+                                    @click="removeCollaborator(collab.id, true)"
+                                >
+                                    Keluar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="rounded-2xl border border-dashed border-slate-200 p-4 text-center">
+                        <p class="text-xs text-slate-500">Belum ada guru lain yang ditambahkan sebagai kolaborator.</p>
+                    </div>
+                </div>
+
+                <!-- Section: Form Undang Kolaborator (Hanya untuk Owner / Superadmin) -->
+                <div v-if="props.quizForm?.isOwner || currentUser?.is_admin" class="space-y-3 pt-2 border-t border-slate-100">
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
+                        Undang Guru Lain
+                    </label>
+
+                    <div v-if="props.quizForm?.availableTeachers && props.quizForm.availableTeachers.length > 0" class="space-y-3">
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <select
+                                v-model="selectedTeacherId"
+                                class="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                            >
+                                <option value="">-- Pilih akun guru untuk diundang --</option>
+                                <option
+                                    v-for="teacher in props.quizForm.availableTeachers"
+                                    :key="teacher.id"
+                                    :value="teacher.id"
+                                >
+                                    {{ teacher.name }} ({{ teacher.email || 'tanpa email' }})
+                                </option>
+                            </select>
+                            <button
+                                type="button"
+                                :disabled="!selectedTeacherId || isInvitingCollaborator"
+                                class="flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 transition shadow-xs"
+                                @click="inviteCollaborator"
+                            >
+                                <span v-if="isInvitingCollaborator" class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                <UserPlus v-else class="h-3.5 w-3.5" />
+                                <span>Undang</span>
+                            </button>
+                        </div>
+                        <p v-if="collaboratorError" class="text-xs font-semibold text-red-600">
+                            {{ collaboratorError }}
+                        </p>
+                    </div>
+                    <div v-else class="rounded-xl bg-slate-50 p-3 text-center">
+                        <p class="text-xs text-slate-500">
+                            Semua guru telah menjadi kolaborator atau belum ada akun guru lain di sistem.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-2 border-t border-slate-100">
+                    <button
+                        type="button"
+                        class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                        @click="isCollaboratorModalOpen = false"
+                    >
+                        Tutup
                     </button>
                 </div>
             </section>

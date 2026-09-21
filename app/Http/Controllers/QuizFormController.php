@@ -77,6 +77,10 @@ class QuizFormController extends Controller
             'published_at' => $request->boolean('published') ? ($quizForm->published_at ?? now()) : null,
         ]);
 
+        if ($request->has('cohort_ids')) {
+            $quizForm->cohorts()->sync($request->input('cohort_ids', []));
+        }
+
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
     }
 

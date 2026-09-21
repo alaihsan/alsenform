@@ -83,6 +83,29 @@ export type QuizFormPayload = {
     } | null;
     updateUrl: string;
     publicUrl: string;
+    cohortIds?: number[];
+    availableCohorts?: {
+        id: number;
+        name: string;
+        code?: string | null;
+    }[];
+    isOwner?: boolean;
+    owner?: {
+        id: number;
+        name: string;
+        email: string | null;
+    } | null;
+    collaborators?: {
+        id: number;
+        name: string;
+        email: string | null;
+    }[];
+    availableTeachers?: {
+        id: number;
+        name: string;
+        email: string | null;
+    }[];
+    inviteCollaboratorUrl?: string;
 };
 
 export type QuestionTypeOption = {
@@ -111,6 +134,8 @@ export type RecentForm = {
     accent: string;
     isPublished: boolean;
     isTrashed: boolean;
+    isCollaborator?: boolean;
+    ownerName?: string;
 };
 
 export type QuizFolder = {

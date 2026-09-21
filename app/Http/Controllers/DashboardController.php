@@ -13,14 +13,19 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request, QuizFormPayloads $payloads): Response
     {
+        $user = $request->user();
+
         $recentForms = QuizForm::query()
             ->withTrashed()
-            ->with('quizFolder')
-            ->whereBelongsTo($request->user())
+            ->with(['quizFolder', 'user:id,name,email'])
+            ->where(function ($query) use ($user): void {
+                $query->whereBelongsTo($user)
+                    ->orWhereHas('collaborators', fn ($q) => $q->where('users.id', $user->id));
+            })
             ->latest('updated_at')
             ->limit(100)
             ->get()
-            ->map(fn (QuizForm $quizForm): array => $payloads->recentForm($quizForm));
+            ->map(fn (QuizForm $quizForm): array => $payloads->recentForm($quizForm, $user));
 
         $folders = QuizFolder::query()
             ->whereBelongsTo($request->user())

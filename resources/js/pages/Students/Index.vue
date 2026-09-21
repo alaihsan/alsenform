@@ -815,9 +815,9 @@ async function executeImport(): Promise<void> {
                             v-model="importText"
                             rows="7"
                             placeholder="Contoh format (bisa langsung copy tabel Excel):
-202401001	Ahmad Fauzi	X IPA 1
-202401002	Siti Nurhaliza	X IPA 1
-202401003	Budi Santoso	X IPS 2"
+202401001	Ahmad Fauzi	Kelas 7A
+202401002	Siti Nurhaliza	Kelas 7A
+202401003	Budi Santoso	Kelas 8B"
                             class="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-3 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                         ></textarea>
                         <div class="flex justify-between items-center text-[11px] text-slate-500">
@@ -1051,7 +1051,7 @@ async function executeImport(): Promise<void> {
                         <input
                             v-model="studentForm.kelas"
                             type="text"
-                            placeholder="Contoh: X IPA 1, VII-B, XII RPL 2"
+                            placeholder="Contoh: Kelas 7A, Kelas 8B, Kelas 1, dll."
                             class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                         />
                         <div v-if="studentForm.errors.kelas" class="mt-1 text-[11px] font-medium text-red-600">

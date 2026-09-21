@@ -1,13 +1,16 @@
 <?php
 
+use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
+use App\Http\Controllers\QuizFormCollaboratorController;
 use App\Http\Controllers\QuizFormController;
 use App\Http\Controllers\QuizResponseController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -30,6 +33,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::patch('forms/{quizForm}/restore', [QuizFormController::class, 'restore'])->withTrashed()->name('forms.restore');
     Route::delete('forms/{quizForm}/force-delete', [QuizFormController::class, 'forceDelete'])->withTrashed()->name('forms.force-delete');
     Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('forms.media.upload');
+    Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
+    Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
     Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
 
     // Developer Support Routes
@@ -42,6 +47,27 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     // Unlock Request Admin Routes
     Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
     Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
+
+    // Cohort Management Routes
+    Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');
+    Route::post('cohorts', [CohortController::class, 'store'])->name('cohorts.store');
+    Route::post('cohorts/sync-from-classes', [CohortController::class, 'syncFromClasses'])->name('cohorts.sync-from-classes');
+    Route::get('cohorts/{cohort}', [CohortController::class, 'show'])->name('cohorts.show');
+    Route::put('cohorts/{cohort}', [CohortController::class, 'update'])->name('cohorts.update');
+    Route::delete('cohorts/{cohort}', [CohortController::class, 'destroy'])->name('cohorts.destroy');
+    Route::post('cohorts/{cohort}/members', [CohortController::class, 'addMembers'])->name('cohorts.members.add');
+    Route::delete('cohorts/{cohort}/members/{user}', [CohortController::class, 'removeMember'])->name('cohorts.members.remove');
+
+    // User Management (Admin, Guru, Murid)
+    Route::get('users', [UserController::class, 'index'])->name('users.index');
+    Route::post('users', [UserController::class, 'store'])->name('users.store');
+    Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
+    Route::post('users/{user}/change-password', [UserController::class, 'changePassword'])->name('users.change-password');
+    Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+    Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
+    Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
 
     // Student Management & Import Routes
     Route::get('students', [StudentController::class, 'index'])->name('students.index');

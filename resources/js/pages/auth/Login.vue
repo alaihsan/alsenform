@@ -82,9 +82,8 @@ const submit = () => {
                 </Button>
             </div>
 
-            <div class="text-center text-sm text-muted-foreground">
-                Belum punya akun?
-                <TextLink :href="route('register')" :tabindex="5">Register</TextLink>
+            <div class="text-center text-xs text-muted-foreground">
+                Akun dikelola oleh Administrator Sekolah.
             </div>
         </form>
     </AuthBase>

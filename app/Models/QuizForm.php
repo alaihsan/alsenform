@@ -6,6 +6,7 @@ use Database\Factories\QuizFormFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
@@ -56,6 +57,63 @@ class QuizForm extends Model
     public function responses(): HasMany
     {
         return $this->hasMany(QuizResponse::class);
+    }
+
+    public function cohorts(): BelongsToMany
+    {
+        return $this->belongsToMany(Cohort::class, 'cohort_quiz_form')
+            ->withTimestamps();
+    }
+
+    public function collaborators(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'quiz_form_collaborators')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function hasCollaborator(User|int $user): bool
+    {
+        $userId = $user instanceof User ? $user->id : $user;
+
+        return $this->collaborators()->where('users.id', $userId)->exists();
+    }
+
+    public function canBeEditedBy(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->id === $this->user_id || $user->isAdmin()) {
+            return true;
+        }
+
+        return $this->hasCollaborator($user);
+    }
+
+    public function isRestrictedToCohorts(): bool
+    {
+        return $this->cohorts()->exists();
+    }
+
+    public function allowsUser(?User $user): bool
+    {
+        if (! $this->isRestrictedToCohorts()) {
+            return true;
+        }
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isAdmin() || $user->id === $this->user_id) {
+            return true;
+        }
+
+        return $this->cohorts()
+            ->whereHas('users', fn ($query) => $query->where('users.id', $user->id))
+            ->exists();
     }
 
     public static function uniqueSlug(string $title, ?self $ignore = null): string

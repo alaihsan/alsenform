@@ -17,7 +17,8 @@ class UpdateQuizFormRequest extends FormRequest
         $quizForm = $this->route('quizForm');
 
         return $quizForm instanceof QuizForm
-            && $this->user()?->is($quizForm->user);
+            && (bool) $this->user()
+            && $quizForm->canBeEditedBy($this->user());
     }
 
     /**
@@ -76,6 +77,8 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.lockOnBlur' => ['nullable', 'boolean'],
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'published' => ['nullable', 'boolean'],
+            'cohort_ids' => ['nullable', 'array'],
+            'cohort_ids.*' => ['integer', 'exists:cohorts,id'],
         ];
     }
 

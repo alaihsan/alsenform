@@ -21,6 +21,7 @@ import {
     Sparkles,
     Trash2,
     Users,
+    BookOpen,
     X,
 } from 'lucide-vue-next';
 import { computed, ref, onMounted } from 'vue';
@@ -380,6 +381,29 @@ function submitFormDeleteModal(): void {
 
 function toggleSortDirection(): void {
     sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc';
+}
+
+function leaveCollaboration(form: RecentForm): void {
+    activeMenuId.value = null;
+    if (!user.value?.id) {
+        return;
+    }
+
+    if (!window.confirm(`Yakin ingin keluar dari kolaborasi kuis "${form.title}"?`)) {
+        return;
+    }
+
+    router.delete(
+        route('forms.collaborators.destroy', {
+            quizForm: form.id,
+            user: user.value.id,
+        }),
+        {
+            preserveScroll: true,
+            onSuccess: () => showToast('Anda telah keluar dari kolaborasi form'),
+            onError: () => showToast('Gagal keluar dari kolaborasi form'),
+        },
+    );
 }
 
 function goHome(): void {
@@ -773,15 +797,35 @@ function closeDonationModal(): void {
                                     <span>Ubah Password</span>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
-                            <DropdownMenuSeparator v-if="user?.is_admin" class="my-1.5 border-t border-slate-100" />
+                            <DropdownMenuSeparator v-if="user?.is_admin || user?.role === 'guru'" class="my-1.5 border-t border-slate-100" />
                             <DropdownMenuGroup v-if="user?.is_admin">
                                 <DropdownMenuItem :as-child="true">
                                     <Link
-                                        :href="route('students.index')"
+                                        :href="route('users.index')"
                                         class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
                                     >
                                         <Users class="h-3.5 w-3.5 text-emerald-600" />
-                                        <span>Pengaturan Murid</span>
+                                        <span>Pengaturan User</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem :as-child="true">
+                                    <Link
+                                        :href="route('cohorts.index')"
+                                        class="flex w-full items-center gap-2 rounded-xl pl-6 pr-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
+                                    >
+                                        <BookOpen class="h-3.5 w-3.5 text-indigo-600" />
+                                        <span>Cohort</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuGroup v-else-if="user?.role === 'guru'">
+                                <DropdownMenuItem :as-child="true">
+                                    <Link
+                                        :href="route('cohorts.index')"
+                                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                    >
+                                        <BookOpen class="h-3.5 w-3.5 text-indigo-600" />
+                                        <span>Cohort</span>
                                     </Link>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
@@ -1131,18 +1175,27 @@ function closeDonationModal(): void {
                                     </h3>
                                 </Link>
                                 <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title">{{ form.title }}</h3>
-                                <span
-                                    :class="[
-                                        'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-                                        form.isTrashed
-                                            ? 'border border-slate-200 bg-slate-100 text-slate-600'
-                                            : form.isPublished
-                                              ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                                              : 'border border-amber-200 bg-amber-50 text-amber-700',
-                                    ]"
-                                >
-                                    {{ form.isTrashed ? 'Trash' : form.isPublished ? 'Published' : 'Draft' }}
-                                </span>
+                                <div class="flex items-center gap-1.5 shrink-0">
+                                    <span
+                                        v-if="form.isCollaborator"
+                                        class="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700"
+                                        title="Anda berkolaborasi pada kuis ini"
+                                    >
+                                        Kolaborasi
+                                    </span>
+                                    <span
+                                        :class="[
+                                            'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                                            form.isTrashed
+                                                ? 'border border-slate-200 bg-slate-100 text-slate-600'
+                                                : form.isPublished
+                                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                  : 'border border-amber-200 bg-amber-50 text-amber-700',
+                                        ]"
+                                    >
+                                        {{ form.isTrashed ? 'Trash' : form.isPublished ? 'Published' : 'Draft' }}
+                                    </span>
+                                </div>
                             </div>
                             <div class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500">
                                 <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
@@ -1150,6 +1203,13 @@ function closeDonationModal(): void {
                                 </span>
                                 <Users class="h-4 w-4 shrink-0" />
                                 <span class="min-w-0 flex-1 truncate">{{ form.updatedLabel }}</span>
+                                <span
+                                    v-if="form.isCollaborator && form.ownerName"
+                                    class="max-w-28 shrink truncate rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700"
+                                    :title="'Pemilik: ' + form.ownerName"
+                                >
+                                    Oleh: {{ form.ownerName }}
+                                </span>
                                 <span
                                     v-if="form.folder && !form.isTrashed"
                                     class="max-w-20 shrink truncate rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
@@ -1220,12 +1280,22 @@ function closeDonationModal(): void {
                                                 Remove from folder
                                             </button>
                                             <button
+                                                v-if="!form.isCollaborator"
                                                 type="button"
                                                 class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
                                                 @click="deleteForm(form)"
                                             >
                                                 <Trash2 class="h-4 w-4" />
                                                 Delete
+                                            </button>
+                                            <button
+                                                v-else
+                                                type="button"
+                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-amber-600 hover:bg-amber-50"
+                                                @click="leaveCollaboration(form)"
+                                            >
+                                                <LogOut class="h-4 w-4" />
+                                                Keluar Kolaborasi
                                             </button>
                                         </template>
                                         <template v-else>

@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -73,11 +74,49 @@ class User extends Authenticatable
     }
 
     /**
+     * Check if user is an admin.
+     */
+    public function isAdmin(): bool
+    {
+        return (bool) $this->is_admin || $this->role === 'admin';
+    }
+
+    /**
+     * Check if user is a teacher.
+     */
+    public function isTeacher(): bool
+    {
+        return $this->role === 'guru' && ! $this->is_admin;
+    }
+
+    /**
      * Check if user is a student.
      */
     public function isStudent(): bool
     {
         return $this->role === 'siswa' || ! empty($this->nis);
+    }
+
+    /**
+     * Scope query to admins.
+     *
+     * @param  Builder<User>  $query
+     */
+    public function scopeAdmins($query)
+    {
+        return $query->where(function ($q): void {
+            $q->where('role', 'admin')->orWhere('is_admin', true);
+        });
+    }
+
+    /**
+     * Scope query to teachers.
+     *
+     * @param  Builder<User>  $query
+     */
+    public function scopeTeachers($query)
+    {
+        return $query->where('role', 'guru')->where('is_admin', false);
     }
 
     /**
@@ -100,5 +139,34 @@ class User extends Authenticatable
     public function scopeClass($query, string $kelas)
     {
         return $query->where('kelas', $kelas);
+    }
+
+    /**
+     * The cohorts that the user belongs to.
+     */
+    public function cohorts(): BelongsToMany
+    {
+        return $this->belongsToMany(Cohort::class, 'cohort_user')
+            ->withTimestamps();
+    }
+
+    /**
+     * Check if user is in a given cohort.
+     */
+    public function isInCohort(Cohort|int $cohort): bool
+    {
+        $cohortId = $cohort instanceof Cohort ? $cohort->id : $cohort;
+
+        return $this->cohorts()->where('cohorts.id', $cohortId)->exists();
+    }
+
+    /**
+     * The quiz forms where the user is invited as a collaborator.
+     */
+    public function collaboratingQuizForms(): BelongsToMany
+    {
+        return $this->belongsToMany(QuizForm::class, 'quiz_form_collaborators')
+            ->withPivot('role')
+            ->withTimestamps();
     }
 }

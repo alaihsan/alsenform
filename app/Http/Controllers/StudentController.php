@@ -249,11 +249,11 @@ class StudentController extends Controller
 
         $sampleData = [
             ['NIS', 'NAMA', 'KELAS'],
-            ['202401001', 'Ahmad Fauzi', 'X IPA 1'],
-            ['202401002', 'Siti Nurhaliza', 'X IPA 1'],
-            ['202401003', 'Budi Santoso', 'X IPS 2'],
-            ['202401004', 'Dewi Lestari', 'X IPS 2'],
-            ['202401005', 'Reza Rahadian', 'XI IPA 1'],
+            ['202401001', 'Ahmad Fauzi', 'Kelas 7A'],
+            ['202401002', 'Siti Nurhaliza', 'Kelas 7A'],
+            ['202401003', 'Budi Santoso', 'Kelas 8B'],
+            ['202401004', 'Dewi Lestari', 'Kelas 8B'],
+            ['202401005', 'Reza Rahadian', 'Kelas 9C'],
         ];
 
         return response()->stream(function () use ($sampleData): void {

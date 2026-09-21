@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { Star, Lock, Unlock, Clock, Key, RefreshCw } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Star, Lock, Unlock, Clock, Key, RefreshCw, ShieldAlert, ArrowLeft, Users } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import axios from 'axios';
 
@@ -42,6 +42,9 @@ const props = defineProps<{
         };
         submitUrl: string;
     };
+    accessRestricted?: boolean;
+    restrictionReason?: string;
+    allowedCohorts?: string[];
 }>();
 
 const answers = ref<Record<number, any>>({});
@@ -425,7 +428,47 @@ const submitAnotherResponse = () => {
             quizForm.settings.backgroundPatternClass ?? 'pattern-none',
         ]"
     >
-        <section v-if="isSubmitted" class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <!-- Access Restricted State (Cohort Restriction) -->
+        <section v-if="accessRestricted" class="mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white shadow-xl overflow-hidden my-8">
+            <div class="h-3 bg-amber-500"></div>
+            <div class="p-6 sm:p-8 text-center">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50 text-amber-600 mb-4 ring-8 ring-amber-50">
+                    <ShieldAlert class="h-8 w-8" />
+                </div>
+                <h1 class="text-2xl font-black text-slate-900">Akses Kuis Dibatasi</h1>
+                <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                    {{ restrictionReason || 'Kuis ini hanya dapat diakses oleh murid yang terdaftar dalam kelompok (Cohort) tertentu.' }}
+                </p>
+
+                <div v-if="allowedCohorts && allowedCohorts.length > 0" class="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 text-left">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">
+                        Kelompok yang Diizinkan:
+                    </span>
+                    <div class="flex flex-wrap gap-2">
+                        <span
+                            v-for="name in allowedCohorts"
+                            :key="name"
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-bold text-indigo-700"
+                        >
+                            <Users class="h-3.5 w-3.5" />
+                            <span>{{ name }}</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link
+                        :href="route('dashboard')"
+                        class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 transition"
+                    >
+                        <ArrowLeft class="h-4 w-4" />
+                        <span>Kembali ke Dashboard</span>
+                    </Link>
+                </div>
+            </div>
+        </section>
+
+        <section v-else-if="isSubmitted" class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
             <div class="p-6 sm:p-8">
                 <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">

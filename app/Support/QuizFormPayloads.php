@@ -2,9 +2,11 @@
 
 namespace App\Support;
 
+use App\Models\Cohort;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Models\User;
 use Illuminate\Support\Collection;
 
 class QuizFormPayloads
@@ -14,6 +16,23 @@ class QuizFormPayloads
      */
     public function editor(QuizForm $quizForm, bool $includeResponses = true): array
     {
+        $quizForm->loadMissing(['user:id,name,email', 'collaborators:id,name,email']);
+        $collaboratorIds = $quizForm->collaborators->pluck('id')->all();
+        $ownerId = $quizForm->user_id;
+
+        // Available teachers (role = guru or is_admin, strictly excluding owner and existing collaborators)
+        $availableTeachers = User::query()
+            ->where(function ($q): void {
+                $q->where('role', 'guru')
+                    ->orWhere('role', 'admin')
+                    ->orWhere('is_admin', true);
+            })
+            ->whereNotIn('id', array_merge([$ownerId], $collaboratorIds))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        $currentUserId = auth()->id();
+
         return [
             'id' => $quizForm->id,
             'title' => $quizForm->title,
@@ -25,18 +44,42 @@ class QuizFormPayloads
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
             'isPublished' => ! is_null($quizForm->published_at),
+            'cohortIds' => $quizForm->cohorts()->pluck('cohorts.id')->all(),
+            'availableCohorts' => Cohort::orderBy('name')->get(['id', 'name', 'code'])->all(),
+            'isOwner' => $currentUserId === $quizForm->user_id || (bool) auth()->user()?->isAdmin(),
+            'owner' => $quizForm->user ? [
+                'id' => $quizForm->user->id,
+                'name' => $quizForm->user->name,
+                'email' => $quizForm->user->email,
+            ] : null,
+            'collaborators' => $quizForm->collaborators->map(fn (User $u): array => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+            ])->values()->all(),
+            'availableTeachers' => $availableTeachers->map(fn (User $u): array => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+            ])->values()->all(),
+            'inviteCollaboratorUrl' => route('forms.collaborators.store', $quizForm),
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function recentForm(QuizForm $quizForm): array
+    public function recentForm(QuizForm $quizForm, ?User $currentUser = null): array
     {
+        $user = $currentUser ?? auth()->user();
+        $isCollaborator = $user && $quizForm->user_id !== $user->id;
+
         return [
             'id' => $quizForm->id,
             'title' => $quizForm->title,
             'description' => $quizForm->description,
+            'isCollaborator' => $isCollaborator,
+            'ownerName' => $quizForm->user?->name ?? 'Guru',
             'folderId' => $quizForm->quiz_folder_id,
             'folder' => $quizForm->quizFolder?->name ?? $quizForm->folder,
             'editUrl' => route('forms.edit', ['quizForm' => $quizForm->slug]),

@@ -14,7 +14,7 @@ class QuizFormPolicy
 
     public function view(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user);
+        return $quizForm->canBeEditedBy($user);
     }
 
     public function create(User $user): bool
@@ -24,21 +24,21 @@ class QuizFormPolicy
 
     public function update(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user);
+        return $quizForm->canBeEditedBy($user);
     }
 
     public function delete(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user);
+        return $user->is($quizForm->user) || $user->isAdmin();
     }
 
     public function restore(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user);
+        return $user->is($quizForm->user) || $user->isAdmin();
     }
 
     public function forceDelete(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user);
+        return $user->is($quizForm->user) || $user->isAdmin();
     }
 }
