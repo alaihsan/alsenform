@@ -17,6 +17,7 @@ import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vu
 import type { PreviewAnswer, Question, QuestionType, QuizFormPayload } from '@/types/quiz';
 import axios from 'axios';
 import {
+    Archive,
     Check,
     ChevronDown,
     Circle,
@@ -152,6 +153,8 @@ const editingAnswerKeyQuestionId = ref<number | null>(null);
 const draggedQuestionId = ref<number | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const docxFileInput = ref<HTMLInputElement | null>(null);
+const examviewFileInput = ref<HTMLInputElement | null>(null);
+const importSource = ref<'examview' | 'docx'>('examview');
 const isImportModalOpen = ref(false);
 const isImportingFile = ref(false);
 const importError = ref('');
@@ -974,6 +977,63 @@ const handleImportDocxFile = async (event: Event) => {
     }
 };
 
+const handleImportExamViewFile = async (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file) {
+        return;
+    }
+
+    isImportingFile.value = true;
+    importError.value = '';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await axios.post('/questions/import-examview', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+
+        const importedQuestions = response.data.questions;
+        if (Array.isArray(importedQuestions) && importedQuestions.length > 0) {
+            importedQuestions.forEach((q: any) => {
+                const question: Question = {
+                    id: nextQuestionId++,
+                    title: q.title || 'Untitled Question',
+                    description: q.description || '',
+                    type: q.type || 'Multiple choice',
+                    options: Array.isArray(q.options) ? [...q.options] : [],
+                    rows: Array.isArray(q.rows) ? [...q.rows] : [],
+                    columns: Array.isArray(q.columns) ? [...q.columns] : [],
+                    answer: typeof q.answer === 'object' && q.answer !== null
+                        ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
+                        : q.answer,
+                    required: !!q.required,
+                    media: Array.isArray(q.media) ? [...q.media] : [],
+                    points: q.points ?? 10,
+                };
+                form.questions.push(question);
+                activeQuestionId.value = question.id;
+            });
+
+            isImportModalOpen.value = false;
+            activeTab.value = 'questions';
+            markChanged(`${importedQuestions.length} soal ExamView berhasil diimpor`);
+        } else {
+            importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas ExamView.';
+        }
+    } catch (error: any) {
+        importError.value = error.response?.data?.message || 'Gagal mengimpor file ExamView. Pastikan format berkas ZIP hasil ekspor Blackboard benar.';
+    } finally {
+        isImportingFile.value = false;
+        input.value = '';
+    }
+};
+
 const copyShareUrl = async () => {
     try {
         await navigator.clipboard.writeText(shareUrl.value);
@@ -1347,6 +1407,7 @@ watch(
 
         <section class="mx-auto grid max-w-[980px] grid-cols-1 gap-4 px-4 py-5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_60px]">
             <input ref="docxFileInput" type="file" accept=".docx" class="hidden" @change="handleImportDocxFile" />
+            <input ref="examviewFileInput" type="file" accept=".zip" class="hidden" @change="handleImportExamViewFile" />
             <div class="space-y-4">
                 <p class="text-sm font-medium text-slate-500">{{ statusMessage }}</p>
 
@@ -3020,57 +3081,123 @@ watch(
         <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-xl font-extrabold text-slate-900">Import Soal dari Word</h2>
+                    <h2 class="text-xl font-extrabold text-slate-900">Import Bank Soal</h2>
                     <button type="button" class="text-slate-400 hover:text-slate-600 transition font-bold text-lg" @click="isImportModalOpen = false">x</button>
                 </div>
-                
-                <p class="text-sm text-slate-500 leading-relaxed">
-                    Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di bawah ini.
-                </p>
 
-                <!-- Clean style template download section -->
-                <div class="flex items-center justify-between rounded-2xl bg-indigo-50/50 border border-indigo-100 p-4">
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
-                            <FileText class="h-5 w-5" />
-                        </div>
-                        <div>
-                            <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
-                            <span class="block text-[11px] text-slate-500 font-medium">Format: Soal, Opsi, Kunci</span>
-                        </div>
-                    </div>
+                <!-- Segmented Tabs: ExamView (.zip) vs Word (.docx) -->
+                <div class="flex rounded-2xl bg-slate-100 p-1">
                     <button
                         type="button"
-                        class="flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white border border-indigo-200 px-3.5 py-2 rounded-xl shadow-sm transition hover:bg-slate-50"
-                        @click="downloadImportTemplate"
+                        :class="[
+                            'flex-1 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-1.5',
+                            importSource === 'examview' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                        ]"
+                        @click="importSource = 'examview'"
                     >
-                        <Download class="h-3.5 w-3.5" />
-                        Unduh
+                        <Archive class="h-4 w-4" />
+                        ExamView (.zip)
+                    </button>
+                    <button
+                        type="button"
+                        :class="[
+                            'flex-1 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-1.5',
+                            importSource === 'docx' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                        ]"
+                        @click="importSource = 'docx'"
+                    >
+                        <FileText class="h-4 w-4" />
+                        Word (.docx)
                     </button>
                 </div>
 
-                <!-- Import / Upload Box -->
-                <div class="space-y-3">
-                    <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas</label>
-                    <div 
-                        class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
-                        @click="docxFileInput?.click()"
-                    >
-                        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
-                            <UploadCloud class="h-6 w-6" />
+                <!-- ExamView Import Tab -->
+                <div v-if="importSource === 'examview'" class="space-y-4">
+                    <div class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 text-xs text-indigo-950 space-y-2">
+                        <span class="block font-bold text-indigo-900">Panduan Ekspor dari ExamView:</span>
+                        <ol class="list-decimal list-inside space-y-1 text-slate-600">
+                            <li>Buka bank soal (<code class="font-mono text-indigo-700">.bnk</code>) di aplikasi <strong>ExamView Test Generator</strong>.</li>
+                            <li>Pilih menu <strong>File &gt; Export &gt; Blackboard 6.0 - 7.0...</strong></li>
+                            <li>Beri nama dan simpan berkas sebagai <strong>.zip</strong>.</li>
+                            <li>Unggah berkas <strong>.zip</strong> hasil ekspor tersebut di bawah ini.</li>
+                        </ol>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas ZIP ExamView</label>
+                        <div 
+                            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
+                            @click="examviewFileInput?.click()"
+                        >
+                            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 mb-3">
+                                <Archive class="h-6 w-6" />
+                            </div>
+                            <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas ZIP</span>
+                            <span class="text-[11px] text-slate-500 mt-1">Dukung file format .zip Blackboard 6.0-7.0 (maks. 25MB)</span>
                         </div>
-                        <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
-                        <span class="text-[11px] text-slate-500 mt-1">Dukung file format .docx (maks. 5MB)</span>
+
+                        <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
+                            <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
+                            Sedang mengekstrak dan memproses soal ExamView...
+                        </div>
+
+                        <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
+                            <span class="font-extrabold">Gagal:</span>
+                            <span>{{ importError }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Word (.docx) Import Tab -->
+                <div v-else class="space-y-4">
+                    <p class="text-sm text-slate-500 leading-relaxed">
+                        Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di bawah ini.
+                    </p>
+
+                    <!-- Clean style template download section -->
+                    <div class="flex items-center justify-between rounded-2xl bg-indigo-50/50 border border-indigo-100 p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                                <FileText class="h-5 w-5" />
+                            </div>
+                            <div>
+                                <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
+                                <span class="block text-[11px] text-slate-500 font-medium">Format: Soal, Opsi, Kunci</span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white border border-indigo-200 px-3.5 py-2 rounded-xl shadow-sm transition hover:bg-slate-50"
+                            @click="downloadImportTemplate"
+                        >
+                            <Download class="h-3.5 w-3.5" />
+                            Unduh
+                        </button>
                     </div>
 
-                    <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
-                        <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
-                        Sedang mengimpor dan memproses soal...
-                    </div>
+                    <!-- Import / Upload Box -->
+                    <div class="space-y-3">
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas DOCX</label>
+                        <div 
+                            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
+                            @click="docxFileInput?.click()"
+                        >
+                            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
+                                <UploadCloud class="h-6 w-6" />
+                            </div>
+                            <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
+                            <span class="text-[11px] text-slate-500 mt-1">Dukung file format .docx (maks. 5MB)</span>
+                        </div>
 
-                    <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
-                        <span class="font-extrabold">Gagal:</span>
-                        <span>{{ importError }}</span>
+                        <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
+                            <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
+                            Sedang mengimpor dan memproses soal...
+                        </div>
+
+                        <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
+                            <span class="font-extrabold">Gagal:</span>
+                            <span>{{ importError }}</span>
+                        </div>
                     </div>
                 </div>
 

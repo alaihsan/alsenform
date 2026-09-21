@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ExamViewImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use SimpleXMLElement;
@@ -164,5 +165,33 @@ class QuestionImportController extends Controller
         return response()->json([
             'questions' => $questions,
         ]);
+    }
+
+    /**
+     * Parse uploaded ExamView Blackboard ZIP file and return parsed questions with options and media.
+     */
+    public function importExamView(Request $request, ExamViewImportService $service): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:zip', 'max:25600'], // Max 25MB for embedded quiz images
+        ]);
+
+        try {
+            $questions = $service->parseZip($request->file('file'));
+
+            return response()->json([
+                'success' => true,
+                'total' => count($questions),
+                'questions' => $questions,
+            ]);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Terjadi kesalahan saat memproses file ExamView: '.$e->getMessage(),
+            ], 500);
+        }
     }
 }
