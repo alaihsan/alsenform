@@ -297,3 +297,149 @@ test('examview: rejects invalid or non-zip files', function () {
     $response2->assertStatus(422);
     expect($response2->json('message'))->toContain('tidak memuat data bank soal');
 });
+
+test('examview: successfully parses XML with default namespace and HTML entities', function () {
+    Storage::fake('public');
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $tempZipPath = tempnam(sys_get_temp_dir(), 'ev_ns_').'.zip';
+    $zip = new ZipArchive;
+    $zip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+    // QTI XML with standard namespace, &deg;, &nbsp;, and unescaped ampersand
+    $qtiXml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<questestinterop xmlns="http://www.imsglobal.org/xsd/ims_qtiasiv1p2">
+  <assessment title="Ujian IPA & Fisika">
+    <section>
+      <item title="Suhu Air" ident="QUE_101">
+        <itemmetadata>
+          <bbmd_questiontype>Multiple Choice</bbmd_questiontype>
+          <qmd_weighting>20</qmd_weighting>
+        </itemmetadata>
+        <presentation>
+          <flow>
+            <material>
+              <mattext texttype="text/html"><![CDATA[<p>Titik didih air murni adalah 100 &deg;C &nbsp; pada tekanan 1 atm.</p>]]></mattext>
+            </material>
+            <response_lid ident="response">
+              <render_choice>
+                <response_label ident="A">
+                  <material><mattext>50 &deg;C</mattext></material>
+                </response_label>
+                <response_label ident="B">
+                  <material><mattext>100 &deg;C</mattext></material>
+                </response_label>
+                <response_label ident="C">
+                  <material><mattext>150 &deg;C</mattext></material>
+                </response_label>
+              </render_choice>
+            </response_lid>
+          </flow>
+        </presentation>
+        <resprocessing>
+          <respcondition title="correct">
+            <conditionvar>
+              <varequal respident="response">B</varequal>
+            </conditionvar>
+            <setvar action="Set" varname="SCORE">20.0</setvar>
+          </respcondition>
+        </resprocessing>
+      </item>
+    </section>
+  </assessment>
+</questestinterop>
+XML;
+
+    $zip->addFromString('res00001.dat', $qtiXml);
+    $zip->close();
+
+    $zipFile = new UploadedFile($tempZipPath, 'examview_ns.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $questions = $response->json('questions');
+
+    expect($questions)->toHaveCount(1)
+        ->and($questions[0]['title'])->toContain('100 °C')
+        ->and($questions[0]['options'])->toHaveCount(3)
+        ->and($questions[0]['answer'])->toBe(1) // Option B -> index 1
+        ->and($questions[0]['points'])->toBe(20);
+});
+
+test('examview: successfully parses Blackboard 7.1+ POOL format', function () {
+    Storage::fake('public');
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $tempZipPath = tempnam(sys_get_temp_dir(), 'ev_bb7_').'.zip';
+    $zip = new ZipArchive;
+    $zip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+    $poolXml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<POOL>
+  <COURSEID value="BIO101"/>
+  <TITLE value="Bank Soal Biologi"/>
+  <QUESTION id="q_001" type="MC">
+    <DATED type="MC"/>
+    <BODY>
+      <TEXT>Organ tubuh manusia yang berfungsi memompa darah adalah...</TEXT>
+    </BODY>
+    <ANSWER id="ans_paru" position="1">
+      <TEXT>Paru-paru</TEXT>
+    </ANSWER>
+    <ANSWER id="ans_jantung" position="2">
+      <TEXT>Jantung</TEXT>
+    </ANSWER>
+    <ANSWER id="ans_ginjal" position="3">
+      <TEXT>Ginjal</TEXT>
+    </ANSWER>
+    <GRADABLE>
+      <POINTS_POSSIBLE>15</POINTS_POSSIBLE>
+      <CORRECTANSWER answer_id="ans_jantung"/>
+    </GRADABLE>
+  </QUESTION>
+</POOL>
+XML;
+
+    $zip->addFromString('res00001.dat', $poolXml);
+    $zip->close();
+
+    $zipFile = new UploadedFile($tempZipPath, 'examview_bb7.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $questions = $response->json('questions');
+
+    expect($questions)->toHaveCount(1)
+        ->and($questions[0]['title'])->toBe('Organ tubuh manusia yang berfungsi memompa darah adalah...')
+        ->and($questions[0]['options'])->toEqual(['Paru-paru', 'Jantung', 'Ginjal'])
+        ->and($questions[0]['answer'])->toBe(1) // Jantung index 1
+        ->and($questions[0]['points'])->toBe(15);
+});
+
+test('examview: gives clear instruction when raw .bnk file is zipped', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $tempZipPath = tempnam(sys_get_temp_dir(), 'ev_raw_bnk_').'.zip';
+    $zip = new ZipArchive;
+    $zip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('soal_uas.bnk', 'binary bnk content');
+    $zip->close();
+
+    $zipFile = new UploadedFile($tempZipPath, 'soal_uas.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->postJson(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertStatus(422);
+    expect($response->json('message'))->toContain('berkas .bnk mentah')
+        ->and($response->json('message'))->toContain('File -> Export -> Blackboard');
+});
