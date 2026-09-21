@@ -48,8 +48,22 @@ const props = defineProps<{
     recentForms: RecentForm[];
     folders: QuizFolder[];
     createFolderUrl: string;
+    stats?: {
+        totalForms: number;
+        publishedForms: number;
+        totalResponses: number;
+        pendingUnlocks: number;
+    };
 }>();
 
+const dashboardStats = computed(() => props.stats ?? {
+    totalForms: props.recentForms.filter((f) => !f.isTrashed).length,
+    publishedForms: props.recentForms.filter((f) => f.isPublished && !f.isTrashed).length,
+    totalResponses: 0,
+    pendingUnlocks: 0,
+});
+
+const showTemplateHint = ref(false);
 const searchQuery = ref('');
 const viewMode = ref<'grid' | 'list'>('grid');
 const statusFilter = ref<'all' | 'published' | 'draft' | 'trash'>('all');
@@ -720,7 +734,10 @@ function closeDonationModal(): void {
                         <span class="rounded-lg bg-white/70"></span>
                         <span class="rounded-lg bg-white/95"></span>
                     </div>
-                    <h1 class="text-xl font-semibold tracking-normal">Forms</h1>
+                    <div class="flex flex-col">
+                        <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">Alsenform</h1>
+                        <span class="text-[9px] sm:text-[10px] font-medium text-slate-500 leading-none">CBT & Exam Platform</span>
+                    </div>
                 </div>
 
                 <label class="mx-auto hidden h-10 w-full max-w-2xl items-center gap-3 rounded-full bg-slate-100 px-4 text-slate-500 md:flex">
@@ -772,7 +789,7 @@ function closeDonationModal(): void {
                                 aria-label="Profile menu"
                             >
                                 <Avatar class="h-6 w-6 overflow-hidden rounded-full border border-slate-100">
-                                    <AvatarImage :src="user?.avatar" :alt="user?.name" />
+                                    <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
                                     <AvatarFallback class="bg-indigo-50 font-black text-indigo-700 flex items-center justify-center text-[10px] w-full h-full">
                                         {{ getInitials(user?.name) }}
                                     </AvatarFallback>
@@ -905,7 +922,7 @@ function closeDonationModal(): void {
                     >
                         <div
                             :class="[
-                                'flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-slate-300 transition group-hover:border-emerald-500',
+                                'flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-slate-300 transition group-hover:border-emerald-500 group-hover:shadow-md',
                                 template.color,
                             ]"
                         >
@@ -915,27 +932,102 @@ function closeDonationModal(): void {
                                 <span class="absolute right-0 top-1/2 h-3 w-1/2 -translate-y-1/2 bg-blue-500"></span>
                                 <span class="absolute left-1/2 top-0 h-1/2 w-3 -translate-x-1/2 bg-red-500"></span>
                             </div>
-                            <div v-else class="w-3/5 overflow-hidden rounded-xl bg-white shadow-sm">
+                            <div v-else class="w-3/5 overflow-hidden rounded-xl bg-white shadow-sm border border-slate-200/80">
                                 <div
                                     :class="[
-                                        'h-6',
-                                        template.theme === 'party'
-                                            ? 'bg-fuchsia-300'
-                                            : template.theme === 'work'
-                                              ? 'bg-emerald-300'
-                                              : 'bg-emerald-500',
+                                        'h-5 sm:h-6 flex items-center px-2',
+                                        template.stripe || 'bg-indigo-600',
                                     ]"
-                                ></div>
-                                <div class="space-y-1.5 p-2.5">
-                                    <div class="h-2 w-2/3 rounded-full bg-slate-300"></div>
-                                    <div class="h-4 rounded-lg bg-slate-100"></div>
-                                    <div class="h-4 rounded-lg bg-slate-100"></div>
-                                    <div class="h-4 rounded-lg bg-slate-100"></div>
+                                >
+                                    <span class="h-1.5 w-1/2 rounded-full bg-white/70"></span>
+                                </div>
+                                <div class="space-y-1.5 p-2 sm:p-2.5">
+                                    <div class="h-2 w-3/4 rounded-full bg-slate-300"></div>
+                                    <div class="flex items-center gap-1">
+                                        <span class="h-1.5 w-1.5 rounded-full border border-slate-400"></span>
+                                        <div class="h-1.5 flex-1 rounded-full bg-slate-100"></div>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span class="h-1.5 w-1.5 rounded-full border border-slate-400"></span>
+                                        <div class="h-1.5 flex-1 rounded-full bg-slate-100"></div>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span class="h-1.5 w-1.5 rounded-full border border-slate-400"></span>
+                                        <div class="h-1.5 flex-1 rounded-full bg-slate-100"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <p class="mt-1.5 truncate text-sm font-semibold text-slate-900">{{ template.title }}</p>
+                        <p class="mt-1.5 truncate text-xs sm:text-sm font-semibold text-slate-900" :title="template.title">{{ template.title }}</p>
                     </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- QUICK STATS BAR -->
+        <section v-if="!searchQuery.trim()" class="mx-auto max-w-[1180px] px-4 pt-5 pb-1 sm:px-6">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <!-- Stat 1: Total Kuis -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                        <ClipboardList class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Total Bank Soal</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.totalForms }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 2: Ujian Aktif (Published) -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                        <Award class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Ujian Aktif</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.publishedForms }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 3: Respon Siswa -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                        <Users class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Respon Siswa</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.totalResponses }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 4: Permintaan Buka Kunci (Unlock) -->
+                <div
+                    :class="[
+                        'flex items-center gap-3.5 rounded-2xl border p-3.5 shadow-xs transition',
+                        dashboardStats.pendingUnlocks > 0
+                            ? 'border-red-200 bg-red-50/70 text-red-900 animate-pulse'
+                            : 'border-slate-200/80 bg-white hover:border-slate-300'
+                    ]"
+                >
+                    <div
+                        :class="[
+                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+                            dashboardStats.pendingUnlocks > 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'
+                        ]"
+                    >
+                        <Shield class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Perlu Buka Kunci</p>
+                        <p
+                            :class="[
+                                'text-lg font-bold leading-tight',
+                                dashboardStats.pendingUnlocks > 0 ? 'text-red-600 font-black' : 'text-slate-800'
+                            ]"
+                        >
+                            {{ dashboardStats.pendingUnlocks }} Siswa
+                        </p>
+                    </div>
                 </div>
             </div>
         </section>
@@ -943,7 +1035,10 @@ function closeDonationModal(): void {
         <section class="mx-auto max-w-[1180px] px-4 py-6 sm:px-6">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-base font-semibold">Recent forms</h2>
+                    <h2 class="text-base font-semibold">
+                        Recent forms
+                        <span v-if="filteredRecentForms.length" class="text-xs font-normal text-slate-500">({{ filteredRecentForms.length }})</span>
+                    </h2>
                     <p v-if="searchQuery.trim()" class="mt-1 text-sm font-medium text-slate-500">
                         Menampilkan hasil pencarian: <span class="text-slate-800">"{{ searchQuery.trim() }}"</span>
                     </p>
@@ -1145,11 +1240,11 @@ function closeDonationModal(): void {
                         <div class="min-w-0 flex-1">
                             <div class="mb-2 flex items-center justify-between gap-2">
                                 <Link v-if="!form.isTrashed" :href="form.editUrl" class="min-w-0">
-                                    <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title">
+                                    <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title" dir="auto">
                                         {{ form.title }}
                                     </h3>
                                 </Link>
-                                <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title">{{ form.title }}</h3>
+                                <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title" dir="auto">{{ form.title }}</h3>
                                 <div class="flex items-center gap-1.5 shrink-0">
                                     <span
                                         v-if="form.isCollaborator"
@@ -1157,6 +1252,13 @@ function closeDonationModal(): void {
                                         title="Anda berkolaborasi pada kuis ini"
                                     >
                                         Kolaborasi
+                                    </span>
+                                    <span
+                                        v-if="form.questionsCount !== undefined"
+                                        class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600"
+                                        :title="form.questionsCount + ' butir soal'"
+                                    >
+                                        {{ form.questionsCount }} Soal
                                     </span>
                                     <span
                                         :class="[
@@ -1177,7 +1279,12 @@ function closeDonationModal(): void {
                                     <ClipboardList class="h-3.5 w-3.5" />
                                 </span>
                                 <Users class="h-4 w-4 shrink-0" />
-                                <span class="min-w-0 flex-1 truncate">{{ form.updatedLabel }}</span>
+                                <span
+                                    class="min-w-0 flex-1 truncate text-[11px]"
+                                    :title="'Terakhir diperbarui: ' + form.updatedLabel"
+                                >
+                                    {{ form.updatedLabel ? form.updatedLabel.replace(/^Opened\s+/i, '') : '' }}
+                                </span>
                                 <span
                                     v-if="form.isCollaborator && form.ownerName"
                                     class="max-w-28 shrink truncate rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700"
@@ -1438,13 +1545,30 @@ function closeDonationModal(): void {
             </section>
         </div>
 
-        <div
-            class="fixed bottom-8 left-8 hidden rounded-full bg-lime-100 px-4 py-3 text-sm font-black text-lime-700 shadow-sm lg:flex lg:items-center lg:gap-2"
+        <transition
+            enter-active-class="transition ease-out duration-200"
+            enter-from-class="opacity-0 translate-y-2"
+            leave-active-class="transition ease-in duration-150"
+            leave-to-class="opacity-0 translate-y-2"
         >
-            <Sparkles class="h-4 w-4" />
-            Template terbuka di tab baru
-            <Send class="h-4 w-4" />
-        </div>
+            <div
+                v-if="showTemplateHint"
+                class="fixed bottom-6 right-6 z-40 hidden lg:flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-lg backdrop-blur-xs"
+            >
+                <div class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <Sparkles class="h-3.5 w-3.5" />
+                </div>
+                <span>Template formulir akan dibuka pada tab peramban baru</span>
+                <button
+                    type="button"
+                    @click="showTemplateHint = false"
+                    class="ml-1 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    title="Tutup pemberitahuan"
+                >
+                    <X class="h-3.5 w-3.5" />
+                </button>
+            </div>
+        </transition>
 
         <!-- MODAL UBAH PROFIL & PASSWORD -->
         <div v-if="isProfileModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs px-4">

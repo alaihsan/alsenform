@@ -20,6 +20,36 @@ export const templatePresets: Record<string, { title: string; description: strin
         question: 'Untitled Question',
         options: ['Option 1'],
     },
+    'pilihan-ganda': {
+        title: 'Penilaian Tengah Semester (PTS)',
+        description: 'Petunjuk: Pilihlah satu jawaban yang paling tepat pada soal pilihan ganda berikut.',
+        question: 'Manakah di bawah ini yang merupakan fungsi utama Pancasila sebagai dasar negara?',
+        options: ['Pedoman hidup dan sumber hukum tertinggi', 'Alat kekuasaan pemerintah', 'Hukum sementara', 'Peraturan daerah'],
+    },
+    'pai-arab': {
+        title: 'Kuis PAI & Bahasa Arab (Madinah)',
+        description: 'Ujian pemahaman ayat Al-Qur\'an dan hukum tajwid standar Mushaf Madinah.',
+        question: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ ﴿١﴾ - Hukum tajwid pada lafaz \'ٱلرَّحْمَـٰنِ\' adalah?',
+        options: ['Alif Lam Syamsiyah', 'Alif Lam Qamariyah', 'Idgham Bighunnah', 'Ikhfa Haqiqi'],
+    },
+    matematika: {
+        title: 'Ujian Matematika & Eksakta',
+        description: 'Petunjuk: Selesaikan soal matematika berikut dengan perhitungan yang teliti.',
+        question: 'Jika diketahui persamaan kuadrat $f(x) = x^2 - 5x + 6 = 0$, maka akar-akar persamaan tersebut adalah?',
+        options: ['$x_1 = 2$ dan $x_2 = 3$', '$x_1 = -2$ dan $x_2 = -3$', '$x_1 = 1$ dan $x_2 = 6$', '$x_1 = -1$ dan $x_2 = -6$'],
+    },
+    'esai-analisis': {
+        title: 'Ujian Esai & Uraian Analisis',
+        description: 'Jawablah pertanyaan analisis berikut dengan uraian yang jelas, runut, dan mendalam.',
+        question: 'Jelaskan dampak perkembangan teknologi kecerdasan buatan terhadap masa depan dunia pendidikan!',
+        options: ['Tuliskan uraian analisis Anda secara terstruktur.'],
+    },
+    'survei-belajar': {
+        title: 'Refleksi & Evaluasi Pembelajaran Siswa',
+        description: 'Kuesioner evaluasi proses belajar mengajar di kelas untuk peningkatan mutu pembelajaran.',
+        question: 'Seberapa baik pemahaman Anda terhadap materi yang diajarkan pada bab ini?',
+        options: ['Sangat memahami', 'Cukup memahami', 'Kurang memahami', 'Perlu bimbingan tambahan'],
+    },
     'contact-information': {
         title: 'Contact Information',
         description: 'Kumpulkan informasi kontak responden.',

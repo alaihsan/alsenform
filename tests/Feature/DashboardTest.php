@@ -3,6 +3,7 @@
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Models\UnlockRequest;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -517,4 +518,52 @@ test('dashboard recent forms include preview question and style mirroring metada
         ->and($recentForm['previewQuestions'])->toHaveCount(2)
         ->and($recentForm['stripe'])->toBe('bg-emerald-600')
         ->and($recentForm['tone'])->toBe('bg-[#eefdf5]');
+});
+
+test('dashboard provides quick stats for forms, responses, and pending unlocks', function () {
+    $user = User::factory()->create();
+    $quiz = QuizForm::factory()->for($user)->create([
+        'published_at' => now(),
+    ]);
+
+    QuizResponse::create([
+        'quiz_form_id' => $quiz->id,
+        'user_id' => $user->id,
+        'respondent_name' => 'Siswa 1',
+        'respondent_email' => 'siswa1@sekolah.sch.id',
+        'answers' => ['1' => 'A'],
+        'score' => 85,
+    ]);
+
+    UnlockRequest::create([
+        'quiz_form_id' => $quiz->id,
+        'respondent_identifier' => 'siswa1@sekolah.sch.id',
+        'email' => 'siswa1@sekolah.sch.id',
+        'unlock_code' => '123456',
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($user);
+
+    $response = $this->get('/dashboard');
+    $stats = $response->inertiaProps('stats');
+
+    expect($stats)->not->toBeNull()
+        ->and($stats['totalForms'])->toBe(1)
+        ->and($stats['publishedForms'])->toBe(1)
+        ->and($stats['totalResponses'])->toBe(1)
+        ->and($stats['pendingUnlocks'])->toBe(1);
+});
+
+test('users can create new quiz using educational templates', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $response = $this->get(route('forms.create', ['template' => 'pilihan-ganda']));
+    $response->assertRedirect();
+
+    $form = QuizForm::query()->where('user_id', $user->id)->latest('id')->first();
+    expect($form)->not->toBeNull()
+        ->and($form->title)->toContain('Penilaian Tengah Semester')
+        ->and($form->questions[0]['options'])->toHaveCount(4);
 });
