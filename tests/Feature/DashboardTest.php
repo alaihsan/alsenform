@@ -567,3 +567,20 @@ test('users can create new quiz using educational templates', function () {
         ->and($form->title)->toContain('Penilaian Tengah Semester')
         ->and($form->questions[0]['options'])->toHaveCount(4);
 });
+
+test('guests are redirected from help page to login', function () {
+    $response = $this->get(route('help'));
+    $response->assertRedirect(route('login'));
+});
+
+test('authenticated users can visit the help page', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $response = $this->get(route('help'));
+    $response
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Help')
+        );
+});

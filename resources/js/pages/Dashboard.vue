@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getInitials } from '@/composables/useInitials';
 import { usePage, useForm } from '@inertiajs/vue3';
-import { LogOut, User, Key, MessageSquare, Heart, Coins, Award, Shield, Wallet, History } from 'lucide-vue-next';
+import { LogOut, User, Key, MessageSquare, Heart, Coins, Award, Shield, Wallet, History, HelpCircle, Settings, PlusCircle, GraduationCap } from 'lucide-vue-next';
 import axios from 'axios';
 import FormCardPreview from '@/components/FormCardPreview.vue';
 
@@ -751,36 +751,156 @@ function closeDonationModal(): void {
                 </label>
 
                 <div class="ml-auto flex items-center gap-2">
-                    <div class="relative hidden sm:block">
-                        <button
-                            type="button"
-                            aria-label="Apps"
-                            @click="isAppsOpen = !isAppsOpen"
-                            class="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
-                        >
-                            <Grid3X3 class="h-5 w-5" />
-                        </button>
-                        <div v-if="isAppsOpen" class="absolute right-0 top-11 z-40 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                            <Link
-                                :href="route('dashboard')"
-                                class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                                <LayoutDashboard class="h-4 w-4 text-emerald-600" />
-                                Dashboard
-                            </Link>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger :as-child="true">
                             <button
                                 type="button"
-                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                @click="
-                                    isTemplateGalleryOpen = true;
-                                    isAppsOpen = false;
-                                "
+                                aria-label="Apps launcher"
+                                class="hidden sm:flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                             >
-                                <ClipboardList class="h-4 w-4 text-indigo-600" />
-                                Template gallery
+                                <Grid3X3 class="h-5 w-5" />
                             </button>
-                        </div>
-                    </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-80 mt-1.5 rounded-2xl shadow-xl border border-slate-200/90 bg-white/95 backdrop-blur-xs p-3.5 z-50">
+                            <!-- Header Mini Title -->
+                            <div class="flex items-center justify-between px-2 pb-2.5 mb-1.5 border-b border-slate-100">
+                                <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <Grid3X3 class="h-3.5 w-3.5 text-slate-500" />
+                                    Aplikasi & Pintasan
+                                </span>
+                                <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Alsenform</span>
+                            </div>
+
+                            <!-- 3-Column App Tiles Grid -->
+                            <div class="grid grid-cols-3 gap-2">
+                                <!-- 1. Dashboard -->
+                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('dashboard')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
+                                            <LayoutDashboard class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Dashboard</span>
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- 2. Buat Kuis (Guru / Admin) -->
+                                <DropdownMenuItem v-if="user?.is_admin || user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('forms.create')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs">
+                                            <PlusCircle class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Buat Kuis</span>
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- 3. Template Galeri -->
+                                <DropdownMenuItem class="p-0 focus:bg-transparent cursor-pointer" @select="isTemplateGalleryOpen = true">
+                                    <button
+                                        type="button"
+                                        class="group flex w-full flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs">
+                                            <ClipboardList class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Template</span>
+                                    </button>
+                                </DropdownMenuItem>
+
+                                <!-- 4. Cohort & Kelas (Guru / Admin) -->
+                                <DropdownMenuItem v-if="user?.is_admin || user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('cohorts.index')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+                                            <BookOpen class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Cohort</span>
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- 5. Data Pengguna / Siswa (Admin / Guru) -->
+                                <DropdownMenuItem v-if="user?.is_admin" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('users.index')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-xs">
+                                            <Users class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Pengguna</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem v-else-if="user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('cohorts.index')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-xs">
+                                            <GraduationCap class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Data Siswa</span>
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- 6. Panduan Aplikasi (Help Center) -->
+                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('help')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-xs">
+                                            <HelpCircle class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Panduan</span>
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- 7. Saran & Masukan (Non-admin) -->
+                                <DropdownMenuItem v-if="!user?.is_admin" class="p-0 focus:bg-transparent cursor-pointer" @select="openSuggestionModal">
+                                    <button
+                                        type="button"
+                                        class="group flex w-full flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
+                                            <MessageSquare class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Saran</span>
+                                    </button>
+                                </DropdownMenuItem>
+
+                                <!-- 8. Pengaturan Profil & Kuis -->
+                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                    <Link
+                                        :href="route('profile.edit')"
+                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                    >
+                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-slate-700 group-hover:text-white transition-all shadow-xs">
+                                            <Settings class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Pengaturan</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                            </div>
+
+                            <!-- Footer Shortcut to Help Center -->
+                            <div class="mt-2.5 pt-2 border-t border-slate-100 text-center">
+                                <Link
+                                    :href="route('help')"
+                                    class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition"
+                                >
+                                    <Sparkles class="h-3 w-3" />
+                                    Pusat Bantuan & Panduan &rarr;
+                                </Link>
+                            </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <DropdownMenu>
                         <DropdownMenuTrigger :as-child="true">
                             <button
@@ -797,75 +917,105 @@ function closeDonationModal(): void {
                                 <span class="hidden max-w-[80px] truncate text-xs font-semibold sm:inline">{{ user?.name }}</span>
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-56 mt-1 rounded-2xl shadow-xl border border-slate-200 bg-white p-2 z-50">
-                            <DropdownMenuLabel class="px-2.5 py-2 font-normal">
-                                <div class="flex flex-col space-y-1">
-                                    <p class="text-xs font-bold text-slate-900 leading-none">{{ user?.name }}</p>
-                                    <p class="text-[10px] text-slate-500 leading-none truncate mt-1">{{ user?.email }}</p>
+                        <DropdownMenuContent align="end" class="w-64 mt-1.5 rounded-2xl shadow-xl border border-slate-200/90 bg-white/95 backdrop-blur-xs p-2 z-50">
+                            <!-- Mini User Profile Card -->
+                            <div class="px-2.5 py-2.5 mb-1 rounded-xl bg-slate-50/80 border border-slate-100 flex items-center gap-3">
+                                <Avatar class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200/80 shadow-xs">
+                                    <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
+                                    <AvatarFallback class="bg-indigo-600 font-bold text-white flex items-center justify-center text-xs w-full h-full">
+                                        {{ getInitials(user?.name) }}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs font-bold text-slate-900 truncate leading-tight">{{ user?.name }}</p>
+                                    <p class="text-[11px] text-slate-500 truncate leading-tight mt-0.5">{{ user?.email }}</p>
+                                    <div class="mt-1.5 flex items-center gap-1.5">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-emerald-100/70 text-emerald-800 border border-emerald-200/50">
+                                            {{ user?.is_admin ? 'Admin' : (user?.role === 'guru' ? 'Guru' : (user?.role || 'Siswa')) }}
+                                        </span>
+                                    </div>
                                 </div>
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator class="my-1.5 border-t border-slate-100" />
+                            </div>
+
+                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+
+                            <!-- Group 1: Akun -->
+                            <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Akun</div>
                             <DropdownMenuGroup>
-                                <DropdownMenuItem @select="openProfileModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-                                    <User class="h-3.5 w-3.5 text-indigo-500" />
-                                    <span>Ubah Profil</span>
+                                <DropdownMenuItem :as-child="true">
+                                    <Link
+                                        :href="route('profile.edit')"
+                                        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                    >
+                                        <User class="h-4 w-4 text-slate-500" />
+                                        <span>Pengaturan Profil</span>
+                                    </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem @select="openPasswordModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-                                    <Key class="h-3.5 w-3.5 text-amber-500" />
+                                <DropdownMenuItem @select="openPasswordModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
+                                    <Key class="h-4 w-4 text-slate-500" />
                                     <span>Ubah Password</span>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
-                            <DropdownMenuSeparator v-if="user?.is_admin || user?.role === 'guru'" class="my-1.5 border-t border-slate-100" />
-                            <DropdownMenuGroup v-if="user?.is_admin">
+
+                            <!-- Group 2: Akademik (Admin / Guru) -->
+                            <template v-if="user?.is_admin || user?.role === 'guru'">
+                                <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+                                <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Akademik</div>
+                                <DropdownMenuGroup>
+                                    <DropdownMenuItem v-if="user?.is_admin" :as-child="true">
+                                        <Link
+                                            :href="route('users.index')"
+                                            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                        >
+                                            <Users class="h-4 w-4 text-slate-500" />
+                                            <span>Pengaturan User</span>
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem :as-child="true">
+                                        <Link
+                                            :href="route('cohorts.index')"
+                                            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                        >
+                                            <BookOpen class="h-4 w-4 text-slate-500" />
+                                            <span>Cohort & Kelas</span>
+                                        </Link>
+                                    </DropdownMenuItem>
+                                </DropdownMenuGroup>
+                            </template>
+
+                            <!-- Group 3: Bantuan & Dukungan -->
+                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+                            <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Bantuan & Dukungan</div>
+                            <DropdownMenuGroup>
                                 <DropdownMenuItem :as-child="true">
                                     <Link
-                                        :href="route('users.index')"
-                                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                        :href="route('help')"
+                                        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100/80 cursor-pointer transition-colors"
                                     >
-                                        <Users class="h-3.5 w-3.5 text-emerald-600" />
-                                        <span>Pengaturan User</span>
+                                        <HelpCircle class="h-4 w-4 text-emerald-600" />
+                                        <span>Panduan Aplikasi (Help)</span>
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem :as-child="true">
-                                    <Link
-                                        :href="route('cohorts.index')"
-                                        class="flex w-full items-center gap-2 rounded-xl pl-6 pr-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer"
-                                    >
-                                        <BookOpen class="h-3.5 w-3.5 text-indigo-600" />
-                                        <span>Cohort</span>
-                                    </Link>
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            <DropdownMenuGroup v-else-if="user?.role === 'guru'">
-                                <DropdownMenuItem :as-child="true">
-                                    <Link
-                                        :href="route('cohorts.index')"
-                                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                                    >
-                                        <BookOpen class="h-3.5 w-3.5 text-indigo-600" />
-                                        <span>Cohort</span>
-                                    </Link>
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            <DropdownMenuGroup v-if="!user?.is_admin">
-                                <DropdownMenuItem @select="openSuggestionModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-                                    <MessageSquare class="h-3.5 w-3.5 text-emerald-500" />
+                                <DropdownMenuItem v-if="!user?.is_admin" @select="openSuggestionModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
+                                    <MessageSquare class="h-4 w-4 text-slate-500" />
                                     <span>Kirim Saran & Masukan</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem @select="openDonationModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-                                    <Heart class="h-3.5 w-3.5 text-pink-500 fill-pink-500" />
+                                <DropdownMenuItem v-if="!user?.is_admin" @select="openDonationModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
+                                    <Heart class="h-4 w-4 text-rose-500 fill-rose-500/20" />
                                     <span>Dukung Developer</span>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
-                            <DropdownMenuSeparator class="my-1.5 border-t border-slate-100" />
+
+                            <!-- Group 4: Keluar -->
+                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
                             <DropdownMenuItem :as-child="true">
                                 <Link
                                     method="post"
                                     :href="route('logout')"
                                     as="button"
-                                    class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 cursor-pointer transition-colors"
                                 >
-                                    <LogOut class="h-3.5 w-3.5 text-red-500" />
+                                    <LogOut class="h-4 w-4 text-rose-500" />
                                     <span>Keluar</span>
                                 </Link>
                             </DropdownMenuItem>

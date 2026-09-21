@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import {
     ClipboardList,
     LogIn,
@@ -11,10 +11,16 @@ import {
     EyeOff,
     Loader2,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 
 const page = usePage();
 const user = computed(() => (page.props.auth as any)?.user);
+
+onMounted(() => {
+    if (user.value) {
+        router.visit(route('dashboard'));
+    }
+});
 
 const form = useForm({
     email: '',
@@ -106,26 +112,8 @@ const submit = () => {
                 <!-- Right: Login Card -->
                 <div class="w-full">
                     <div class="rounded-[2.2rem] border-2 border-emerald-200 bg-white p-6 sm:p-8 shadow-[0_12px_0_#d9f99d]">
-                        <!-- If user is already logged in -->
-                        <div v-if="user" class="text-center py-6 space-y-4">
-                            <div class="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-600 mx-auto">
-                                <UserCheck class="h-8 w-8" />
-                            </div>
-                            <div>
-                                <h2 class="text-2xl font-black text-slate-900">Halo, {{ user.name }}!</h2>
-                                <p class="text-xs font-semibold text-slate-500 mt-1">Akun Anda saat ini sedang aktif.</p>
-                            </div>
-                            <Link
-                                :href="route('dashboard')"
-                                class="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-white shadow-[0_5px_0_#159447] transition hover:-translate-y-0.5 active:translate-y-0"
-                            >
-                                <LogIn class="h-4 w-4" />
-                                Buka Dashboard
-                            </Link>
-                        </div>
-
-                        <!-- Direct Login Form for Guests -->
-                        <div v-else class="space-y-5">
+                        <!-- Direct Login Form -->
+                        <div class="space-y-5">
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                                     <KeyRound class="h-5 w-5" />

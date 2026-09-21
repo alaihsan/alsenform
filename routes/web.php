@@ -16,12 +16,20 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
+    if (auth()->check()) {
+        return redirect()->route('dashboard');
+    }
+
     return Inertia::render('Welcome');
 })->name('home');
 
 Route::get('dashboard', DashboardController::class)->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
+    Route::get('help', function () {
+        return Inertia::render('Help');
+    })->name('help');
+
     Route::post('folders', [QuizFolderController::class, 'store'])->name('folders.store');
     Route::patch('folders/{quizFolder}', [QuizFolderController::class, 'update'])->name('folders.update');
     Route::delete('folders/{quizFolder}', [QuizFolderController::class, 'destroy'])->name('folders.destroy');
