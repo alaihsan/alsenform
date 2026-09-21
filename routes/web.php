@@ -6,6 +6,7 @@ use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
 use App\Http\Controllers\QuizFormController;
 use App\Http\Controllers\QuizResponseController;
+use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -41,6 +42,16 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     // Unlock Request Admin Routes
     Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
     Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
+
+    // Student Management & Import Routes
+    Route::get('students', [StudentController::class, 'index'])->name('students.index');
+    Route::post('students', [StudentController::class, 'store'])->name('students.store');
+    Route::put('students/{student}', [StudentController::class, 'update'])->name('students.update');
+    Route::delete('students/{student}', [StudentController::class, 'destroy'])->name('students.destroy');
+    Route::post('students/import', [StudentController::class, 'import'])->name('students.import');
+    Route::get('students/template', [StudentController::class, 'downloadTemplate'])->name('students.template');
+    Route::post('students/{student}/reset-password', [StudentController::class, 'resetPassword'])->name('students.reset-password');
+    Route::post('students/{student}/change-password', [StudentController::class, 'changePassword'])->name('students.change-password');
 });
 
 Route::get('forms/{quizForm:slug}', [QuizResponseController::class, 'show'])->name('forms.public');

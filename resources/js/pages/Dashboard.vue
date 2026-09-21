@@ -773,14 +773,19 @@ function closeDonationModal(): void {
                                     <span>Ubah Password</span>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
-                            <DropdownMenuSeparator class="my-1.5 border-t border-slate-100" />
+                            <DropdownMenuSeparator v-if="user?.is_admin" class="my-1.5 border-t border-slate-100" />
                             <DropdownMenuGroup v-if="user?.is_admin">
-                                <DropdownMenuItem @select="openAdminModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
-                                    <Shield class="h-3.5 w-3.5 text-pink-500" />
-                                    <span>Panel Admin (Donasi & Saran)</span>
+                                <DropdownMenuItem :as-child="true">
+                                    <Link
+                                        :href="route('students.index')"
+                                        class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                    >
+                                        <Users class="h-3.5 w-3.5 text-emerald-600" />
+                                        <span>Pengaturan Murid</span>
+                                    </Link>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
-                            <DropdownMenuGroup v-else>
+                            <DropdownMenuGroup v-if="!user?.is_admin">
                                 <DropdownMenuItem @select="openSuggestionModal" class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
                                     <MessageSquare class="h-3.5 w-3.5 text-emerald-500" />
                                     <span>Kirim Saran & Masukan</span>

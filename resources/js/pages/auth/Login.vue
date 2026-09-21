@@ -28,7 +28,7 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Masuk ke akunmu" description="Gunakan email dan password untuk membuka workspace form">
+    <AuthBase title="Masuk ke akunmu" description="Gunakan email atau NIS serta password untuk membuka akun">
         <Head title="Login" />
 
         <div v-if="status" class="mb-4 text-center text-sm font-medium text-green-600">
@@ -38,16 +38,16 @@ const submit = () => {
         <form @submit.prevent="submit" class="flex flex-col gap-6">
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="email">Email</Label>
+                    <Label for="email">Email atau NIS</Label>
                     <Input
                         id="email"
-                        type="email"
+                        type="text"
                         required
                         autofocus
                         tabindex="1"
-                        autocomplete="email"
+                        autocomplete="username"
                         v-model="form.email"
-                        placeholder="email@example.com"
+                        placeholder="email@example.com atau NIS murid"
                     />
                     <InputError :message="form.errors.email" />
                 </div>
