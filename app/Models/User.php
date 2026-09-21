@@ -23,12 +23,19 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'avatar',
         'password',
         'must_change_password',
         'is_admin',
         'nis',
         'kelas',
         'role',
+        'nip',
+        'phone',
+        'subject',
+        'school_origin',
+        'quiz_preferences',
+        'proctor_pin',
     ];
 
     /**
@@ -39,6 +46,17 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'proctor_pin',
+    ];
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'avatar_url',
+        'has_proctor_pin',
     ];
 
     /**
@@ -53,6 +71,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'must_change_password' => 'boolean',
+            'quiz_preferences' => 'array',
         ];
     }
 
@@ -170,5 +189,37 @@ class User extends Authenticatable
         return $this->belongsToMany(QuizForm::class, 'quiz_form_collaborators')
             ->withPivot('role')
             ->withTimestamps();
+    }
+
+    /**
+     * The quiz forms created by the user.
+     */
+    public function quizForms()
+    {
+        return $this->hasMany(QuizForm::class, 'user_id');
+    }
+
+    /**
+     * Get the public URL for the user's avatar.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (! $this->avatar) {
+            return null;
+        }
+
+        if (filter_var($this->avatar, FILTER_VALIDATE_URL)) {
+            return $this->avatar;
+        }
+
+        return asset('storage/'.$this->avatar);
+    }
+
+    /**
+     * Check whether the user has a proctor PIN configured.
+     */
+    public function getHasProctorPinAttribute(): bool
+    {
+        return ! empty($this->proctor_pin);
     }
 }

@@ -1061,7 +1061,7 @@ function closeDonationModal(): void {
                     role="button"
                     tabindex="0"
                     :class="[
-                        'group relative flex aspect-[5/3] min-w-0 flex-col justify-between rounded-xl border p-3 text-left transition',
+                        'group relative flex aspect-[500/309] min-w-0 flex-col justify-between rounded-xl border p-3 text-left transition',
                         activeDropFolderId === folder.id
                             ? 'border-emerald-400 bg-emerald-50 shadow-sm'
                             : folderFilter === folder.id

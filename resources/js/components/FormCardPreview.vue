@@ -45,7 +45,7 @@ const isScaleOrRating = computed(() => firstQuestion.value?.type === 'Linear sca
 <template>
     <div
         :class="[
-            'relative flex aspect-[5/3] select-none items-start justify-center overflow-hidden transition-colors',
+            'relative flex aspect-[500/309] select-none items-start justify-center overflow-hidden transition-colors',
             viewMode === 'list' ? 'h-full w-full p-1.5' : 'w-full p-2 sm:p-2.5',
             form.backgroundColorClass || form.tone || 'bg-slate-100',
             form.isTrashed ? 'opacity-65 grayscale' : '',
