@@ -54,6 +54,10 @@ export const templatePresets: Record<string, { title: string; description: strin
 
 export const fonts = [
     { name: 'Inter (Default)', value: "'Inter', sans-serif" },
+    { name: 'Amiri Quran (Mushaf Madinah)', value: "'Amiri Quran', 'Scheherazade New', serif" },
+    { name: 'Scheherazade New (Arab Tradisional)', value: "'Scheherazade New', serif" },
+    { name: 'Noto Naskh Arabic (Arab Standar)', value: "'Noto Naskh Arabic', serif" },
+    { name: 'Amiri (Arab Klasik)', value: "'Amiri', serif" },
     { name: 'Outfit (Modern)', value: "'Outfit', sans-serif" },
     { name: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', sans-serif" },
     { name: 'Montserrat', value: "'Montserrat', sans-serif" },

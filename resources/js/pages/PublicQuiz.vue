@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Star, Lock, Unlock, Clock, Key, RefreshCw, ShieldAlert, ArrowLeft, Users, CheckCircle2 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
+import RichContent from '@/components/RichContent.vue';
 
 type Question = {
     id: number;
@@ -664,7 +665,9 @@ const submitAnotherResponse = () => {
                 <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                 <div class="p-6 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
-                        <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">{{ quizForm.title }}</h1>
+                        <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                            <RichContent :content="quizForm.title" />
+                        </h1>
                         <div v-if="autoSaveStatus !== 'idle'" class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
                             <span v-if="autoSaveStatus === 'saving'" class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
                                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
@@ -676,9 +679,13 @@ const submitAnotherResponse = () => {
                             </span>
                         </div>
                     </div>
-                    <p v-if="quizForm.description" class="mt-3 text-slate-500" :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }">
-                        {{ quizForm.description }}
-                    </p>
+                    <RichContent
+                        v-if="quizForm.description"
+                        :content="quizForm.description"
+                        as="p"
+                        class="mt-3 text-slate-500"
+                        :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
+                    />
                 </div>
             </section>
 
@@ -710,7 +717,7 @@ const submitAnotherResponse = () => {
                         class="flex flex-wrap items-center text-lg font-semibold"
                         :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
                     >
-                        <span>{{ question.title }}</span>
+                        <RichContent :content="question.title" class="flex-1" />
                         <span v-if="question.required" class="ml-1 text-red-500">*</span>
                         <span
                             v-if="quizForm.settings.isQuiz !== false && question.points"
@@ -725,13 +732,13 @@ const submitAnotherResponse = () => {
                         {{ validationErrors[question.id] }}
                     </div>
 
-                    <p
+                    <RichContent
                         v-if="question.description"
+                        :content="question.description"
+                        as="p"
                         class="mt-2 text-sm text-slate-500"
                         :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
-                    >
-                        {{ question.description }}
-                    </p>
+                    />
 
                     <!-- Media elements rendering -->
                     <div v-if="question.media && question.media.length" class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -814,12 +821,16 @@ const submitAnotherResponse = () => {
                             <thead>
                                 <tr class="border-b border-slate-200 bg-slate-100">
                                     <th class="p-3.5 font-bold text-slate-700">Baris / Kolom</th>
-                                    <th v-for="col in question.columns" :key="col" class="p-3.5 text-center font-bold text-slate-700">{{ col }}</th>
+                                    <th v-for="col in question.columns" :key="col" class="p-3.5 text-center font-bold text-slate-700">
+                                        <RichContent :content="col" />
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="(row, rIndex) in question.rows" :key="row" class="border-b border-slate-150 last:border-0 hover:bg-slate-50/70 transition-colors">
-                                    <td class="p-3.5 font-semibold text-slate-800">{{ row }}</td>
+                                    <td class="p-3.5 font-semibold text-slate-800">
+                                        <RichContent :content="row" />
+                                    </td>
                                     <td v-for="(col, cIndex) in question.columns" :key="col" class="p-3.5 text-center">
                                         <label class="inline-flex items-center justify-center cursor-pointer">
                                             <input
@@ -850,7 +861,7 @@ const submitAnotherResponse = () => {
                                 class="h-5 w-5 accent-indigo-600"
                                 @change="question.type === 'Checkboxes' ? toggleCheckbox(question.id, option) : (answers[question.id] = option)"
                             />
-                            <span class="text-slate-800">{{ option }}</span>
+                            <RichContent :content="option" class="text-slate-800 flex-1" />
                         </label>
                     </div>
                     <input
@@ -965,7 +976,7 @@ const submitAnotherResponse = () => {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&family=Scheherazade+New:wght@400;700&display=swap');
 
 .pattern-none {
     background-image: none;

@@ -47,6 +47,9 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import RichContent from '@/components/RichContent.vue';
+import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
+import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
 
 const getYoutubeEmbedUrl = (url: string): string | undefined => {
     if (!url) {
@@ -545,6 +548,15 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
     activeQuestionId.value = question.id;
     activeTab.value = 'questions';
     markChanged('Question added');
+};
+
+const insertTextIntoQuestion = (question: any, snippet: string) => {
+    if (!question.title || question.title === 'Untitled Question') {
+        question.title = snippet;
+    } else {
+        question.title += ` ${snippet}`;
+    }
+    markChanged('Question formula or arabic inserted');
 };
 
 const duplicateQuestion = (question: Question) => {
@@ -1709,13 +1721,37 @@ watch(
                                             <span class="h-1 w-1 rounded-full bg-slate-300"></span>
                                         </div>
 
-                                        <input
-                                            v-model="question.title"
-                                            type="text"
-                                            class="mb-6 w-full border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
-                                            :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
-                                            @input="markChanged('Question updated')"
+                                        <!-- Math & Arabic Toolbar -->
+                                        <MathArabicToolbar
+                                            @insert="(snip) => insertTextIntoQuestion(question, snip)"
+                                            @toggle-rtl="question.isRtl = !question.isRtl"
                                         />
+
+                                        <textarea
+                                            v-model="question.title"
+                                            rows="2"
+                                            :dir="question.isRtl ? 'rtl' : (hasArabic(question.title) ? 'rtl' : 'auto')"
+                                            class="mb-3 w-full resize-y rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
+                                            :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
+                                            placeholder="Tulis pertanyaan, rumus matematika $...$, atau ketik bahasa Arab..."
+                                            @input="markChanged('Question updated')"
+                                        ></textarea>
+
+                                        <!-- Live Preview of Math & Quran Arabic Rendering -->
+                                        <div
+                                            v-if="hasMathOrArabic(question.title)"
+                                            class="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3 shadow-xs"
+                                        >
+                                            <div class="mb-1.5 flex items-center justify-between text-[11px] font-bold text-indigo-700">
+                                                <span class="flex items-center gap-1.5">
+                                                    <Sparkles class="h-3.5 w-3.5 text-indigo-600" />
+                                                    Pratinjau Tampilan (KaTeX & Mushaf Madinah):
+                                                </span>
+                                            </div>
+                                            <div class="text-base font-semibold text-slate-900 sm:text-lg">
+                                                <RichContent :content="question.title" />
+                                            </div>
+                                        </div>
 
                                         <input
                                             v-model="question.description"
@@ -2060,13 +2096,23 @@ watch(
                                                     #{{ optionIndex + 1 }}
                                                 </span>
 
-                                                <input
-                                                    v-model="question.options[optionIndex]"
-                                                    type="text"
-                                                    class="min-w-0 flex-1 border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
-                                                    :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                                    @input="markChanged('Option updated')"
-                                                />
+                                                <div class="min-w-0 flex-1 flex flex-col gap-1">
+                                                    <input
+                                                        v-model="question.options[optionIndex]"
+                                                        type="text"
+                                                        :dir="hasArabic(question.options[optionIndex]) ? 'rtl' : 'auto'"
+                                                        class="w-full border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
+                                                        :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
+                                                        @input="markChanged('Option updated')"
+                                                    />
+                                                    <div
+                                                        v-if="hasMathOrArabic(question.options[optionIndex])"
+                                                        class="inline-flex items-center gap-1 rounded border border-indigo-100 bg-indigo-50/70 px-2 py-0.5 text-xs text-slate-800 self-start"
+                                                    >
+                                                        <span class="text-[10px] font-bold text-indigo-500">Pratinjau:</span>
+                                                        <RichContent :content="question.options[optionIndex]" />
+                                                    </div>
+                                                </div>
                                                 <button
                                                     type="button"
                                                     class="rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
@@ -3007,12 +3053,12 @@ watch(
                     <button type="button" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100" @click="showPreview = false">Close</button>
                 </div>
                 <div :class="['mb-5 h-3 rounded-full', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
-                <h3 class="text-3xl font-semibold">{{ form.title }}</h3>
-                <p class="mt-2 text-slate-500">{{ form.description }}</p>
+                <h3 class="text-3xl font-semibold"><RichContent :content="form.title" /></h3>
+                <RichContent v-if="form.description" :content="form.description" as="p" class="mt-2 text-slate-500" />
                 <div class="mt-6 space-y-5">
                     <div v-for="question in form.questions" :key="`preview-${question.id}`" class="rounded-2xl border border-slate-200 p-5">
                         <p class="flex flex-wrap items-center font-bold">
-                            <span>{{ question.title }}</span>
+                            <RichContent :content="question.title" class="flex-1" />
                             <span v-if="question.required" class="ml-1 text-red-500">*</span>
                             <span
                                 v-if="form.settings.isQuiz && question.points"
@@ -3082,12 +3128,16 @@ watch(
                                 <thead>
                                     <tr class="border-b border-slate-200 bg-slate-100">
                                         <th class="p-2.5 font-bold text-slate-600">Baris / Kolom</th>
-                                        <th v-for="col in question.columns" :key="col" class="p-2.5 text-center font-bold text-slate-600">{{ col }}</th>
+                                        <th v-for="col in question.columns" :key="col" class="p-2.5 text-center font-bold text-slate-600">
+                                            <RichContent :content="col" />
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr v-for="(row, rIndex) in question.rows" :key="row" class="border-b border-slate-150 last:border-0 hover:bg-slate-50 transition-colors">
-                                        <td class="p-2.5 font-semibold text-slate-700">{{ row }}</td>
+                                        <td class="p-2.5 font-semibold text-slate-700">
+                                            <RichContent :content="row" />
+                                        </td>
                                         <td v-for="(col, cIndex) in question.columns" :key="col" class="p-2.5 text-center">
                                             <label class="inline-flex items-center justify-center cursor-pointer">
                                                 <input
@@ -3112,7 +3162,7 @@ watch(
                                     :value="option"
                                     class="accent-indigo-600"
                                 />
-                                <span>{{ option }}</span>
+                                <RichContent :content="option" class="flex-1" />
                             </label>
                         </div>
                         <div v-else-if="question.type === 'Checkboxes'" class="mt-4 space-y-3">
@@ -3123,7 +3173,7 @@ watch(
                                     class="accent-indigo-600"
                                     @change="toggleCheckboxAnswer(question, option)"
                                 />
-                                <span>{{ option }}</span>
+                                <RichContent :content="option" class="flex-1" />
                             </label>
                         </div>
                         <input
@@ -3610,7 +3660,7 @@ watch(
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&family=Scheherazade+New:wght@400;700&display=swap');
 
 .pattern-none {
     background-image: none;

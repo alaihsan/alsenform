@@ -478,3 +478,43 @@ test('authenticated users can update quiz questions with rows and columns for gr
     expect($updatedForm->questions[0])
         ->toMatchArray($questions[0]);
 });
+
+test('dashboard recent forms include preview question and style mirroring metadata', function () {
+    $user = User::factory()->create();
+    $form = QuizForm::factory()->for($user)->create([
+        'title' => 'Ujian Akhir Semester',
+        'questions' => [
+            [
+                'id' => 1,
+                'title' => '<p><strong>Siapakah</strong> proklamator Indonesia?</p>',
+                'type' => 'Multiple choice',
+                'options' => ['Soekarno-Hatta', 'Sumpah Pemuda'],
+            ],
+            [
+                'id' => 2,
+                'title' => 'Sebutkan sila kelima!',
+                'type' => 'Short answer',
+                'options' => [],
+            ],
+        ],
+        'settings' => [
+            'themeColorClass' => 'bg-emerald-600',
+            'backgroundColorClass' => 'bg-[#eefdf5]',
+        ],
+    ]);
+
+    $this->actingAs($user);
+
+    $response = $this->get('/dashboard');
+
+    $recentForm = collect($response->inertiaProps('recentForms'))->firstWhere('id', $form->id);
+
+    expect($recentForm)->not->toBeNull()
+        ->and($recentForm['questionsCount'])->toBe(2)
+        ->and($recentForm['firstQuestion']['title'])->toBe('Siapakah proklamator Indonesia?')
+        ->and($recentForm['firstQuestion']['type'])->toBe('Multiple choice')
+        ->and($recentForm['firstQuestion']['options'])->toBe(['Soekarno-Hatta', 'Sumpah Pemuda'])
+        ->and($recentForm['previewQuestions'])->toHaveCount(2)
+        ->and($recentForm['stripe'])->toBe('bg-emerald-600')
+        ->and($recentForm['tone'])->toBe('bg-[#eefdf5]');
+});

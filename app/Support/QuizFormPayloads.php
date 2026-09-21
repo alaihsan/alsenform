@@ -75,6 +75,55 @@ class QuizFormPayloads
         $user = $currentUser ?? auth()->user();
         $isCollaborator = $user && $quizForm->user_id !== $user->id;
 
+        $questions = $quizForm->questions ?? [];
+        $previewQuestions = [];
+        if (! empty($questions) && is_array($questions)) {
+            foreach (array_slice($questions, 0, 2) as $q) {
+                if (! is_array($q)) {
+                    continue;
+                }
+
+                $rawTitle = (string) ($q['title'] ?? '');
+                $cleanTitle = trim((string) preg_replace('/\s+/', ' ', strip_tags(html_entity_decode($rawTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8'))));
+
+                $options = [];
+                if (! empty($q['options']) && is_array($q['options'])) {
+                    foreach (array_slice($q['options'], 0, 3) as $opt) {
+                        $cleanOpt = trim((string) preg_replace('/\s+/', ' ', strip_tags(html_entity_decode((string) $opt, ENT_QUOTES | ENT_HTML5, 'UTF-8'))));
+                        if ($cleanOpt !== '') {
+                            $options[] = mb_substr($cleanOpt, 0, 45);
+                        }
+                    }
+                }
+
+                $previewQuestions[] = [
+                    'id' => $q['id'] ?? null,
+                    'title' => mb_substr($cleanTitle, 0, 120),
+                    'type' => (string) ($q['type'] ?? 'Multiple choice'),
+                    'options' => $options,
+                ];
+            }
+        }
+
+        $themeColor = $quizForm->settings['themeColorClass'] ?? null;
+        $bgColor = $quizForm->settings['backgroundColorClass'] ?? null;
+
+        $tone = $bgColor ?: match ($quizForm->template) {
+            'party-invite' => 'bg-fuchsia-50',
+            'work-request' => 'bg-cyan-50',
+            'rsvp' => 'bg-orange-50',
+            't-shirt-sign-up' => 'bg-violet-50',
+            default => 'bg-slate-100',
+        };
+
+        $stripe = $themeColor ?: match ($quizForm->template) {
+            'party-invite' => 'bg-fuchsia-300',
+            'work-request' => 'bg-emerald-300',
+            'rsvp' => 'bg-orange-300',
+            't-shirt-sign-up' => 'bg-violet-500',
+            default => 'bg-indigo-500',
+        };
+
         return [
             'id' => $quizForm->id,
             'title' => $quizForm->title,
@@ -94,20 +143,13 @@ class QuizFormPayloads
             'updatedAt' => $quizForm->updated_at->toISOString(),
             'isPublished' => ! is_null($quizForm->published_at),
             'isTrashed' => ! is_null($quizForm->deleted_at),
-            'tone' => match ($quizForm->template) {
-                'party-invite' => 'bg-fuchsia-50',
-                'work-request' => 'bg-cyan-50',
-                'rsvp' => 'bg-orange-50',
-                't-shirt-sign-up' => 'bg-violet-50',
-                default => 'bg-slate-100',
-            },
-            'stripe' => match ($quizForm->template) {
-                'party-invite' => 'bg-fuchsia-300',
-                'work-request' => 'bg-emerald-300',
-                'rsvp' => 'bg-orange-300',
-                't-shirt-sign-up' => 'bg-violet-500',
-                default => 'bg-indigo-500',
-            },
+            'tone' => $tone,
+            'stripe' => $stripe,
+            'themeColorClass' => $themeColor,
+            'backgroundColorClass' => $bgColor,
+            'questionsCount' => is_array($questions) ? count($questions) : 0,
+            'previewQuestions' => $previewQuestions,
+            'firstQuestion' => $previewQuestions[0] ?? null,
             'accent' => match ($quizForm->template) {
                 'rsvp' => 'bg-orange-500',
                 'work-request' => 'bg-emerald-500',

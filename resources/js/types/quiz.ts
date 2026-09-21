@@ -130,6 +130,13 @@ export type QuestionTypeOption = {
     icon: Component;
 };
 
+export type PreviewQuestion = {
+    id?: number | string | null;
+    title: string;
+    type: string;
+    options?: string[];
+};
+
 export type RecentForm = {
     id: number;
     title: string;
@@ -148,6 +155,11 @@ export type RecentForm = {
     tone: string;
     stripe: string;
     accent: string;
+    themeColorClass?: string | null;
+    backgroundColorClass?: string | null;
+    questionsCount?: number;
+    previewQuestions?: PreviewQuestion[];
+    firstQuestion?: PreviewQuestion | null;
     isPublished: boolean;
     isTrashed: boolean;
     isCollaborator?: boolean;

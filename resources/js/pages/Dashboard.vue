@@ -39,6 +39,7 @@ import { getInitials } from '@/composables/useInitials';
 import { usePage, useForm } from '@inertiajs/vue3';
 import { LogOut, User, Key, MessageSquare, Heart, Coins, Award, Shield, Wallet, History } from 'lucide-vue-next';
 import axios from 'axios';
+import FormCardPreview from '@/components/FormCardPreview.vue';
 
 type FolderModalMode = 'create' | 'rename' | 'delete';
 type FormDeleteMode = 'trash' | 'force';
@@ -1132,36 +1133,10 @@ function closeDonationModal(): void {
                     @dragend="endDraggingForm"
                 >
                     <Link v-if="!form.isTrashed" :href="form.editUrl" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
-                        <div :class="['flex aspect-[5/3] items-start justify-center p-2', form.tone, viewMode === 'list' ? 'h-full w-full' : '']">
-                            <div class="w-3/5 overflow-hidden rounded-lg bg-white shadow">
-                                <div :class="['h-5', form.stripe]"></div>
-                                <div class="space-y-1 p-2">
-                                    <div class="h-2 w-4/5 rounded-full bg-slate-300"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                </div>
-                            </div>
-                        </div>
+                        <FormCardPreview :form="form" :view-mode="viewMode" />
                     </Link>
                     <div v-else :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
-                        <div
-                            :class="[
-                                'flex aspect-[5/3] items-start justify-center p-2 opacity-60',
-                                form.tone,
-                                viewMode === 'list' ? 'h-full w-full' : '',
-                            ]"
-                        >
-                            <div class="w-3/5 overflow-hidden rounded-lg bg-white shadow">
-                                <div class="h-5 bg-slate-400"></div>
-                                <div class="space-y-1 p-2">
-                                    <div class="h-2 w-4/5 rounded-full bg-slate-300"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                    <div class="h-4 rounded-md bg-slate-100"></div>
-                                </div>
-                            </div>
-                        </div>
+                        <FormCardPreview :form="form" :view-mode="viewMode" />
                     </div>
 
                     <div
