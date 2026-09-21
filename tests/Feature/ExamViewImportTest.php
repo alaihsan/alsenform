@@ -443,3 +443,198 @@ test('examview: gives clear instruction when raw .bnk file is zipped', function 
     expect($response->json('message'))->toContain('berkas .bnk mentah')
         ->and($response->json('message'))->toContain('File -> Export -> Blackboard');
 });
+
+test('examview: successfully parses Blackboard 7.1+ Checkboxes (Multiple Answer) with multiple correct keys', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $tempZipPath = tempnam(sys_get_temp_dir(), 'ev_bb7_ma_').'.zip';
+    $zip = new ZipArchive;
+    $zip->open($tempZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+    $manifestXml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest identifier="MANIFEST_BB7_MA">
+  <resources>
+    <resource identifier="res00001" type="assessment/x-bb-pool" href="res00001.dat"/>
+  </resources>
+</manifest>
+XML;
+    $zip->addFromString('imsmanifest.xml', $manifestXml);
+
+    $poolXml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<POOL>
+  <QUESTION id="q_ma_1" type="Multiple Answer">
+    <BODY>
+      <TEXT>Pilihlah bilangan prima di bawah ini:</TEXT>
+    </BODY>
+    <ANSWER id="ans_2">
+      <TEXT>2</TEXT>
+    </ANSWER>
+    <ANSWER id="ans_3">
+      <TEXT>3</TEXT>
+    </ANSWER>
+    <ANSWER id="ans_4">
+      <TEXT>4</TEXT>
+    </ANSWER>
+    <GRADABLE>
+      <POINTS_POSSIBLE>20</POINTS_POSSIBLE>
+      <CORRECTANSWER answer_id="ans_2"/>
+      <CORRECTANSWER answer_id="ans_3"/>
+    </GRADABLE>
+  </QUESTION>
+</POOL>
+XML;
+
+    $zip->addFromString('res00001.dat', $poolXml);
+    $zip->close();
+
+    $zipFile = new UploadedFile($tempZipPath, 'examview_bb7_ma.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $questions = $response->json('questions');
+
+    expect($questions)->toHaveCount(1)
+        ->and($questions[0]['type'])->toBe('Checkboxes')
+        ->and($questions[0]['options'])->toEqual(['2', '3', '4'])
+        ->and($questions[0]['answer'])->toEqual(['2', '3'])
+        ->and($questions[0]['points'])->toBe(20);
+});
+
+test('examview: successfully parses QTI 1.2 mat_formattedtext and Matching (Multiple-choice grid)', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $itemsXml = [
+        // 1. Multiple Choice with mat_formattedtext inside QUESTION_BLOCK
+        <<<'XML'
+    <item>
+      <itemmetadata>
+        <bbmd_questiontype>Multiple Choice</bbmd_questiontype>
+        <qmd_weighting>10</qmd_weighting>
+      </itemmetadata>
+      <presentation>
+        <flow class="Block">
+          <flow class="QUESTION_BLOCK">
+            <material>
+              <mat_extension>
+                <mat_formattedtext type="SMART_TEXT">Siapakah penjahit bendera Merah Putih?</mat_formattedtext>
+              </mat_extension>
+            </material>
+          </flow>
+          <flow class="RESPONSE_BLOCK">
+            <response_lid ident="response">
+              <render_choice>
+                <response_label ident="ans_1">
+                  <material>
+                    <mat_extension>
+                      <mat_formattedtext type="SMART_TEXT">Fatmawati</mat_formattedtext>
+                    </mat_extension>
+                  </material>
+                </response_label>
+                <response_label ident="ans_2">
+                  <material>
+                    <mat_extension>
+                      <mat_formattedtext type="SMART_TEXT">Sayuti Melik</mat_formattedtext>
+                    </mat_extension>
+                  </material>
+                </response_label>
+              </render_choice>
+            </response_lid>
+          </flow>
+        </flow>
+      </presentation>
+      <resprocessing>
+        <respcondition title="correct">
+          <conditionvar>
+            <varequal respident="response">ans_1</varequal>
+          </conditionvar>
+          <setvar action="Set" varname="SCORE">10.0</setvar>
+        </respcondition>
+      </resprocessing>
+    </item>
+XML,
+        // 2. Matching question
+        <<<'XML'
+    <item>
+      <itemmetadata>
+        <bbmd_questiontype>Matching</bbmd_questiontype>
+        <qmd_absolutescore_max>4.0</qmd_absolutescore_max>
+      </itemmetadata>
+      <presentation>
+        <flow class="Block">
+          <flow class="QUESTION_BLOCK">
+            <material>
+              <mat_extension>
+                <mat_formattedtext type="SMART_TEXT">Pasangkan pernyataan berikut:</mat_formattedtext>
+              </mat_extension>
+            </material>
+          </flow>
+          <flow class="RESPONSE_BLOCK">
+            <flow class="Block">
+              <response_lid ident="answer_1">
+                <render_choice>
+                  <flow_label class="Block">
+                    <response_label ident="answer_2"/>
+                    <response_label ident="answer_3"/>
+                  </flow_label>
+                </render_choice>
+              </response_lid>
+              <material>
+                <mat_extension>
+                  <mat_formattedtext type="SMART_TEXT">Pernyataan 1</mat_formattedtext>
+                </mat_extension>
+              </material>
+            </flow>
+          </flow>
+          <flow class="RIGHT_MATCH_BLOCK">
+            <flow class="Block">
+              <material>
+                <mat_extension>
+                  <mat_formattedtext type="SMART_TEXT">Benar</mat_formattedtext>
+                </mat_extension>
+              </material>
+            </flow>
+            <flow class="Block">
+              <material>
+                <mat_extension>
+                  <mat_formattedtext type="SMART_TEXT">Salah</mat_formattedtext>
+                </mat_extension>
+              </material>
+            </flow>
+          </flow>
+        </flow>
+      </presentation>
+      <resprocessing>
+        <respcondition>
+          <conditionvar>
+            <varequal respident="answer_1">answer_2</varequal>
+          </conditionvar>
+        </respcondition>
+      </resprocessing>
+    </item>
+XML,
+    ];
+
+    $zipFile = createSampleExamViewZip($itemsXml);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $questions = $response->json('questions');
+
+    expect($questions)->toHaveCount(2)
+        ->and($questions[0]['title'])->toBe('Siapakah penjahit bendera Merah Putih?')
+        ->and($questions[0]['options'])->toEqual(['Fatmawati', 'Sayuti Melik'])
+        ->and($questions[0]['answer'])->toBe(0)
+        ->and($questions[1]['type'])->toBe('Multiple-choice grid')
+        ->and($questions[1]['title'])->toBe('Pasangkan pernyataan berikut:')
+        ->and($questions[1]['rows'])->toEqual(['Pernyataan 1'])
+        ->and($questions[1]['columns'])->toEqual(['Benar', 'Salah'])
+        ->and((array) $questions[1]['answer'])->toEqual(['0' => 0]);
+});

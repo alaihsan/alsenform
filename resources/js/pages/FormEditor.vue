@@ -406,8 +406,11 @@ const handleGenerateSlug = () => {
     slugWarning.value = '';
 };
 
-const saveDraft = (publishAfterSave = false) => {
+const hasUnsavedChanges = ref(false);
+
+const saveDraft = (publishAfterSave = false, onComplete?: () => void) => {
     if (!props.quizForm) {
+        onComplete?.();
         return;
     }
 
@@ -433,8 +436,9 @@ const saveDraft = (publishAfterSave = false) => {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
+                hasUnsavedChanges.value = false;
                 publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
-                markChanged('Draft saved');
+                markChanged('Semua perubahan disimpan');
                 showPublish.value = publishAfterSave;
                 // Update local storage in sync
                 localStorage.setItem(
@@ -447,11 +451,13 @@ const saveDraft = (publishAfterSave = false) => {
                         isPublished: isPublished.value,
                     }),
                 );
+                onComplete?.();
             },
             onError: (errors) => {
                 slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
-                markChanged('Link needs attention');
+                markChanged('Gagal menyimpan perubahan');
                 showPublish.value = true;
+                onComplete?.();
             },
             onFinish: () => {
                 isSaving.value = false;
@@ -741,18 +747,29 @@ const setGridAnswer = (question: Question, rowIndex: number, colIndex: number, m
 
 const isCorrectAnswer = (question: Question, optionIndex: number | string) => {
     const idx = Number(optionIndex);
+    const optText = question.options?.[idx];
     if (question.type === 'Checkboxes') {
-        const currentAnswer = Array.isArray(question.answer) ? question.answer.map(Number) : [];
-        return currentAnswer.includes(idx);
+        const currentAnswer = Array.isArray(question.answer) ? question.answer : [];
+        return currentAnswer.some((a: any) => Number(a) === idx || (optText !== undefined && a === optText));
     }
-    return question.answer !== '' && Number(question.answer) === idx;
+    return question.answer !== '' && (Number(question.answer) === idx || (optText !== undefined && question.answer === optText));
 };
 
 const setCorrectAnswer = (question: Question, optionIndex: number | string) => {
     const idx = Number(optionIndex);
     if (question.type === 'Checkboxes') {
-        const currentAnswer = Array.isArray(question.answer) ? [...question.answer].map(Number) : [];
-        const ansIdx = currentAnswer.indexOf(idx);
+        const currentAnswer = Array.isArray(question.answer)
+            ? question.answer.map((a: any) => {
+                const asNum = Number(a);
+                if (!isNaN(asNum) && question.options[asNum] !== undefined) {
+                    return asNum;
+                }
+                const found = question.options.indexOf(String(a));
+                return found >= 0 ? found : a;
+            })
+            : [];
+        const optText = question.options?.[idx];
+        const ansIdx = currentAnswer.findIndex((a: any) => Number(a) === idx || (optText !== undefined && a === optText));
 
         if (ansIdx >= 0) {
             currentAnswer.splice(ansIdx, 1);
@@ -944,6 +961,18 @@ const handleImportDocxFile = async (event: Event) => {
         const importedQuestions = response.data.questions;
         if (Array.isArray(importedQuestions) && importedQuestions.length > 0) {
             importedQuestions.forEach((q: any) => {
+                const isCheckboxes = q.type === 'Checkboxes';
+                let answerVal = typeof q.answer === 'object' && q.answer !== null
+                    ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
+                    : q.answer;
+
+                if (isCheckboxes && Array.isArray(answerVal)) {
+                    answerVal = answerVal.map((ans: any) => {
+                        const foundIdx = (q.options || []).indexOf(ans);
+                        return foundIdx >= 0 ? foundIdx : ans;
+                    });
+                }
+
                 const question: Question = {
                     id: nextQuestionId++,
                     title: q.title || 'Untitled Question',
@@ -952,11 +981,9 @@ const handleImportDocxFile = async (event: Event) => {
                     options: Array.isArray(q.options) ? [...q.options] : [],
                     rows: Array.isArray(q.rows) ? [...q.rows] : [],
                     columns: Array.isArray(q.columns) ? [...q.columns] : [],
-                    answer: typeof q.answer === 'object' && q.answer !== null
-                        ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
-                        : q.answer,
+                    answer: answerVal,
                     required: !!q.required,
-                    media: [],
+                    media: Array.isArray(q.media) ? [...q.media] : [],
                     points: q.points ?? 10,
                 };
                 form.questions.push(question);
@@ -1177,18 +1204,36 @@ onMounted(() => {
     recordHistory();
 });
 
-// Auto-save to server logic (every 10 seconds)
+// Auto-save to server logic (1.2 seconds debounce)
 const autoSave = useDebounceFn(() => {
     if (props.quizForm) {
         saveDraft(false);
     }
-}, 10000); // 10 seconds debounce
+}, 1200);
+
+const handleTitleBlur = () => {
+    if (props.quizForm) {
+        saveDraft(false);
+    }
+};
+
+const navigateBackToDashboard = () => {
+    if (props.quizForm && (hasUnsavedChanges.value || isSaving.value)) {
+        statusMessage.value = 'Menyimpan sebelum kembali...';
+        saveDraft(false, () => {
+            router.visit(route('dashboard'));
+        });
+    } else {
+        router.visit(route('dashboard'));
+    }
+};
 
 // Watch form changes (updates LocalStorage in real-time)
 watch(
     () => [form.title, form.description, form.questions, form.settings],
     () => {
-        statusMessage.value = 'Saving changes...';
+        hasUnsavedChanges.value = true;
+        statusMessage.value = 'Menyimpan perubahan...';
 
         // Save to LocalStorage immediately (real-time)
         if (props.quizForm) {
@@ -1223,16 +1268,18 @@ watch(
     >
         <header class="sticky top-0 z-30 border-b border-slate-200 bg-white">
             <div class="flex h-16 items-center gap-3 px-4 sm:px-5">
-                <Link
-                    :href="route('dashboard')"
+                <button
+                    type="button"
                     class="grid h-9 w-9 shrink-0 grid-cols-2 gap-1 rounded-xl bg-indigo-500 p-1.5 text-white shadow-[0_3px_0_#4338ca] transition hover:-translate-y-0.5 hover:shadow-[0_5px_0_#4338ca]"
                     aria-label="Back to dashboard"
+                    title="Kembali ke Dashboard"
+                    @click="navigateBackToDashboard"
                 >
                     <span class="rounded-lg bg-white/95"></span>
                     <span class="rounded-lg bg-white/70"></span>
                     <span class="rounded-lg bg-white/70"></span>
                     <span class="rounded-lg bg-white/95"></span>
-                </Link>
+                </button>
 
                 <div class="flex min-w-0 items-center gap-3">
                     <input
@@ -1240,6 +1287,9 @@ watch(
                         type="text"
                         class="min-w-0 max-w-[170px] border-0 bg-transparent p-0 text-lg font-medium outline-none transition focus:border-b focus:border-indigo-500 sm:max-w-md sm:text-xl"
                         @input="markChanged('Title updated')"
+                        @blur="handleTitleBlur"
+                        @change="handleTitleBlur"
+                        @keydown.enter.prevent="handleTitleBlur"
                     />
                     <Star class="hidden h-5 w-5 text-slate-500 sm:block" />
                 </div>
@@ -1421,6 +1471,9 @@ watch(
                                 class="w-full border-0 border-b border-transparent bg-transparent p-0 text-2xl font-normal leading-tight outline-none transition focus:border-indigo-500 sm:text-3xl"
                                 :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                 @input="markChanged('Title updated')"
+                                @blur="handleTitleBlur"
+                                @change="handleTitleBlur"
+                                @keydown.enter.prevent="handleTitleBlur"
                             />
                             <input
                                 v-model="form.description"
@@ -2033,7 +2086,13 @@ watch(
                                                 >
                                                     {{
                                                         question.answer
-                                                            .map((idx: any) => question.options[Number(idx)])
+                                                            .map((a: any) => {
+                                                                const asNum = Number(a);
+                                                                if (!isNaN(asNum) && question.options[asNum] !== undefined) {
+                                                                    return question.options[asNum];
+                                                                }
+                                                                return a;
+                                                            })
                                                             .filter(Boolean)
                                                             .join(', ')
                                                     }}
@@ -2047,7 +2106,7 @@ watch(
                                                     "
                                                     class="ml-1"
                                                 >
-                                                    {{ question.options[Number(question.answer)] }}
+                                                    {{ question.options[Number(question.answer)] || question.answer }}
                                                 </span>
                                                 <span v-else class="ml-1 text-emerald-600">belum dipilih</span>
                                             </div>

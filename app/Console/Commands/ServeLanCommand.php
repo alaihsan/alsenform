@@ -89,7 +89,8 @@ class ServeLanCommand extends Command
                         foreach ($info['unicast'] as $u) {
                             $addr = $u['address'] ?? '';
                             $family = $u['family'] ?? null;
-                            if ($family === AF_INET && $addr && $addr !== '127.0.0.1') {
+                            $isIpv4 = defined('AF_INET') ? ($family === AF_INET) : ($family === 2);
+                            if ($isIpv4 && $addr && $addr !== '127.0.0.1') {
                                 $label = $this->resolveInterfaceLabel($name);
                                 $results[$label] = $addr;
                             }

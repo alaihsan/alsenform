@@ -173,7 +173,7 @@ class QuestionImportController extends Controller
     public function importExamView(Request $request, ExamViewImportService $service): JsonResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:zip', 'max:25600'], // Max 25MB for embedded quiz images
+            'file' => ['required', 'file', 'extensions:zip', 'max:25600'], // Max 25MB for embedded quiz images
         ]);
 
         try {

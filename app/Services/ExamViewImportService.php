@@ -195,15 +195,20 @@ class ExamViewImportService
 
         libxml_use_internal_errors(true);
 
+        $libxmlOptions = LIBXML_NOCDATA | LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET;
+        if (defined('LIBXML_PARSEHUGE')) {
+            $libxmlOptions |= LIBXML_PARSEHUGE;
+        }
+
         $root = simplexml_load_string(
             $sanitizedXml,
             SimpleXMLElement::class,
-            LIBXML_NOCDATA | LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET | LIBXML_RECOVER
+            $libxmlOptions
         );
 
         if ($root === false) {
             $dom = new DOMDocument;
-            @$dom->loadXML($sanitizedXml, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET | LIBXML_RECOVER);
+            @$dom->loadXML($sanitizedXml, $libxmlOptions);
             $root = @simplexml_import_dom($dom);
         }
 
@@ -256,6 +261,11 @@ class ExamViewImportService
         // 1. Determine question type
         $bbType = (string) ($item->xpath('.//itemmetadata/bbmd_questiontype | .//itemmetadata/qmd_questiontype')[0] ?? '');
         $type = $this->mapQuestionType($bbType);
+
+        // Special handling for Matching questions in Blackboard 6.0 - 7.0
+        if ($type === 'Multiple-choice grid') {
+            return $this->parseQti12MatchingItem($item, $zip, $nextId);
+        }
 
         // 2. Extract question prompt and embedded media
         $extractedPrompt = $this->extractQti12PromptAndMedia($item, $zip);
@@ -363,20 +373,44 @@ class ExamViewImportService
         }
 
         // Answer Key
-        $correctAnswerNode = $item->xpath('.//GRADABLE//CORRECTANSWER | .//gradable//correctanswer | .//CORRECTANSWER | .//correctanswer | .//CORRECT_ANSWER | .//correct_answer')[0] ?? null;
-        $correctAnswerId = (string) ($correctAnswerNode['answer_id'] ?? $correctAnswerNode['id'] ?? $correctAnswerNode['ident'] ?? '');
+        $correctAnswerNodes = $item->xpath('.//GRADABLE//CORRECTANSWER | .//gradable//correctanswer | .//CORRECTANSWER | .//correctanswer | .//CORRECT_ANSWER | .//correct_answer');
 
-        if ($correctAnswerId === '' && $correctAnswerNode) {
-            $correctAnswerId = trim((string) $correctAnswerNode);
-        }
+        if ($type === 'Checkboxes') {
+            $correctAnswers = [];
+            foreach ($correctAnswerNodes as $can) {
+                $cId = (string) ($can['answer_id'] ?? $can['id'] ?? $can['ident'] ?? trim((string) $can));
+                if (isset($identMap[$cId]) && isset($options[$identMap[$cId]])) {
+                    $correctAnswers[] = $options[$identMap[$cId]];
+                } elseif (preg_match('/^[A-E]$/i', $cId)) {
+                    $idx = ord(strtoupper($cId)) - ord('A');
+                    if (isset($options[$idx])) {
+                        $correctAnswers[] = $options[$idx];
+                    }
+                }
+            }
+            $answer = array_values(array_unique($correctAnswers));
+        } elseif ($type === 'Short answer' || $type === 'Paragraph') {
+            $ansText = '';
+            if (! empty($correctAnswerNodes)) {
+                $ansText = trim((string) $correctAnswerNodes[0]);
+            }
+            $answer = $ansText;
+        } else {
+            $correctAnswerNode = $correctAnswerNodes[0] ?? null;
+            $correctAnswerId = (string) ($correctAnswerNode['answer_id'] ?? $correctAnswerNode['id'] ?? $correctAnswerNode['ident'] ?? '');
 
-        $answer = 0;
-        if (isset($identMap[$correctAnswerId])) {
-            $answer = $identMap[$correctAnswerId];
-        } elseif (preg_match('/^[A-E]$/i', $correctAnswerId)) {
-            $idx = ord(strtoupper($correctAnswerId)) - ord('A');
-            if (isset($options[$idx])) {
-                $answer = $idx;
+            if ($correctAnswerId === '' && $correctAnswerNode) {
+                $correctAnswerId = trim((string) $correctAnswerNode);
+            }
+
+            $answer = 0;
+            if (isset($identMap[$correctAnswerId])) {
+                $answer = $identMap[$correctAnswerId];
+            } elseif (preg_match('/^[A-E]$/i', $correctAnswerId)) {
+                $idx = ord(strtoupper($correctAnswerId)) - ord('A');
+                if (isset($options[$idx])) {
+                    $answer = $idx;
+                }
             }
         }
 
@@ -419,7 +453,7 @@ class ExamViewImportService
             'multipleanswer', 'multipleresponse', 'ma' => 'Checkboxes',
             'essay', 'paragraph', 'ess' => 'Paragraph',
             'shortanswer', 'shortresponse', 'numeric', 'numericresponse', 'fillintheblank', 'fib', 'num', 'sr' => 'Short answer',
-            'matching' => 'Multiple choice grid',
+            'matching', 'mat' => 'Multiple-choice grid',
             default => 'Multiple choice',
         };
     }
@@ -431,15 +465,19 @@ class ExamViewImportService
      */
     private function extractQti12PromptAndMedia(SimpleXMLElement $item, ZipArchive $zip): array
     {
-        // 1. Mattext nodes specifically outside response_label
-        $promptNodes = $item->xpath('.//presentation//material/mattext[not(ancestor::response_label)] | .//presentation/material/mattext[not(ancestor::response_label)] | .//presentation//flow_mat/material/mattext | .//presentation/flow/material/mattext[not(ancestor::response_label)]');
+        // 1. Check for mat_formattedtext or mattext specifically inside QUESTION_BLOCK
+        $promptNodes = $item->xpath('.//presentation//flow[@class="QUESTION_BLOCK"]//mat_formattedtext | .//presentation//flow[@class="QUESTION_BLOCK"]//mattext');
 
         if (empty($promptNodes)) {
-            $promptNodes = $item->xpath('.//presentation//mattext[not(ancestor::response_label)]');
+            $promptNodes = $item->xpath('.//presentation//material/mattext[not(ancestor::response_label) and not(ancestor::response_lid)] | .//presentation//flow_mat/material/mattext[not(ancestor::response_label) and not(ancestor::response_lid)] | .//presentation/flow/material/mattext[not(ancestor::response_label) and not(ancestor::response_lid)]');
         }
 
         if (empty($promptNodes)) {
-            $promptNodes = $item->xpath('.//mattext[not(ancestor::response_label) and not(ancestor::render_choice) and not(ancestor::response_lid)]');
+            $promptNodes = $item->xpath('.//presentation//mat_formattedtext[not(ancestor::response_label) and not(ancestor::response_lid) and not(ancestor::flow[@class="RESPONSE_BLOCK"]) and not(ancestor::flow[@class="RIGHT_MATCH_BLOCK"])] | .//presentation//mattext[not(ancestor::response_label) and not(ancestor::response_lid)]');
+        }
+
+        if (empty($promptNodes)) {
+            $promptNodes = $item->xpath('.//mat_formattedtext[not(ancestor::response_label) and not(ancestor::render_choice) and not(ancestor::response_lid) and not(ancestor::flow[@class="RESPONSE_BLOCK"]) and not(ancestor::flow[@class="RIGHT_MATCH_BLOCK"])] | .//mattext[not(ancestor::response_label) and not(ancestor::render_choice) and not(ancestor::response_lid)]');
         }
 
         if (empty($promptNodes)) {
@@ -467,7 +505,7 @@ class ExamViewImportService
         $imageNodes = $item->xpath('.//presentation//matimage | .//material//matimage');
         if ($imageNodes) {
             foreach ($imageNodes as $imgNode) {
-                $uri = (string) ($imgNode['uri'] ?? $imgNode['URI'] ?? '');
+                $uri = urldecode(trim((string) ($imgNode['uri'] ?? $imgNode['URI'] ?? '')));
                 if ($uri !== '') {
                     $extractedUrl = $this->extractAndStoreImage($uri, $zip);
                     if ($extractedUrl) {
@@ -499,7 +537,7 @@ class ExamViewImportService
         if (preg_match_all('/<img[^>]+src=["\']([^"\']+)["\']/i', $rawHtml, $matches)) {
             foreach ($matches[1] as $src) {
                 // Clean @X@EmbeddedFile.location@X@ pattern
-                $cleanPath = preg_replace('/^@X@[^@]+@X@/i', '', $src);
+                $cleanPath = urldecode(preg_replace('/^@X@[^@]+@X@/i', '', $src));
                 $extractedUrl = $this->extractAndStoreImage($cleanPath, $zip);
                 if ($extractedUrl) {
                     $media[] = [
@@ -580,7 +618,7 @@ class ExamViewImportService
 
         foreach ($labels as $label) {
             $ident = (string) ($label['ident'] ?? $label['IDENT'] ?? $label['id'] ?? '');
-            $textNode = $label->xpath('.//material/mattext | .//mattext | .//text | .//TEXT')[0] ?? null;
+            $textNode = $label->xpath('.//mat_formattedtext | .//material/mattext | .//mattext | .//text | .//TEXT')[0] ?? null;
             $optText = $textNode ? (string) $textNode : (string) $label;
 
             $cleanOpt = html_entity_decode($optText, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -644,8 +682,8 @@ class ExamViewImportService
         // Extract answer for Multiple choice
         if ($type === 'Multiple choice') {
             $varequalNodes = $targetCondition
-                ? $targetCondition->xpath('.//conditionvar//varequal | .//varequal')
-                : $item->xpath('.//resprocessing//conditionvar//varequal | .//conditionvar//varequal');
+                ? $targetCondition->xpath('.//conditionvar//varequal[not(ancestor::not)] | .//varequal[not(ancestor::not)]')
+                : $item->xpath('.//resprocessing//conditionvar//varequal[not(ancestor::not)] | .//conditionvar//varequal[not(ancestor::not)]');
 
             if ($varequalNodes) {
                 $correctIdent = trim((string) $varequalNodes[0]);
@@ -663,21 +701,48 @@ class ExamViewImportService
                         $answer = $idx;
                     }
                 } elseif (preg_match('/_(\d+)$/', $correctIdent, $m)) {
-                    // e.g. ans_0 -> 0
-                    $answer = (int) $m[1];
+                    $idx = (int) $m[1];
+                    if (isset($options[$idx])) {
+                        $answer = $idx;
+                    } elseif ($idx > 0 && isset($options[$idx - 1])) {
+                        $answer = $idx - 1;
+                    }
                 }
             }
         } elseif ($type === 'Checkboxes') {
-            // Multiple answers
+            // Multiple answers: ignore negated conditions
             $varequalNodes = $targetCondition
-                ? $targetCondition->xpath('.//conditionvar//varequal | .//varequal')
-                : $item->xpath('.//resprocessing//conditionvar//varequal | .//conditionvar//varequal');
+                ? $targetCondition->xpath('.//conditionvar//varequal[not(ancestor::not)] | .//varequal[not(ancestor::not)]')
+                : $item->xpath('.//resprocessing//conditionvar//varequal[not(ancestor::not)] | .//conditionvar//varequal[not(ancestor::not)]');
+
+            // Detect if resprocessing uses 0-based index idents (e.g. answer_0) while labels were 1-based
+            $isZeroBased = false;
+            foreach ($varequalNodes as $ve) {
+                $rawId = trim((string) $ve);
+                if (preg_match('/^(?:answer_)?0$/i', $rawId) && ! isset($identMap[$rawId])) {
+                    $isZeroBased = true;
+                    break;
+                }
+            }
 
             $correctAnswers = [];
             foreach ($varequalNodes as $ve) {
                 $id = trim((string) $ve);
-                if (isset($identMap[$id]) && isset($options[$identMap[$id]])) {
+
+                if ($isZeroBased && preg_match('/_(\d+)$/', $id, $m)) {
+                    $idx = (int) $m[1];
+                    if (isset($options[$idx])) {
+                        $correctAnswers[] = $options[$idx];
+                    }
+                } elseif (isset($identMap[$id]) && isset($options[$identMap[$id]])) {
                     $correctAnswers[] = $options[$identMap[$id]];
+                } elseif (preg_match('/_(\d+)$/', $id, $m)) {
+                    $idx = (int) $m[1];
+                    if (isset($options[$idx])) {
+                        $correctAnswers[] = $options[$idx];
+                    } elseif ($idx > 0 && isset($options[$idx - 1])) {
+                        $correctAnswers[] = $options[$idx - 1];
+                    }
                 }
             }
             $answer = array_values(array_unique($correctAnswers));
@@ -689,6 +754,102 @@ class ExamViewImportService
         return [
             'points' => $points,
             'answer' => $answer,
+        ];
+    }
+
+    /**
+     * Parse IMS QTI 1.2 Matching question into Multiple-choice grid.
+     *
+     * @return array<string, mixed>
+     */
+    private function parseQti12MatchingItem(SimpleXMLElement $item, ZipArchive $zip, int &$nextId): array
+    {
+        // 1. Question Prompt
+        $promptNodes = $item->xpath('.//flow[@class="QUESTION_BLOCK"]//mat_formattedtext | .//flow[@class="QUESTION_BLOCK"]//mattext');
+        $extracted = $this->cleanHtmlAndExtractImages((string) ($promptNodes[0] ?? ''), $zip);
+        $title = $extracted['text'];
+        $media = $extracted['media'];
+
+        if ($title === '') {
+            $title = 'Pasangkan pernyataan berikut dengan pilihan yang benar';
+        }
+
+        // 2. Rows (Left statements) and row response identifier mapping
+        $rows = [];
+        $rowRespMap = []; // rowIndex => response_lid ident (e.g. answer_1)
+        $leftBlocks = $item->xpath('.//flow[@class="RESPONSE_BLOCK"]/flow[@class="Block"]');
+        foreach ($leftBlocks as $idx => $lb) {
+            $txt = (string) ($lb->xpath('.//mat_formattedtext | .//mattext')[0] ?? '');
+            $cleanRow = trim(strip_tags(html_entity_decode($txt, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+            if ($cleanRow !== '') {
+                $rows[] = $cleanRow;
+                $respLid = (string) ($lb->xpath('.//response_lid/@ident')[0] ?? '');
+                $rowRespMap[count($rows) - 1] = $respLid;
+            }
+        }
+
+        // 3. Columns (Right match targets)
+        $rightBlockNodes = $item->xpath('.//flow[@class="RIGHT_MATCH_BLOCK"]/flow[@class="Block"]');
+        $columns = [];
+        $colIndexMap = []; // rightBlockIndex => uniqueColumnIndex
+        foreach ($rightBlockNodes as $rIdx => $rb) {
+            $cTxt = trim(strip_tags(html_entity_decode((string) ($rb->xpath('.//mat_formattedtext | .//mattext')[0] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+            if ($cTxt !== '') {
+                if (! in_array($cTxt, $columns, true)) {
+                    $columns[] = $cTxt;
+                }
+                $colIndex = array_search($cTxt, $columns, true);
+                $colIndexMap[$rIdx] = $colIndex;
+            }
+        }
+
+        // 4. Correct match conditions from resprocessing
+        $correctMatches = [];
+        $respConditions = $item->xpath('.//resprocessing//respcondition[not(contains(@title, "incorrect"))]//varequal');
+        foreach ($respConditions as $ve) {
+            $leftId = (string) $ve['respident'];
+            $rightId = trim((string) $ve);
+            if ($leftId !== '' && $rightId !== '') {
+                $correctMatches[$leftId] = $rightId;
+            }
+        }
+
+        // 5. Build answer mapping: [rowIndex => columnIndex]
+        $answer = [];
+        foreach ($rowRespMap as $rIdx => $respLid) {
+            if (isset($correctMatches[$respLid])) {
+                $matchedTargetId = $correctMatches[$respLid];
+                $allLabels = $item->xpath('.//response_lid[@ident="'.$respLid.'"]//response_label');
+                foreach ($allLabels as $pos => $lbl) {
+                    if ((string) $lbl['ident'] === $matchedTargetId) {
+                        if (isset($colIndexMap[$pos])) {
+                            $answer[$rIdx] = $colIndexMap[$pos];
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Points
+        $points = 10;
+        $qmdWeight = $item->xpath('.//itemmetadata/qmd_weighting | .//itemmetadata/qmd_absolutescore_max')[0] ?? null;
+        if ($qmdWeight && (float) $qmdWeight > 0) {
+            $points = (int) round((float) $qmdWeight);
+        }
+
+        return [
+            'id' => $nextId++,
+            'title' => $title,
+            'description' => '',
+            'type' => 'Multiple-choice grid',
+            'options' => [],
+            'rows' => $rows,
+            'columns' => $columns,
+            'answer' => (object) $answer,
+            'required' => false,
+            'media' => $media,
+            'points' => $points,
         ];
     }
 }
