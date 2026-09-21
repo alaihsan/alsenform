@@ -64,10 +64,25 @@ export type QuizFormPayload = {
     };
     responses: {
         total: number;
+        maxScore?: number;
+        exportUrl?: string;
         latest: {
             id: number;
             email: string | null;
             submittedAt: string;
+        }[];
+        gradebook?: {
+            id: number;
+            user_id?: number | null;
+            name: string;
+            nis: string;
+            kelas: string;
+            email: string;
+            score: number;
+            percentage: number;
+            is_timeout: boolean;
+            submittedAt: string;
+            formattedDate: string;
         }[];
         questions: {
             id: number | string | null;
@@ -81,6 +96,7 @@ export type QuizFormPayload = {
             textAnswers: string[];
         }[];
     } | null;
+    exportResponsesUrl?: string;
     updateUrl: string;
     publicUrl: string;
     cohortIds?: number[];

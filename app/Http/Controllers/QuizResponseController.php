@@ -233,9 +233,23 @@ class QuizResponseController extends Controller
     {
         $identifier = $request->input('respondent_identifier') ?? ($request->user() ? 'user_'.$request->user()->id : null);
         if ($identifier) {
-            QuizSession::where('quiz_form_id', $quizForm->id)
+            $session = QuizSession::query()
+                ->where('quiz_form_id', $quizForm->id)
                 ->where('respondent_identifier', $identifier)
-                ->update(['is_locked' => true]);
+                ->first();
+
+            if (! $session) {
+                $session = QuizSession::create([
+                    'quiz_form_id' => $quizForm->id,
+                    'user_id' => $request->user()?->id,
+                    'respondent_identifier' => $identifier,
+                    'session_token' => Str::random(40),
+                    'started_at' => now(),
+                    'is_locked' => true,
+                ]);
+            }
+
+            $session->recordBlurEvent($request->ip());
         }
 
         return response()->json(['locked' => true]);

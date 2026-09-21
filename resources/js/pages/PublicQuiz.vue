@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Star, Lock, Unlock, Clock, Key, RefreshCw, ShieldAlert, ArrowLeft, Users } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { Star, Lock, Unlock, Clock, Key, RefreshCw, ShieldAlert, ArrowLeft, Users, CheckCircle2 } from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
 
 type Question = {
@@ -61,6 +61,70 @@ const displayQuestions = ref<Question[]>([]);
 const isSubmitted = ref(false);
 const isSubmitting = ref(false);
 const submissionError = ref('');
+
+// Offline Auto-Save Draft Refs & Logic
+const autoSaveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
+const draftAnswersKey = `alsen_draft_answers_${props.quizForm.id}`;
+const draftEmailKey = `alsen_draft_email_${props.quizForm.id}`;
+let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const restoreDraft = () => {
+    try {
+        const savedAnswers = localStorage.getItem(draftAnswersKey);
+        if (savedAnswers) {
+            const parsed = JSON.parse(savedAnswers);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                answers.value = parsed;
+                autoSaveStatus.value = 'saved';
+            }
+        }
+        const savedEmail = localStorage.getItem(draftEmailKey);
+        if (savedEmail && !email.value) {
+            email.value = savedEmail;
+        }
+    } catch {
+        // ignore storage access error
+    }
+};
+
+const clearDraft = () => {
+    try {
+        localStorage.removeItem(draftAnswersKey);
+        localStorage.removeItem(draftEmailKey);
+        autoSaveStatus.value = 'idle';
+    } catch {
+        // ignore
+    }
+};
+
+watch(
+    answers,
+    (newVal) => {
+        if (isSubmitted.value) return;
+        autoSaveStatus.value = 'saving';
+        if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(() => {
+            try {
+                localStorage.setItem(draftAnswersKey, JSON.stringify(newVal));
+                autoSaveStatus.value = 'saved';
+            } catch {
+                // ignore storage error
+            }
+        }, 500);
+    },
+    { deep: true }
+);
+
+watch(email, (newVal) => {
+    if (isSubmitted.value) return;
+    try {
+        if (newVal) {
+            localStorage.setItem(draftEmailKey, newVal);
+        }
+    } catch {
+        // ignore
+    }
+});
 
 // Anti-Cheat (Focus Lock) Refs & Logic
 const isLocked = ref(false);
@@ -195,6 +259,9 @@ onMounted(() => {
         }
     }
     displayQuestions.value = qs;
+
+    // Restore draft answers from localStorage if available
+    restoreDraft();
 
     // Focus Lock (Anti-Cheat) initialization
     if (props.quizForm.settings?.lockOnBlur) {
@@ -477,6 +544,7 @@ const submitResponse = () => {
             preserveScroll: true,
             onSuccess: () => {
                 isSubmitted.value = true;
+                clearDraft();
                 localStorage.removeItem(`is_locked_${props.quizForm.id}`);
                 localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -496,6 +564,7 @@ const submitResponse = () => {
 const submitAnotherResponse = () => {
     answers.value = {};
     email.value = '';
+    clearDraft();
     isSubmitted.value = false;
     validationErrors.value = {};
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -594,7 +663,19 @@ const submitAnotherResponse = () => {
             <section class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
                 <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                 <div class="p-6 sm:p-8">
-                    <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">{{ quizForm.title }}</h1>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">{{ quizForm.title }}</h1>
+                        <div v-if="autoSaveStatus !== 'idle'" class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
+                            <span v-if="autoSaveStatus === 'saving'" class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
+                                <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                                Menyimpan draft...
+                            </span>
+                            <span v-else-if="autoSaveStatus === 'saved'" class="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                                <CheckCircle2 class="h-3.5 w-3.5 text-emerald-500" />
+                                Draft tersimpan otomatis
+                            </span>
+                        </div>
+                    </div>
                     <p v-if="quizForm.description" class="mt-3 text-slate-500" :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }">
                         {{ quizForm.description }}
                     </p>

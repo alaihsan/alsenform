@@ -8,6 +8,8 @@ defineProps<{
         email: string | null;
         status: 'pending' | 'approved' | string;
         created_at: string;
+        blur_count?: number;
+        last_blur_at?: string | null;
     }[];
 }>();
 
@@ -37,7 +39,7 @@ defineEmits<{
             <div v-if="unlockRequests.length" class="mt-6 divide-y divide-slate-150 overflow-hidden rounded-2xl border border-slate-200">
                 <div v-for="req in unlockRequests" :key="req.id" class="flex items-center justify-between gap-4 p-5 transition-colors hover:bg-slate-50">
                     <div class="min-w-0">
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <span class="text-base font-bold text-slate-800">{{ req.email ?? 'Responden Anonim' }}</span>
                             <span
                                 :class="[
@@ -47,9 +49,20 @@ defineEmits<{
                             >
                                 {{ req.status === 'approved' ? 'Terbuka' : 'Terkunci' }}
                             </span>
+                            <span
+                                v-if="(req.blur_count ?? 0) > 0"
+                                class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-600/20"
+                            >
+                                ⚠️ {{ req.blur_count }}x Pindah Tab
+                            </span>
                         </div>
                         <span class="mt-1 block font-mono text-xs text-slate-500">ID: {{ req.respondent_identifier }}</span>
-                        <span class="mt-0.5 block text-xs text-slate-400">Meminta pada: {{ new Date(req.created_at).toLocaleString('id-ID') }}</span>
+                        <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            <span>Meminta pada: {{ new Date(req.created_at).toLocaleString('id-ID') }}</span>
+                            <span v-if="req.last_blur_at" class="text-rose-600 font-medium">
+                                • Pindah tab terakhir: {{ new Date(req.last_blur_at).toLocaleTimeString('id-ID') }}
+                            </span>
+                        </div>
                     </div>
 
                     <button

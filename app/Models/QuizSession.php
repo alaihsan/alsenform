@@ -21,6 +21,8 @@ class QuizSession extends Model
         'started_at',
         'expires_at',
         'is_locked',
+        'blur_count',
+        'blur_logs',
         'locked_at',
         'unlocked_at',
         'submitted_at',
@@ -38,7 +40,25 @@ class QuizSession extends Model
             'unlocked_at' => 'datetime',
             'submitted_at' => 'datetime',
             'is_locked' => 'boolean',
+            'blur_count' => 'integer',
+            'blur_logs' => 'array',
         ];
+    }
+
+    public function recordBlurEvent(?string $ip = null): void
+    {
+        $logs = $this->blur_logs ?? [];
+        $logs[] = [
+            'timestamp' => now()->toIso8601String(),
+            'ip' => $ip,
+        ];
+
+        $this->update([
+            'is_locked' => true,
+            'locked_at' => now(),
+            'blur_count' => ($this->blur_count ?? 0) + 1,
+            'blur_logs' => $logs,
+        ]);
     }
 
     public function quizForm(): BelongsTo

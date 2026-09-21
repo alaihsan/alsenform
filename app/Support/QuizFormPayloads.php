@@ -63,6 +63,7 @@ class QuizFormPayloads
                 'email' => $u->email,
             ])->values()->all(),
             'inviteCollaboratorUrl' => route('forms.collaborators.store', $quizForm),
+            'exportResponsesUrl' => route('forms.responses.export', $quizForm),
         ];
     }
 
@@ -130,23 +131,51 @@ class QuizFormPayloads
     }
 
     /**
-     * @return array{total: int, latest: array<int, array<string, mixed>>, questions: array<int, array<string, mixed>>}
+     * @return array<string, mixed>
      */
     public function responses(QuizForm $quizForm): array
     {
         $responses = $quizForm->responses()
+            ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'email', 'answers', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'email', 'score', 'is_timeout', 'answers', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
+        $maxScore = 0;
+        foreach ($quizForm->questions ?? [] as $q) {
+            $maxScore += isset($q['points']) ? (int) $q['points'] : 1;
+        }
+
+        $gradebook = $responses->map(function (QuizResponse $response) use ($maxScore): array {
+            $score = $response->score ?? 0;
+            $percentage = $maxScore > 0 ? round(($score / $maxScore) * 100, 1) : 0;
+
+            return [
+                'id' => $response->id,
+                'user_id' => $response->user_id,
+                'name' => $response->user?->name ?? 'Anonim',
+                'nis' => $response->user?->nis ?? '-',
+                'kelas' => $response->user?->kelas ?? '-',
+                'email' => $response->email ?? $response->user?->email ?? '-',
+                'score' => $score,
+                'percentage' => $percentage,
+                'is_timeout' => (bool) $response->is_timeout,
+                'submittedAt' => $response->created_at->diffForHumans(),
+                'formattedDate' => $response->created_at->format('d/m/Y H:i'),
+            ];
+        })->values()->all();
+
         return [
             'total' => $responses->count(),
+            'maxScore' => $maxScore,
+            'exportUrl' => route('forms.responses.export', $quizForm),
             'latest' => $responses->take(5)->map(fn (QuizResponse $response): array => [
                 'id' => $response->id,
-                'email' => $response->email,
+                'email' => $response->email ?? $response->user?->email,
                 'submittedAt' => $response->created_at->diffForHumans(),
             ])->values()->all(),
+            'gradebook' => $gradebook,
             'questions' => $questions,
         ];
     }

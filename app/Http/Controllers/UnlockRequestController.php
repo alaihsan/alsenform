@@ -21,8 +21,32 @@ class UnlockRequestController extends Controller
             ->latest()
             ->get(['id', 'quiz_form_id', 'respondent_identifier', 'email', 'status', 'created_at', 'updated_at']);
 
+        $sessions = QuizSession::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->whereIn('respondent_identifier', $requests->pluck('respondent_identifier'))
+            ->get()
+            ->keyBy('respondent_identifier');
+
+        $requestsData = $requests->map(function ($req) use ($sessions) {
+            $session = $sessions->get($req->respondent_identifier);
+            $blurLogs = $session?->blur_logs ?? [];
+            $lastBlur = ! empty($blurLogs) ? (end($blurLogs)['timestamp'] ?? null) : null;
+
+            return [
+                'id' => $req->id,
+                'quiz_form_id' => $req->quiz_form_id,
+                'respondent_identifier' => $req->respondent_identifier,
+                'email' => $req->email,
+                'status' => $req->status,
+                'created_at' => $req->created_at,
+                'updated_at' => $req->updated_at,
+                'blur_count' => $session?->blur_count ?? 0,
+                'last_blur_at' => $lastBlur,
+            ];
+        });
+
         return response()->json([
-            'requests' => $requests,
+            'requests' => $requestsData,
         ]);
     }
 

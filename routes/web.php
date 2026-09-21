@@ -8,6 +8,7 @@ use App\Http\Controllers\QuizFolderController;
 use App\Http\Controllers\QuizFormCollaboratorController;
 use App\Http\Controllers\QuizFormController;
 use App\Http\Controllers\QuizResponseController;
+use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
@@ -35,6 +36,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('forms.media.upload');
     Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
     Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
+    Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
     Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
 
     // Developer Support Routes
