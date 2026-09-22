@@ -638,3 +638,146 @@ XML,
         ->and($questions[1]['columns'])->toEqual(['Benar', 'Salah'])
         ->and((array) $questions[1]['answer'])->toEqual(['0' => 0]);
 });
+
+test('examview: successfully imports questions from a ZIP containing Word (.docx) document', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    // 1. Create a sample .docx file
+    $docxTemp = tempnam(sys_get_temp_dir(), 'docx_sub_').'.docx';
+    $zipDocx = new ZipArchive;
+    $zipDocx->open($docxTemp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Negara kepulauan terbesar di Asia Tenggara adalah?</w:t></w:r></w:p>
+    <w:p><w:r><w:t>A. Malaysia</w:t></w:r></w:p>
+    <w:p><w:r><w:t>B. Filipina</w:t></w:r></w:p>
+    <w:p><w:r><w:t>C. Indonesia</w:t></w:r></w:p>
+    <w:p><w:r><w:t>D. Singapura</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Jawaban: C</w:t></w:r></w:p>
+  </w:body>
+</w:document>';
+    $zipDocx->addFromString('word/document.xml', $documentXml);
+    $zipDocx->close();
+
+    $docxBytes = file_get_contents($docxTemp);
+    @unlink($docxTemp);
+
+    // 2. Put the docx inside a ZIP archive
+    $zipTemp = tempnam(sys_get_temp_dir(), 'outer_zip_').'.zip';
+    $outerZip = new ZipArchive;
+    $outerZip->open($zipTemp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $outerZip->addFromString('Soal_IPS_Kelas_8.docx', $docxBytes);
+    $outerZip->close();
+
+    $zipFile = new UploadedFile($zipTemp, 'Soal_IPS.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data['success'])->toBeTrue()
+        ->and($data['total'])->toBe(1);
+
+    $questions = $data['questions'];
+    expect($questions[0]['title'])->toBe('Negara kepulauan terbesar di Asia Tenggara adalah?')
+        ->and($questions[0]['options'])->toEqual(['Malaysia', 'Filipina', 'Indonesia', 'Singapura'])
+        ->and($questions[0]['answer'])->toBe(2); // C is index 2
+
+    @unlink($zipTemp);
+});
+
+test('examview: gives detailed file names when zip contains non-examview and non-docx files', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $zipTemp = tempnam(sys_get_temp_dir(), 'pdf_zip_').'.zip';
+    $zip = new ZipArchive;
+    $zip->open($zipTemp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('daftar_nilai.pdf', 'dummy pdf');
+    $zip->addFromString('catatan.txt', 'dummy txt');
+    $zip->close();
+
+    $zipFile = new UploadedFile($zipTemp, 'berkas.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->postJson(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertStatus(422);
+    expect($response->json('message'))->toContain('daftar_nilai.pdf')
+        ->and($response->json('message'))->toContain('catatan.txt')
+        ->and($response->json('message'))->toContain('Blackboard 7.1-9.0');
+
+    @unlink($zipTemp);
+});
+
+test('examview: successfully imports True/False and Matching tables from docx as Multiple-choice grid', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+
+    $docxTemp = tempnam(sys_get_temp_dir(), 'docx_tbl_').'.docx';
+    $zipDocx = new ZipArchive;
+    $zipDocx->open($docxTemp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Perhatikan tabel dan tentukanlah benar atau salah dari pernyataan di bawah ini!</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>No.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Pernyataan</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Benar/salah</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>1.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Hasil pertanian Singapura adalah kelapa sawit.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Benar/salah</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>2.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Laos memiliki iklim tropis.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Benar/salah</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t>Jawaban: S, B</w:t></w:r></w:p>
+  </w:body>
+</w:document>';
+    $zipDocx->addFromString('word/document.xml', $documentXml);
+    $zipDocx->close();
+
+    $docxBytes = file_get_contents($docxTemp);
+    @unlink($docxTemp);
+
+    $zipTemp = tempnam(sys_get_temp_dir(), 'outer_tbl_zip_').'.zip';
+    $outerZip = new ZipArchive;
+    $outerZip->open($zipTemp, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $outerZip->addFromString('Soal_Tabel.docx', $docxBytes);
+    $outerZip->close();
+
+    $zipFile = new UploadedFile($zipTemp, 'Soal_Tabel.zip', 'application/zip', null, true);
+
+    $response = $this->actingAs($teacher)->post(route('questions.import.examview'), [
+        'file' => $zipFile,
+    ]);
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data['success'])->toBeTrue()
+        ->and($data['total'])->toBe(1);
+
+    $q = $data['questions'][0];
+    expect($q['type'])->toBe('Multiple-choice grid')
+        ->and($q['title'])->toBe('Perhatikan tabel dan tentukanlah benar atau salah dari pernyataan di bawah ini!')
+        ->and($q['columns'])->toEqual(['Benar', 'Salah'])
+        ->and($q['rows'])->toEqual([
+            '1. Hasil pertanian Singapura adalah kelapa sawit.',
+            '2. Laos memiliki iklim tropis.',
+        ])
+        ->and((array) $q['answer'])->toEqual([
+            '0' => 1, // S -> Salah
+            '1' => 0, // B -> Benar
+        ]);
+
+    @unlink($zipTemp);
+});

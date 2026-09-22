@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { useDebounceFn } from '@vueuse/core';
+import RichContent from '@/components/RichContent.vue';
+import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
+import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
     colorThemes,
@@ -13,8 +14,10 @@ import {
     scaleQuestionTypes,
     templatePresets,
 } from '@/constants/form-editor';
-import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
 import type { PreviewAnswer, Question, QuestionType, QuizFormPayload } from '@/types/quiz';
+import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
 import {
     Archive,
@@ -34,6 +37,7 @@ import {
     PlusCircle,
     Puzzle,
     Redo2,
+    School,
     Star,
     ToggleRight,
     Trash2,
@@ -41,15 +45,10 @@ import {
     Undo2,
     UploadCloud,
     UserPlus,
-    Users,
-    School,
     Video,
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import RichContent from '@/components/RichContent.vue';
-import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
-import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
 
 const getYoutubeEmbedUrl = (url: string): string | undefined => {
     if (!url) {
@@ -210,9 +209,7 @@ const removeCollaborator = (collaboratorId: number, isSelf = false) => {
         return;
     }
 
-    const confirmMsg = isSelf
-        ? 'Apakah Anda yakin ingin keluar dari kolaborasi kuis ini?'
-        : 'Hapus guru ini dari daftar kolaborator?';
+    const confirmMsg = isSelf ? 'Apakah Anda yakin ingin keluar dari kolaborasi kuis ini?' : 'Hapus guru ini dari daftar kolaborator?';
 
     if (!window.confirm(confirmMsg)) {
         return;
@@ -241,13 +238,13 @@ const removeCollaborator = (collaboratorId: number, isSelf = false) => {
 const statusMessage = ref('All changes saved locally');
 const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
+const appOrigin = ref(typeof window === 'undefined' ? 'http://172.16.0.208:8000' : window.location.origin);
 const publicSlug = ref(props.quizForm?.slug ?? 'untitled-form');
-const publicUrl = ref(props.quizForm?.publicUrl ?? 'http://alsenform.test/forms/untitled-form');
+const publicUrl = ref(props.quizForm?.publicUrl ?? `${appOrigin.value}/forms/untitled-form`);
 const slugWarning = ref('');
 const isSaving = ref(false);
 const isPublished = ref(props.quizForm?.isPublished ?? false);
 const showStatusMenu = ref(false);
-const appOrigin = ref(typeof window === 'undefined' ? 'http://alsenform.test' : window.location.origin);
 const isResponsesSettingsOpen = ref(true);
 const isPresentationSettingsOpen = ref(true);
 const isFormDefaultsOpen = ref(true);
@@ -320,7 +317,12 @@ const latestResponses = computed(() => props.quizForm?.responses?.latest ?? []);
 
 const gradebookSearch = ref('');
 const maxScore = computed(() => props.quizForm?.responses?.maxScore ?? 0);
-const exportResponsesUrl = computed(() => props.quizForm?.responses?.exportUrl ?? props.quizForm?.exportResponsesUrl ?? (props.quizForm ? `/forms/${props.quizForm.id}/responses/export` : '#'));
+const exportResponsesUrl = computed(
+    () =>
+        props.quizForm?.responses?.exportUrl ??
+        props.quizForm?.exportResponsesUrl ??
+        (props.quizForm ? `/forms/${props.quizForm.id}/responses/export` : '#'),
+);
 const gradebook = computed(() => props.quizForm?.responses?.gradebook ?? []);
 
 const filteredGradebook = computed(() => {
@@ -538,7 +540,7 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         options: noOptionQuestionTypes.includes(type) ? [] : scaleQuestionTypes.includes(type) ? ['1', '2', '3', '4', '5'] : ['Option 1'],
         rows: gridQuestionTypes.includes(type) ? ['Baris 1', 'Baris 2'] : [],
         columns: gridQuestionTypes.includes(type) ? ['Kolom 1', 'Kolom 2'] : [],
-        answer: gridQuestionTypes.includes(type) ? {} : (type === 'Checkboxes' ? [] : ''),
+        answer: gridQuestionTypes.includes(type) ? {} : type === 'Checkboxes' ? [] : '',
         required: false,
         media: [],
         points: 10,
@@ -567,9 +569,12 @@ const duplicateQuestion = (question: Question) => {
         options: [...question.options],
         rows: question.rows ? [...question.rows] : [],
         columns: question.columns ? [...question.columns] : [],
-        answer: typeof question.answer === 'object' && question.answer !== null
-            ? (Array.isArray(question.answer) ? [...question.answer] : JSON.parse(JSON.stringify(question.answer)))
-            : question.answer,
+        answer:
+            typeof question.answer === 'object' && question.answer !== null
+                ? Array.isArray(question.answer)
+                    ? [...question.answer]
+                    : JSON.parse(JSON.stringify(question.answer))
+                : question.answer,
         media: (question.media ?? []).map((m) => ({ ...m })),
         points: question.points ?? 10,
     };
@@ -772,13 +777,13 @@ const setCorrectAnswer = (question: Question, optionIndex: number | string) => {
     if (question.type === 'Checkboxes') {
         const currentAnswer = Array.isArray(question.answer)
             ? question.answer.map((a: any) => {
-                const asNum = Number(a);
-                if (!isNaN(asNum) && question.options[asNum] !== undefined) {
-                    return asNum;
-                }
-                const found = question.options.indexOf(String(a));
-                return found >= 0 ? found : a;
-            })
+                  const asNum = Number(a);
+                  if (!isNaN(asNum) && question.options[asNum] !== undefined) {
+                      return asNum;
+                  }
+                  const found = question.options.indexOf(String(a));
+                  return found >= 0 ? found : a;
+              })
             : [];
         const optText = question.options?.[idx];
         const ansIdx = currentAnswer.findIndex((a: any) => Number(a) === idx || (optText !== undefined && a === optText));
@@ -974,9 +979,12 @@ const handleImportDocxFile = async (event: Event) => {
         if (Array.isArray(importedQuestions) && importedQuestions.length > 0) {
             importedQuestions.forEach((q: any) => {
                 const isCheckboxes = q.type === 'Checkboxes';
-                let answerVal = typeof q.answer === 'object' && q.answer !== null
-                    ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
-                    : q.answer;
+                let answerVal =
+                    typeof q.answer === 'object' && q.answer !== null
+                        ? Array.isArray(q.answer)
+                            ? [...q.answer]
+                            : JSON.parse(JSON.stringify(q.answer))
+                        : q.answer;
 
                 if (isCheckboxes && Array.isArray(answerVal)) {
                     answerVal = answerVal.map((ans: any) => {
@@ -1048,9 +1056,12 @@ const handleImportExamViewFile = async (event: Event) => {
                     options: Array.isArray(q.options) ? [...q.options] : [],
                     rows: Array.isArray(q.rows) ? [...q.rows] : [],
                     columns: Array.isArray(q.columns) ? [...q.columns] : [],
-                    answer: typeof q.answer === 'object' && q.answer !== null
-                        ? (Array.isArray(q.answer) ? [...q.answer] : JSON.parse(JSON.stringify(q.answer)))
-                        : q.answer,
+                    answer:
+                        typeof q.answer === 'object' && q.answer !== null
+                            ? Array.isArray(q.answer)
+                                ? [...q.answer]
+                                : JSON.parse(JSON.stringify(q.answer))
+                            : q.answer,
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
                     points: q.points ?? 10,
@@ -1066,7 +1077,8 @@ const handleImportExamViewFile = async (event: Event) => {
             importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas ExamView.';
         }
     } catch (error: any) {
-        importError.value = error.response?.data?.message || 'Gagal mengimpor file ExamView. Pastikan format berkas ZIP hasil ekspor Blackboard benar.';
+        importError.value =
+            error.response?.data?.message || 'Gagal mengimpor file ExamView. Pastikan format berkas ZIP hasil ekspor Blackboard benar.';
     } finally {
         isImportingFile.value = false;
         input.value = '';
@@ -1364,7 +1376,7 @@ watch(
                         <UserPlus class="h-5 w-5" />
                         <span
                             v-if="props.quizForm?.collaborators?.length"
-                            class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white shadow-xs"
+                            class="shadow-xs absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white"
                         >
                             {{ props.quizForm.collaborators.length }}
                         </span>
@@ -1531,10 +1543,10 @@ watch(
                             >
                                 <template v-if="editingAnswerKeyQuestionId === question.id">
                                     <!-- ANSWER KEY EDIT MODE -->
-                                    <div class="col-span-full border border-indigo-100 rounded-2xl overflow-hidden bg-white">
+                                    <div class="col-span-full overflow-hidden rounded-2xl border border-indigo-100 bg-white">
                                         <div class="flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-6 py-4">
                                             <div class="flex items-center gap-2">
-                                                <Key class="h-5 w-5 text-indigo-600 animate-pulse" />
+                                                <Key class="h-5 w-5 animate-pulse text-indigo-600" />
                                                 <span class="text-sm font-extrabold text-indigo-950">Pengaturan Kunci Jawaban</span>
                                             </div>
                                             <div class="flex items-center gap-2">
@@ -1548,8 +1560,8 @@ watch(
                                                 />
                                             </div>
                                         </div>
-                                        
-                                        <div class="p-6 space-y-4">
+
+                                        <div class="space-y-4 p-6">
                                             <div class="text-sm font-bold text-slate-800">
                                                 Pertanyaan: <span class="font-normal text-slate-600">{{ question.title || 'Tanpa Judul' }}</span>
                                             </div>
@@ -1560,30 +1572,36 @@ watch(
                                                 <input
                                                     v-model="question.answer"
                                                     type="text"
-                                                    class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 bg-slate-50/30"
+                                                    class="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/30 px-3.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                                                     placeholder="Masukkan teks jawaban yang benar..."
                                                     @input="markChanged('Answer key updated')"
                                                 />
                                             </div>
 
                                             <!-- Paragraph Kunci Jawaban Info -->
-                                            <div v-else-if="question.type === 'Paragraph'" class="rounded-xl bg-slate-50 p-4 border border-slate-200 text-xs text-slate-500 leading-relaxed font-medium">
-                                                💡 Pertanyaan bertipe <strong>Paragraf</strong> akan dinilai secara manual oleh Anda setelah responden mengirimkan jawaban. Tidak ada kunci jawaban otomatis.
+                                            <div
+                                                v-else-if="question.type === 'Paragraph'"
+                                                class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-medium leading-relaxed text-slate-500"
+                                            >
+                                                💡 Pertanyaan bertipe <strong>Paragraf</strong> akan dinilai secara manual oleh Anda setelah responden
+                                                mengirimkan jawaban. Tidak ada kunci jawaban otomatis.
                                             </div>
 
                                             <!-- Multiple choice / Checkboxes / Drop-down Kunci Jawaban -->
                                             <div v-else-if="optionQuestionTypes.includes(question.type)" class="space-y-2.5">
-                                                <span class="text-xs font-bold text-slate-600 block">Pilih satu atau lebih opsi jawaban yang benar:</span>
+                                                <span class="block text-xs font-bold text-slate-600"
+                                                    >Pilih satu atau lebih opsi jawaban yang benar:</span
+                                                >
                                                 <div class="space-y-2">
                                                     <button
                                                         v-for="(option, optionIndex) in question.options"
                                                         :key="`anskey-opt-${optionIndex}`"
                                                         type="button"
                                                         :class="[
-                                                            'w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-semibold transition-all text-left',
+                                                            'flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition-all',
                                                             isCorrectAnswer(question, optionIndex)
                                                                 ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-100'
-                                                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                                                         ]"
                                                         @click="setCorrectAnswer(question, optionIndex)"
                                                     >
@@ -1591,7 +1609,9 @@ watch(
                                                             :class="[
                                                                 'flex h-5 w-5 shrink-0 items-center justify-center border-2',
                                                                 question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
-                                                                isCorrectAnswer(question, optionIndex) ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300'
+                                                                isCorrectAnswer(question, optionIndex)
+                                                                    ? 'border-emerald-500 bg-emerald-500 text-white'
+                                                                    : 'border-slate-300',
                                                             ]"
                                                         >
                                                             <Check v-if="isCorrectAnswer(question, optionIndex)" class="h-3.5 w-3.5 text-white" />
@@ -1603,7 +1623,7 @@ watch(
 
                                             <!-- Linear scale Kunci Jawaban -->
                                             <div v-else-if="question.type === 'Linear scale'" class="space-y-3">
-                                                <span class="text-xs font-bold text-slate-600 block">Pilih titik skala yang benar:</span>
+                                                <span class="block text-xs font-bold text-slate-600">Pilih titik skala yang benar:</span>
                                                 <div class="flex items-center gap-2">
                                                     <button
                                                         v-for="option in question.options"
@@ -1613,9 +1633,12 @@ watch(
                                                             'flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition-all',
                                                             question.answer === option
                                                                 ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                                                                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-400'
+                                                                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-400',
                                                         ]"
-                                                        @click="question.answer = option; markChanged('Answer key updated')"
+                                                        @click="
+                                                            question.answer = option;
+                                                            markChanged('Answer key updated');
+                                                        "
                                                     >
                                                         {{ option }}
                                                     </button>
@@ -1624,7 +1647,7 @@ watch(
 
                                             <!-- Rating Kunci Jawaban -->
                                             <div v-else-if="question.type === 'Rating'" class="space-y-3">
-                                                <span class="text-xs font-bold text-slate-600 block">Pilih rating bintang yang benar:</span>
+                                                <span class="block text-xs font-bold text-slate-600">Pilih rating bintang yang benar:</span>
                                                 <div class="flex gap-2 text-slate-300">
                                                     <button
                                                         v-for="option in question.options"
@@ -1632,9 +1655,14 @@ watch(
                                                         type="button"
                                                         :class="[
                                                             'transition-colors',
-                                                            Number(question.answer) >= Number(option) ? 'text-amber-400' : 'text-slate-300 hover:text-amber-200'
+                                                            Number(question.answer) >= Number(option)
+                                                                ? 'text-amber-400'
+                                                                : 'text-slate-300 hover:text-amber-200',
                                                         ]"
-                                                        @click="question.answer = option; markChanged('Answer key updated')"
+                                                        @click="
+                                                            question.answer = option;
+                                                            markChanged('Answer key updated');
+                                                        "
                                                     >
                                                         <Star class="h-8 w-8 fill-current" />
                                                     </button>
@@ -1647,7 +1675,7 @@ watch(
                                                 <input
                                                     v-model="question.answer"
                                                     type="date"
-                                                    class="h-10 rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 bg-white"
+                                                    class="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-indigo-600"
                                                     @change="markChanged('Answer key updated')"
                                                 />
                                             </div>
@@ -1658,35 +1686,58 @@ watch(
                                                 <input
                                                     v-model="question.answer"
                                                     type="time"
-                                                    class="h-10 rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-600 bg-white"
+                                                    class="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-indigo-600"
                                                     @change="markChanged('Answer key updated')"
                                                 />
                                             </div>
 
                                             <!-- Grid types Kunci Jawaban -->
                                             <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-4">
-                                                <span class="text-xs font-bold text-slate-600 block">Pilih jawaban benar untuk setiap baris:</span>
+                                                <span class="block text-xs font-bold text-slate-600">Pilih jawaban benar untuk setiap baris:</span>
                                                 <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/50">
-                                                    <table class="w-full text-left border-collapse text-sm">
+                                                    <table class="w-full border-collapse text-left text-sm">
                                                         <thead>
                                                             <tr class="border-b border-slate-200 bg-slate-100">
                                                                 <th class="p-3 font-bold text-slate-700">Baris / Kolom</th>
-                                                                <th v-for="(col, cIndex) in question.columns" :key="`header-col-${cIndex}`" class="p-3 text-center font-bold text-slate-700">
+                                                                <th
+                                                                    v-for="(col, cIndex) in question.columns"
+                                                                    :key="`header-col-${cIndex}`"
+                                                                    class="p-3 text-center font-bold text-slate-700"
+                                                                >
                                                                     {{ col }}
                                                                 </th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            <tr v-for="(row, rIndex) in question.rows" :key="`row-key-${rIndex}`" class="border-b border-slate-150 last:border-0 hover:bg-slate-50 transition-colors">
+                                                            <tr
+                                                                v-for="(row, rIndex) in question.rows"
+                                                                :key="`row-key-${rIndex}`"
+                                                                class="border-slate-150 border-b transition-colors last:border-0 hover:bg-slate-50"
+                                                            >
                                                                 <td class="p-3 font-semibold text-slate-800">{{ row }}</td>
-                                                                <td v-for="(col, cIndex) in question.columns" :key="`cell-${rIndex}-${cIndex}`" class="p-3 text-center">
-                                                                    <label class="inline-flex items-center justify-center cursor-pointer">
+                                                                <td
+                                                                    v-for="(col, cIndex) in question.columns"
+                                                                    :key="`cell-${rIndex}-${cIndex}`"
+                                                                    class="p-3 text-center"
+                                                                >
+                                                                    <label class="inline-flex cursor-pointer items-center justify-center">
                                                                         <input
                                                                             :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
                                                                             :name="`anskey-grid-row-${question.id}-${rIndex}`"
-                                                                            :checked="question.type === 'Tick box grid' ? question.answer?.[rIndex]?.includes(cIndex) : question.answer?.[rIndex] === cIndex"
+                                                                            :checked="
+                                                                                question.type === 'Tick box grid'
+                                                                                    ? question.answer?.[rIndex]?.includes(cIndex)
+                                                                                    : question.answer?.[rIndex] === cIndex
+                                                                            "
                                                                             class="h-4 w-4 accent-emerald-600"
-                                                                            @change="setGridAnswer(question, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')"
+                                                                            @change="
+                                                                                setGridAnswer(
+                                                                                    question,
+                                                                                    rIndex,
+                                                                                    cIndex,
+                                                                                    question.type === 'Tick box grid' ? 'multiple' : 'single',
+                                                                                )
+                                                                            "
                                                                         />
                                                                     </label>
                                                                 </td>
@@ -1696,10 +1747,10 @@ watch(
                                                 </div>
                                             </div>
 
-                                            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                                            <div class="flex justify-end gap-2 border-t border-slate-100 pt-3">
                                                 <button
                                                     type="button"
-                                                    class="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-md"
+                                                    class="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-indigo-700"
                                                     @click="editingAnswerKeyQuestionId = null"
                                                 >
                                                     Selesai
@@ -1730,7 +1781,7 @@ watch(
                                         <textarea
                                             v-model="question.title"
                                             rows="2"
-                                            :dir="question.isRtl ? 'rtl' : (hasArabic(question.title) ? 'rtl' : 'auto')"
+                                            :dir="question.isRtl ? 'rtl' : hasArabic(question.title) ? 'rtl' : 'auto'"
                                             class="mb-3 w-full resize-y rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
                                             :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                             placeholder="Tulis pertanyaan, rumus matematika $...$, atau ketik bahasa Arab..."
@@ -1740,7 +1791,7 @@ watch(
                                         <!-- Live Preview of Math & Quran Arabic Rendering -->
                                         <div
                                             v-if="hasMathOrArabic(question.title)"
-                                            class="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3 shadow-xs"
+                                            class="shadow-xs mb-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3"
                                         >
                                             <div class="mb-1.5 flex items-center justify-between text-[11px] font-bold text-indigo-700">
                                                 <span class="flex items-center gap-1.5">
@@ -1846,7 +1897,9 @@ watch(
                                                                 @change="handleMediaUpload($event, media)"
                                                             />
                                                         </label>
-                                                        <p v-if="media.uploadError" class="text-[9px] font-bold text-red-600">{{ media.uploadError }}</p>
+                                                        <p v-if="media.uploadError" class="text-[9px] font-bold text-red-600">
+                                                            {{ media.uploadError }}
+                                                        </p>
                                                     </div>
                                                 </div>
 
@@ -1893,7 +1946,10 @@ watch(
                                             <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-400">
                                                 Responden memasukkan jawaban teks singkat
                                             </div>
-                                            <div v-if="form.settings.isQuiz" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-800">
+                                            <div
+                                                v-if="form.settings.isQuiz"
+                                                class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-800"
+                                            >
                                                 <span class="font-bold">Kunci jawaban benar:</span> {{ question.answer || 'belum diisi' }}
                                             </div>
                                         </div>
@@ -1921,8 +1977,15 @@ watch(
                                             v-else-if="question.type === 'Date'"
                                             class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
                                         >
-                                            <input type="date" disabled class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400 cursor-not-allowed" />
-                                            <div v-if="form.settings.isQuiz && question.answer" class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                            <input
+                                                type="date"
+                                                disabled
+                                                class="cursor-not-allowed rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400"
+                                            />
+                                            <div
+                                                v-if="form.settings.isQuiz && question.answer"
+                                                class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
+                                            >
                                                 <span class="font-bold">Kunci tanggal benar:</span> {{ question.answer }}
                                             </div>
                                         </div>
@@ -1931,8 +1994,15 @@ watch(
                                             v-else-if="question.type === 'Time'"
                                             class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
                                         >
-                                            <input type="time" disabled class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400 cursor-not-allowed" />
-                                            <div v-if="form.settings.isQuiz && question.answer" class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800">
+                                            <input
+                                                type="time"
+                                                disabled
+                                                class="cursor-not-allowed rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-400"
+                                            />
+                                            <div
+                                                v-if="form.settings.isQuiz && question.answer"
+                                                class="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-800"
+                                            >
                                                 <span class="font-bold">Kunci waktu benar:</span> {{ question.answer }}
                                             </div>
                                         </div>
@@ -1942,7 +2012,7 @@ watch(
                                                 <span
                                                     v-for="option in question.options"
                                                     :key="option"
-                                                    class="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold bg-white text-slate-700"
+                                                    class="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-sm font-bold text-slate-700"
                                                 >
                                                     {{ option }}
                                                 </span>
@@ -1961,7 +2031,7 @@ watch(
                                                 <button
                                                     v-if="question.options.length > 2"
                                                     type="button"
-                                                    class="text-xs font-bold text-red-600 hover:underline ml-4"
+                                                    class="ml-4 text-xs font-bold text-red-600 hover:underline"
                                                     @click.stop="
                                                         question.options.pop();
                                                         markChanged('Scale reduced');
@@ -1996,7 +2066,7 @@ watch(
                                                 <button
                                                     v-if="question.options.length > 1"
                                                     type="button"
-                                                    class="text-xs font-bold text-red-600 hover:underline ml-4"
+                                                    class="ml-4 text-xs font-bold text-red-600 hover:underline"
                                                     @click.stop="
                                                         question.options.pop();
                                                         markChanged('Rating reduced');
@@ -2015,50 +2085,87 @@ watch(
 
                                         <!-- Rows & Columns Editor for Grid types -->
                                         <div v-else-if="gridQuestionTypes.includes(question.type)" class="space-y-4">
-                                            <div class="grid grid-cols-2 gap-4 border border-slate-200 rounded-2xl p-4 bg-slate-50/30">
+                                            <div class="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 bg-slate-50/30 p-4">
                                                 <!-- Rows list -->
                                                 <div class="space-y-2">
-                                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Baris (Rows)</span>
-                                                    <div v-for="(row, rIndex) in question.rows" :key="`row-${rIndex}`" class="flex items-center gap-2">
-                                                        <span class="text-xs text-slate-400 font-bold">#{{ rIndex + 1 }}</span>
+                                                    <span class="block text-xs font-bold uppercase tracking-wider text-slate-500">Baris (Rows)</span>
+                                                    <div
+                                                        v-for="(row, rIndex) in question.rows"
+                                                        :key="`row-${rIndex}`"
+                                                        class="flex items-center gap-2"
+                                                    >
+                                                        <span class="text-xs font-bold text-slate-400">#{{ rIndex + 1 }}</span>
                                                         <input
                                                             v-model="question.rows[rIndex]"
                                                             type="text"
-                                                            class="min-w-0 flex-1 border-b border-slate-200 outline-none text-xs py-1 focus:border-indigo-500 bg-transparent"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-1 text-xs outline-none focus:border-indigo-500"
                                                             @input="markChanged('Row label updated')"
                                                         />
-                                                        <button type="button" class="text-slate-400 hover:text-red-500 font-bold text-xs px-1" @click="question.rows.splice(rIndex, 1)">x</button>
+                                                        <button
+                                                            type="button"
+                                                            class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
+                                                            @click="question.rows.splice(rIndex, 1)"
+                                                        >
+                                                            x
+                                                        </button>
                                                     </div>
-                                                    <button type="button" class="text-xs font-bold text-indigo-600 hover:underline flex items-center" @click="question.rows.push(`Baris ${question.rows.length + 1}`)">
+                                                    <button
+                                                        type="button"
+                                                        class="flex items-center text-xs font-bold text-indigo-600 hover:underline"
+                                                        @click="question.rows.push(`Baris ${question.rows.length + 1}`)"
+                                                    >
                                                         + Tambah Baris
                                                     </button>
                                                 </div>
 
                                                 <!-- Columns list -->
                                                 <div class="space-y-2">
-                                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Kolom (Columns)</span>
-                                                    <div v-for="(col, cIndex) in question.columns" :key="`col-${cIndex}`" class="flex items-center gap-2">
-                                                        <span class="text-xs text-slate-400 font-bold">#{{ cIndex + 1 }}</span>
+                                                    <span class="block text-xs font-bold uppercase tracking-wider text-slate-500"
+                                                        >Kolom (Columns)</span
+                                                    >
+                                                    <div
+                                                        v-for="(col, cIndex) in question.columns"
+                                                        :key="`col-${cIndex}`"
+                                                        class="flex items-center gap-2"
+                                                    >
+                                                        <span class="text-xs font-bold text-slate-400">#{{ cIndex + 1 }}</span>
                                                         <input
                                                             v-model="question.columns[cIndex]"
                                                             type="text"
-                                                            class="min-w-0 flex-1 border-b border-slate-200 outline-none text-xs py-1 focus:border-indigo-500 bg-transparent"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-1 text-xs outline-none focus:border-indigo-500"
                                                             @input="markChanged('Column label updated')"
                                                         />
-                                                        <button type="button" class="text-slate-400 hover:text-red-500 font-bold text-xs px-1" @click="question.columns.splice(cIndex, 1)">x</button>
+                                                        <button
+                                                            type="button"
+                                                            class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
+                                                            @click="question.columns.splice(cIndex, 1)"
+                                                        >
+                                                            x
+                                                        </button>
                                                     </div>
-                                                    <button type="button" class="text-xs font-bold text-indigo-600 hover:underline flex items-center" @click="question.columns.push(`Kolom ${question.columns.length + 1}`)">
+                                                    <button
+                                                        type="button"
+                                                        class="flex items-center text-xs font-bold text-indigo-600 hover:underline"
+                                                        @click="question.columns.push(`Kolom ${question.columns.length + 1}`)"
+                                                    >
                                                         + Tambah Kolom
                                                     </button>
                                                 </div>
                                             </div>
                                             <!-- Preview of correct answers in Grid -->
-                                            <div v-if="form.settings.isQuiz && question.answer && Object.keys(question.answer).length" class="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-800 space-y-1">
-                                                <span class="font-bold block">Kunci jawaban benar:</span>
+                                            <div
+                                                v-if="form.settings.isQuiz && question.answer && Object.keys(question.answer).length"
+                                                class="space-y-1 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-800"
+                                            >
+                                                <span class="block font-bold">Kunci jawaban benar:</span>
                                                 <div v-for="(colIdx, rowIdx) in question.answer" :key="`ans-${rowIdx}`" class="ml-2 font-medium">
-                                                    - {{ question.rows?.[rowIdx] }}: 
+                                                    - {{ question.rows?.[rowIdx] }}:
                                                     <span class="font-bold">
-                                                        {{ Array.isArray(colIdx) ? colIdx.map(c => question.columns?.[c]).join(', ') : question.columns?.[colIdx] }}
+                                                        {{
+                                                            Array.isArray(colIdx)
+                                                                ? colIdx.map((c) => question.columns?.[c]).join(', ')
+                                                                : question.columns?.[colIdx]
+                                                        }}
                                                     </span>
                                                 </div>
                                             </div>
@@ -2085,10 +2192,13 @@ watch(
                                                         question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
                                                         form.settings.isQuiz && isCorrectAnswer(question, optionIndex)
                                                             ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                                                            : 'border-slate-300 bg-white'
+                                                            : 'border-slate-300 bg-white',
                                                     ]"
                                                 >
-                                                    <Check v-if="form.settings.isQuiz && isCorrectAnswer(question, optionIndex)" class="h-3.5 w-3.5 text-white" />
+                                                    <Check
+                                                        v-if="form.settings.isQuiz && isCorrectAnswer(question, optionIndex)"
+                                                        class="h-3.5 w-3.5 text-white"
+                                                    />
                                                 </span>
 
                                                 <!-- Dropdown number index if it is a Drop-down type -->
@@ -2096,7 +2206,7 @@ watch(
                                                     #{{ optionIndex + 1 }}
                                                 </span>
 
-                                                <div class="min-w-0 flex-1 flex flex-col gap-1">
+                                                <div class="flex min-w-0 flex-1 flex-col gap-1">
                                                     <input
                                                         v-model="question.options[optionIndex]"
                                                         type="text"
@@ -2107,7 +2217,7 @@ watch(
                                                     />
                                                     <div
                                                         v-if="hasMathOrArabic(question.options[optionIndex])"
-                                                        class="inline-flex items-center gap-1 rounded border border-indigo-100 bg-indigo-50/70 px-2 py-0.5 text-xs text-slate-800 self-start"
+                                                        class="inline-flex items-center gap-1 self-start rounded border border-indigo-100 bg-indigo-50/70 px-2 py-0.5 text-xs text-slate-800"
                                                     >
                                                         <span class="text-[10px] font-bold text-indigo-500">Pratinjau:</span>
                                                         <RichContent :content="question.options[optionIndex]" />
@@ -2173,7 +2283,9 @@ watch(
                                                 <button type="button" class="transition hover:text-indigo-600" @click.stop="addOption(question)">
                                                     Add option
                                                 </button>
-                                                <span v-if="!question.options.includes('Other') && !isQuestionAnswered(question)" class="text-slate-900"
+                                                <span
+                                                    v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
+                                                    class="text-slate-900"
                                                     >or</span
                                                 >
                                                 <button
@@ -2249,7 +2361,7 @@ watch(
                                                 <button
                                                     v-if="form.settings.isQuiz"
                                                     type="button"
-                                                    class="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-sm shrink-0"
+                                                    class="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-100"
                                                     @click.stop="editingAnswerKeyQuestionId = question.id"
                                                 >
                                                     <Key class="h-3.5 w-3.5" />
@@ -2340,7 +2452,7 @@ watch(
                                 <a
                                     v-if="responseCount"
                                     :href="exportResponsesUrl"
-                                    class="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                                    class="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
                                 >
                                     <Download class="h-4 w-4" />
                                     Ekspor Nilai (CSV)
@@ -2394,7 +2506,7 @@ watch(
                                     <a
                                         v-if="responseCount"
                                         :href="exportResponsesUrl"
-                                        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                                        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"
                                     >
                                         <Download class="h-3.5 w-3.5" />
                                         Unduh CSV
@@ -2404,7 +2516,9 @@ watch(
 
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left text-xs text-slate-600">
-                                    <thead class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                    <thead
+                                        class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                                    >
                                         <tr>
                                             <th class="px-4 py-3">No</th>
                                             <th class="px-4 py-3">NIS</th>
@@ -2417,21 +2531,23 @@ watch(
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-100">
-                                        <tr v-for="(item, idx) in filteredGradebook" :key="item.id" class="hover:bg-slate-50/80 transition-colors">
+                                        <tr v-for="(item, idx) in filteredGradebook" :key="item.id" class="transition-colors hover:bg-slate-50/80">
                                             <td class="px-4 py-3 font-semibold text-slate-400">{{ idx + 1 }}</td>
                                             <td class="px-4 py-3 font-mono font-medium text-slate-700">{{ item.nis }}</td>
                                             <td class="px-4 py-3 font-bold text-slate-900">{{ item.name }}</td>
                                             <td class="px-4 py-3">
                                                 <span class="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{{ item.kelas }}</span>
                                             </td>
-                                            <td class="px-4 py-3 text-center font-bold text-indigo-600">
-                                                {{ item.score }} / {{ maxScore }}
-                                            </td>
+                                            <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ item.score }} / {{ maxScore }}</td>
                                             <td class="px-4 py-3 text-center">
                                                 <span
                                                     :class="[
                                                         'inline-block rounded-full px-2.5 py-0.5 font-bold',
-                                                        item.percentage >= 75 ? 'bg-emerald-100 text-emerald-800' : (item.percentage >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')
+                                                        item.percentage >= 75
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : item.percentage >= 60
+                                                              ? 'bg-amber-100 text-amber-800'
+                                                              : 'bg-rose-100 text-rose-800',
                                                     ]"
                                                 >
                                                     {{ item.percentage }}
@@ -2441,7 +2557,9 @@ watch(
                                                 <span
                                                     :class="[
                                                         'rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
-                                                        item.is_timeout ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                        item.is_timeout
+                                                            ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                                                            : 'border border-emerald-200 bg-emerald-50 text-emerald-700',
                                                     ]"
                                                 >
                                                     {{ item.is_timeout ? 'Timeout' : 'Selesai' }}
@@ -2451,7 +2569,11 @@ watch(
                                         </tr>
                                         <tr v-if="filteredGradebook.length === 0">
                                             <td colspan="8" class="py-8 text-center text-slate-400">
-                                                {{ gradebook.length === 0 ? 'Belum ada tanggapan masuk untuk kuis ini.' : 'Tidak ada data siswa yang cocok dengan pencarian.' }}
+                                                {{
+                                                    gradebook.length === 0
+                                                        ? 'Belum ada tanggapan masuk untuk kuis ini.'
+                                                        : 'Tidak ada data siswa yang cocok dengan pencarian.'
+                                                }}
                                             </td>
                                         </tr>
                                     </tbody>
@@ -2670,10 +2792,14 @@ watch(
                                 </button>
 
                                 <div v-if="isCohortSettingsOpen" class="mt-10 space-y-6 pl-11">
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+                                    <div class="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
                                         <label
-                                            class="flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition"
-                                            :class="!isCohortRestricted ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                            class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition"
+                                            :class="
+                                                !isCohortRestricted
+                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 hover:bg-slate-50'
+                                            "
                                         >
                                             <input
                                                 type="radio"
@@ -2684,13 +2810,19 @@ watch(
                                             />
                                             <div>
                                                 <span class="block text-base font-bold text-slate-900">Terbuka untuk Semua (Publik)</span>
-                                                <span class="text-sm text-slate-500">Siapapun yang memiliki link dapat mengisi dan mengerjakan kuis ini.</span>
+                                                <span class="text-sm text-slate-500"
+                                                    >Siapapun yang memiliki link dapat mengisi dan mengerjakan kuis ini.</span
+                                                >
                                             </div>
                                         </label>
 
                                         <label
-                                            class="flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition"
-                                            :class="isCohortRestricted ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                            class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition"
+                                            :class="
+                                                isCohortRestricted
+                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 hover:bg-slate-50'
+                                            "
                                         >
                                             <input
                                                 type="radio"
@@ -2701,43 +2833,59 @@ watch(
                                             />
                                             <div>
                                                 <span class="block text-base font-bold text-slate-900">Khusus Cohort Tertentu</span>
-                                                <span class="text-sm text-slate-500">Hanya murid yang terdaftar di kelompok terpilih yang dapat mengakses kuis.</span>
+                                                <span class="text-sm text-slate-500"
+                                                    >Hanya murid yang terdaftar di kelompok terpilih yang dapat mengakses kuis.</span
+                                                >
                                             </div>
                                         </label>
                                     </div>
 
                                     <!-- Cohort Checklist when restricted -->
                                     <div v-if="isCohortRestricted" class="mt-5 space-y-3">
-                                        <p class="text-sm font-bold uppercase tracking-wider text-slate-500">
-                                            Pilih Cohort yang Diizinkan:
-                                        </p>
+                                        <p class="text-sm font-bold uppercase tracking-wider text-slate-500">Pilih Cohort yang Diizinkan:</p>
 
-                                        <div v-if="props.quizForm?.availableCohorts?.length" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                        <div
+                                            v-if="props.quizForm?.availableCohorts?.length"
+                                            class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3"
+                                        >
                                             <div
                                                 v-for="c in props.quizForm.availableCohorts"
                                                 :key="c.id"
                                                 @click="toggleCohort(c.id)"
-                                                class="flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition select-none"
-                                                :class="selectedCohortIds.includes(c.id) ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20' : 'border-slate-200 hover:bg-slate-50'"
+                                                class="flex cursor-pointer select-none items-center justify-between rounded-2xl border p-3.5 transition"
+                                                :class="
+                                                    selectedCohortIds.includes(c.id)
+                                                        ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20'
+                                                        : 'border-slate-200 hover:bg-slate-50'
+                                                "
                                             >
                                                 <div class="flex items-center gap-3">
                                                     <div
                                                         class="flex h-5 w-5 items-center justify-center rounded-md border"
-                                                        :class="selectedCohortIds.includes(c.id) ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'"
+                                                        :class="
+                                                            selectedCohortIds.includes(c.id)
+                                                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                                                : 'border-slate-300 bg-white'
+                                                        "
                                                     >
                                                         <Check v-if="selectedCohortIds.includes(c.id)" class="h-3.5 w-3.5 stroke-[3]" />
                                                     </div>
                                                     <div>
                                                         <div class="text-sm font-bold text-slate-900">{{ c.name }}</div>
-                                                        <div v-if="c.code" class="text-xs font-mono text-slate-400">{{ c.code }}</div>
+                                                        <div v-if="c.code" class="font-mono text-xs text-slate-400">{{ c.code }}</div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div v-else class="rounded-2xl bg-amber-50 p-4 border border-amber-200 text-sm text-amber-900 flex items-center justify-between">
-                                            <span>Belum ada Cohort yang tersedia di sistem. Buat Cohort terlebih dahulu di menu Kelompok Belajar.</span>
-                                            <Link :href="route('cohorts.index')" class="font-bold underline ml-2">Kelola Cohort</Link>
+                                        <div
+                                            v-else
+                                            class="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+                                        >
+                                            <span
+                                                >Belum ada Cohort yang tersedia di sistem. Buat Cohort terlebih dahulu di menu Kelompok Belajar.</span
+                                            >
+                                            <Link :href="route('cohorts.index')" class="ml-2 font-bold underline">Kelola Cohort</Link>
                                         </div>
 
                                         <p v-if="selectedCohortIds.length === 0" class="text-sm font-medium text-red-600">
@@ -2881,7 +3029,7 @@ watch(
                         </div>
                     </section>
 
-                    <section class="rounded-xl border border-slate-300 bg-white shadow-sm mt-5">
+                    <section class="mt-5 rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-7 py-7">
                             <h2 class="text-2xl font-normal text-slate-950">Security & Limits</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
@@ -2889,11 +3037,16 @@ watch(
                             <div class="flex items-center justify-between gap-6 px-11 py-12">
                                 <div>
                                     <h3 class="text-xl font-normal text-slate-950">Lock quiz on tab switch</h3>
-                                    <p class="mt-2 text-lg text-slate-600">Automatically lock attempt if respondent switches tab or blurs window. Requires approval to unlock.</p>
+                                    <p class="mt-2 text-lg text-slate-600">
+                                        Automatically lock attempt if respondent switches tab or blurs window. Requires approval to unlock.
+                                    </p>
                                 </div>
                                 <button
                                     type="button"
-                                    :class="['relative h-5 w-11 rounded-full transition', form.settings.lockOnBlur ? 'bg-indigo-500' : 'bg-slate-300']"
+                                    :class="[
+                                        'relative h-5 w-11 rounded-full transition',
+                                        form.settings.lockOnBlur ? 'bg-indigo-500' : 'bg-slate-300',
+                                    ]"
                                     @click="toggleSetting('lockOnBlur')"
                                 >
                                     <span
@@ -3123,8 +3276,11 @@ watch(
                                 {{ question.type === 'Rating' ? '★' : option }}
                             </span>
                         </div>
-                        <div v-else-if="gridQuestionTypes.includes(question.type)" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/50">
-                            <table class="w-full text-left border-collapse text-xs">
+                        <div
+                            v-else-if="gridQuestionTypes.includes(question.type)"
+                            class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/50"
+                        >
+                            <table class="w-full border-collapse text-left text-xs">
                                 <thead>
                                     <tr class="border-b border-slate-200 bg-slate-100">
                                         <th class="p-2.5 font-bold text-slate-600">Baris / Kolom</th>
@@ -3134,18 +3290,33 @@ watch(
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="(row, rIndex) in question.rows" :key="row" class="border-b border-slate-150 last:border-0 hover:bg-slate-50 transition-colors">
+                                    <tr
+                                        v-for="(row, rIndex) in question.rows"
+                                        :key="row"
+                                        class="border-slate-150 border-b transition-colors last:border-0 hover:bg-slate-50"
+                                    >
                                         <td class="p-2.5 font-semibold text-slate-700">
                                             <RichContent :content="row" />
                                         </td>
                                         <td v-for="(col, cIndex) in question.columns" :key="col" class="p-2.5 text-center">
-                                            <label class="inline-flex items-center justify-center cursor-pointer">
+                                            <label class="inline-flex cursor-pointer items-center justify-center">
                                                 <input
                                                     :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
                                                     :name="`preview-question-grid-row-${question.id}-${rIndex}`"
-                                                    :checked="question.type === 'Tick box grid' ? (previewAnswers[question.id]?.[rIndex]?.includes(cIndex)) : (previewAnswers[question.id]?.[rIndex] === cIndex)"
-                                                    class="h-4 w-4 accent-indigo-600 cursor-pointer"
-                                                    @change="selectPreviewGridAnswer(question.id, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')"
+                                                    :checked="
+                                                        question.type === 'Tick box grid'
+                                                            ? previewAnswers[question.id]?.[rIndex]?.includes(cIndex)
+                                                            : previewAnswers[question.id]?.[rIndex] === cIndex
+                                                    "
+                                                    class="h-4 w-4 cursor-pointer accent-indigo-600"
+                                                    @change="
+                                                        selectPreviewGridAnswer(
+                                                            question.id,
+                                                            rIndex,
+                                                            cIndex,
+                                                            question.type === 'Tick box grid' ? 'multiple' : 'single',
+                                                        )
+                                                    "
                                                 />
                                             </label>
                                         </td>
@@ -3188,10 +3359,12 @@ watch(
         </div>
 
         <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5">
+            <section class="w-full max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-2xl">
                 <div class="flex items-center justify-between">
                     <h2 class="text-xl font-extrabold text-slate-900">Import Bank Soal</h2>
-                    <button type="button" class="text-slate-400 hover:text-slate-600 transition font-bold text-lg" @click="isImportModalOpen = false">x</button>
+                    <button type="button" class="text-lg font-bold text-slate-400 transition hover:text-slate-600" @click="isImportModalOpen = false">
+                        x
+                    </button>
                 </div>
 
                 <!-- Segmented Tabs: ExamView (.zip) vs Word (.docx) -->
@@ -3199,8 +3372,8 @@ watch(
                     <button
                         type="button"
                         :class="[
-                            'flex-1 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-1.5',
-                            importSource === 'examview' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition',
+                            importSource === 'examview' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
                         ]"
                         @click="importSource = 'examview'"
                     >
@@ -3210,8 +3383,8 @@ watch(
                     <button
                         type="button"
                         :class="[
-                            'flex-1 rounded-xl py-2 text-xs font-bold transition flex items-center justify-center gap-1.5',
-                            importSource === 'docx' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition',
+                            importSource === 'docx' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
                         ]"
                         @click="importSource = 'docx'"
                     >
@@ -3222,10 +3395,13 @@ watch(
 
                 <!-- ExamView Import Tab -->
                 <div v-if="importSource === 'examview'" class="space-y-4">
-                    <div class="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 text-xs text-indigo-950 space-y-2">
+                    <div class="space-y-2 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 text-xs text-indigo-950">
                         <span class="block font-bold text-indigo-900">Panduan Ekspor dari ExamView:</span>
-                        <ol class="list-decimal list-inside space-y-1 text-slate-600">
-                            <li>Buka bank soal (<code class="font-mono text-indigo-700">.bnk</code>) di aplikasi <strong>ExamView Test Generator</strong>.</li>
+                        <ol class="list-inside list-decimal space-y-1 text-slate-600">
+                            <li>
+                                Buka bank soal (<code class="font-mono text-indigo-700">.bnk</code>) di aplikasi
+                                <strong>ExamView Test Generator</strong>.
+                            </li>
                             <li>Pilih menu <strong>File &gt; Export &gt; Blackboard 6.0 - 7.0...</strong></li>
                             <li>Beri nama dan simpan berkas sebagai <strong>.zip</strong>.</li>
                             <li>Unggah berkas <strong>.zip</strong> hasil ekspor tersebut di bawah ini.</li>
@@ -3233,24 +3409,30 @@ watch(
                     </div>
 
                     <div class="space-y-3">
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas ZIP ExamView</label>
-                        <div 
-                            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Unggah Berkas ZIP ExamView</label>
+                        <div
+                            class="border-slate-250 hover:border-indigo-450 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-slate-50/30 p-6 transition-colors"
                             @click="examviewFileInput?.click()"
                         >
-                            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 mb-3">
+                            <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                                 <Archive class="h-6 w-6" />
                             </div>
                             <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas ZIP</span>
-                            <span class="text-[11px] text-slate-500 mt-1">Dukung file format .zip Blackboard 6.0-7.0 (maks. 25MB)</span>
+                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .zip Blackboard 6.0-7.0 (maks. 25MB)</span>
                         </div>
 
-                        <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
+                        <div
+                            v-if="isImportingFile"
+                            class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700"
+                        >
                             <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
                             Sedang mengekstrak dan memproses soal ExamView...
                         </div>
 
-                        <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
+                        <div
+                            v-if="importError"
+                            class="flex gap-2 rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600"
+                        >
                             <span class="font-extrabold">Gagal:</span>
                             <span>{{ importError }}</span>
                         </div>
@@ -3259,24 +3441,25 @@ watch(
 
                 <!-- Word (.docx) Import Tab -->
                 <div v-else class="space-y-4">
-                    <p class="text-sm text-slate-500 leading-relaxed">
-                        Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di bawah ini.
+                    <p class="text-sm leading-relaxed text-slate-500">
+                        Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di
+                        bawah ini.
                     </p>
 
                     <!-- Clean style template download section -->
-                    <div class="flex items-center justify-between rounded-2xl bg-indigo-50/50 border border-indigo-100 p-4">
+                    <div class="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
                         <div class="flex items-center gap-3">
                             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
                                 <FileText class="h-5 w-5" />
                             </div>
                             <div>
                                 <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
-                                <span class="block text-[11px] text-slate-500 font-medium">Format: Soal, Opsi, Kunci</span>
+                                <span class="block text-[11px] font-medium text-slate-500">Format: Soal, Opsi, Kunci</span>
                             </div>
                         </div>
                         <button
                             type="button"
-                            class="flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white border border-indigo-200 px-3.5 py-2 rounded-xl shadow-sm transition hover:bg-slate-50"
+                            class="flex items-center gap-1 rounded-xl border border-indigo-200 bg-white px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-slate-50 hover:text-indigo-900"
                             @click="downloadImportTemplate"
                         >
                             <Download class="h-3.5 w-3.5" />
@@ -3286,34 +3469,40 @@ watch(
 
                     <!-- Import / Upload Box -->
                     <div class="space-y-3">
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block">Unggah Berkas DOCX</label>
-                        <div 
-                            class="flex flex-col items-center justify-center border-2 border-dashed border-slate-250 hover:border-indigo-450 rounded-2xl p-6 bg-slate-50/30 cursor-pointer transition-colors"
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Unggah Berkas DOCX</label>
+                        <div
+                            class="border-slate-250 hover:border-indigo-450 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-slate-50/30 p-6 transition-colors"
                             @click="docxFileInput?.click()"
                         >
-                            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500 mb-3">
+                            <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                                 <UploadCloud class="h-6 w-6" />
                             </div>
                             <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
-                            <span class="text-[11px] text-slate-500 mt-1">Dukung file format .docx (maks. 5MB)</span>
+                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .docx (maks. 5MB)</span>
                         </div>
 
-                        <div v-if="isImportingFile" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700">
+                        <div
+                            v-if="isImportingFile"
+                            class="flex items-center justify-center gap-2 rounded-xl bg-indigo-50/50 p-3 text-xs font-bold text-indigo-700"
+                        >
                             <span class="mb-1 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></span>
                             Sedang mengimpor dan memproses soal...
                         </div>
 
-                        <div v-if="importError" class="rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600 flex gap-2">
+                        <div
+                            v-if="importError"
+                            class="flex gap-2 rounded-xl border border-red-100 bg-red-50/50 p-3.5 text-xs font-semibold text-red-600"
+                        >
                             <span class="font-extrabold">Gagal:</span>
                             <span>{{ importError }}</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex justify-end gap-3 pt-3 border-t border-slate-150">
-                    <button 
-                        type="button" 
-                        class="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition" 
+                <div class="border-slate-150 flex justify-end gap-3 border-t pt-3">
+                    <button
+                        type="button"
+                        class="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                         @click="isImportModalOpen = false"
                     >
                         Batal
@@ -3323,8 +3512,8 @@ watch(
         </div>
 
         <!-- Modal Kolaborasi Kuis (Antar Guru) -->
-        <div v-if="isCollaboratorModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs">
-            <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div v-if="isCollaboratorModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+            <section class="w-full max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-2xl duration-150 animate-in fade-in zoom-in-95">
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex items-center gap-3">
                         <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
@@ -3337,7 +3526,7 @@ watch(
                     </div>
                     <button
                         type="button"
-                        class="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                        class="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                         @click="isCollaboratorModalOpen = false"
                     >
                         <X class="h-5 w-5" />
@@ -3345,8 +3534,8 @@ watch(
                 </div>
 
                 <!-- Info callout: Only teachers -->
-                <div class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs text-indigo-950 flex items-start gap-2.5">
-                    <School class="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div class="flex items-start gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs text-indigo-950">
+                    <School class="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
                     <div class="leading-relaxed">
                         <span class="font-bold">Khusus Antar Guru:</span>
                         Kolaborasi kuis hanya dapat dilakukan antar sesama akun Guru. Akun Murid (Siswa) tidak dapat ditambahkan ke kuis.
@@ -3358,7 +3547,7 @@ watch(
                     <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pemilik Kuis</label>
                     <div class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3">
                         <div class="flex items-center gap-3">
-                            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-800 text-xs">
+                            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">
                                 {{ (props.quizForm?.owner?.name || 'G')[0].toUpperCase() }}
                             </div>
                             <div>
@@ -3380,14 +3569,19 @@ watch(
                         </label>
                     </div>
 
-                    <div v-if="props.quizForm?.collaborators && props.quizForm.collaborators.length > 0" class="max-h-48 overflow-y-auto space-y-2 pr-1">
+                    <div
+                        v-if="props.quizForm?.collaborators && props.quizForm.collaborators.length > 0"
+                        class="max-h-48 space-y-2 overflow-y-auto pr-1"
+                    >
                         <div
                             v-for="collab in props.quizForm.collaborators"
                             :key="collab.id"
-                            class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 hover:border-slate-300 transition"
+                            class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-slate-300"
                         >
-                            <div class="flex items-center gap-3 min-w-0 flex-1">
-                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-700 text-xs">
+                            <div class="flex min-w-0 flex-1 items-center gap-3">
+                                <div
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700"
+                                >
                                     {{ collab.name ? collab.name[0].toUpperCase() : 'G' }}
                                 </div>
                                 <div class="min-w-0 flex-1">
@@ -3395,14 +3589,14 @@ watch(
                                     <div class="truncate text-[11px] text-slate-500">{{ collab.email || '-' }}</div>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0">
+                            <div class="flex shrink-0 items-center gap-2">
                                 <span class="rounded-full border border-indigo-100 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
                                     Editor
                                 </span>
                                 <button
                                     v-if="props.quizForm?.isOwner || currentUser?.is_admin"
                                     type="button"
-                                    class="rounded-lg p-1.5 text-red-500 hover:bg-red-50 transition"
+                                    class="rounded-lg p-1.5 text-red-500 transition hover:bg-red-50"
                                     title="Hapus kolaborator"
                                     @click="removeCollaborator(collab.id, false)"
                                 >
@@ -3411,7 +3605,7 @@ watch(
                                 <button
                                     v-else-if="currentUser?.id === collab.id"
                                     type="button"
-                                    class="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 transition"
+                                    class="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
                                     @click="removeCollaborator(collab.id, true)"
                                 >
                                     Keluar
@@ -3425,33 +3619,30 @@ watch(
                 </div>
 
                 <!-- Section: Form Undang Kolaborator (Hanya untuk Owner / Superadmin) -->
-                <div v-if="props.quizForm?.isOwner || currentUser?.is_admin" class="space-y-3 pt-2 border-t border-slate-100">
-                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-700 block">
-                        Undang Guru Lain
-                    </label>
+                <div v-if="props.quizForm?.isOwner || currentUser?.is_admin" class="space-y-3 border-t border-slate-100 pt-2">
+                    <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-700"> Undang Guru Lain </label>
 
                     <div v-if="props.quizForm?.availableTeachers && props.quizForm.availableTeachers.length > 0" class="space-y-3">
-                        <div class="flex flex-col sm:flex-row gap-2">
+                        <div class="flex flex-col gap-2 sm:flex-row">
                             <select
                                 v-model="selectedTeacherId"
                                 class="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             >
                                 <option value="">-- Pilih akun guru untuk diundang --</option>
-                                <option
-                                    v-for="teacher in props.quizForm.availableTeachers"
-                                    :key="teacher.id"
-                                    :value="teacher.id"
-                                >
+                                <option v-for="teacher in props.quizForm.availableTeachers" :key="teacher.id" :value="teacher.id">
                                     {{ teacher.name }} ({{ teacher.email || 'tanpa email' }})
                                 </option>
                             </select>
                             <button
                                 type="button"
                                 :disabled="!selectedTeacherId || isInvitingCollaborator"
-                                class="flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 transition shadow-xs"
+                                class="shadow-xs flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
                                 @click="inviteCollaborator"
                             >
-                                <span v-if="isInvitingCollaborator" class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                <span
+                                    v-if="isInvitingCollaborator"
+                                    class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                                ></span>
                                 <UserPlus v-else class="h-3.5 w-3.5" />
                                 <span>Undang</span>
                             </button>
@@ -3461,16 +3652,14 @@ watch(
                         </p>
                     </div>
                     <div v-else class="rounded-xl bg-slate-50 p-3 text-center">
-                        <p class="text-xs text-slate-500">
-                            Semua guru telah menjadi kolaborator atau belum ada akun guru lain di sistem.
-                        </p>
+                        <p class="text-xs text-slate-500">Semua guru telah menjadi kolaborator atau belum ada akun guru lain di sistem.</p>
                     </div>
                 </div>
 
-                <div class="flex justify-end pt-2 border-t border-slate-100">
+                <div class="flex justify-end border-t border-slate-100 pt-2">
                     <button
                         type="button"
-                        class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                        class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
                         @click="isCollaboratorModalOpen = false"
                     >
                         Tutup

@@ -11,8 +11,12 @@ use ZipArchive;
 
 class ExamViewImportService
 {
+    public function __construct(
+        protected DocxImportService $docxImportService = new DocxImportService,
+    ) {}
+
     /**
-     * Parse an uploaded ExamView Blackboard export ZIP archive.
+     * Parse an uploaded ExamView Blackboard export ZIP archive (or ZIP containing DOCX).
      *
      * @return array<int, array<string, mixed>>
      *
@@ -39,7 +43,23 @@ class ExamViewImportService
             $xmlContents = $this->findAssessmentXmlFiles($zip);
 
             if (empty($xmlContents)) {
-                throw new \RuntimeException('Berkas ZIP tidak memuat data bank soal ExamView / Blackboard yang valid (tidak ditemukan berkas XML/DAT QTI). Pastikan mengekspor dengan format Blackboard 7.1-9.0 atau Blackboard 6.0-7.0 dari ExamView Test Generator.');
+                // Check if user uploaded a ZIP containing a Word document (.docx)
+                $docxFiles = $this->findDocxFiles($zip);
+                if (! empty($docxFiles)) {
+                    return $this->parseDocxFromZip($zip, $docxFiles);
+                }
+
+                // Collect file names inside ZIP to provide clear, actionable diagnostic
+                $foundFiles = [];
+                for ($i = 0; $i < min($zip->numFiles, 6); $i++) {
+                    $entry = $zip->getNameIndex($i);
+                    if (! str_ends_with($entry, '/')) {
+                        $foundFiles[] = basename($entry);
+                    }
+                }
+                $fileHint = ! empty($foundFiles) ? ' (berkas yang ditemukan di dalam ZIP: '.implode(', ', $foundFiles).')' : '';
+
+                throw new \RuntimeException('Berkas ZIP tidak memuat data bank soal ExamView / Blackboard yang valid'.$fileHint.'. Pastikan mengekspor dengan format Blackboard 7.1-9.0 atau Blackboard 6.0-7.0 dari ExamView Test Generator, atau unggah dokumen Word (.docx).');
             }
 
             $questions = [];
@@ -61,6 +81,58 @@ class ExamViewImportService
     }
 
     /**
+     * Parse questions from a Word (.docx) file found inside the ZIP archive.
+     *
+     * @param  list<string>  $docxEntries
+     * @return list<array<string, mixed>>
+     */
+    protected function parseDocxFromZip(ZipArchive $zip, array $docxEntries): array
+    {
+        $allQuestions = [];
+
+        foreach ($docxEntries as $entryName) {
+            $docxBytes = $zip->getFromName($entryName);
+            if (! $docxBytes) {
+                continue;
+            }
+
+            $tempPath = tempnam(sys_get_temp_dir(), 'ev_docx_').'.docx';
+            file_put_contents($tempPath, $docxBytes);
+
+            try {
+                $questions = $this->docxImportService->parseDocx($tempPath);
+                $allQuestions = array_merge($allQuestions, $questions);
+            } finally {
+                @unlink($tempPath);
+            }
+        }
+
+        if (empty($allQuestions)) {
+            throw new \RuntimeException('Ditemukan berkas Word (.docx) di dalam ZIP, tetapi tidak dapat mengurai butir soal dari dokumen tersebut.');
+        }
+
+        return $allQuestions;
+    }
+
+    /**
+     * Find all .docx files inside the ZIP.
+     *
+     * @return list<string>
+     */
+    protected function findDocxFiles(ZipArchive $zip): array
+    {
+        $docxFiles = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = $zip->getNameIndex($i);
+            if (! str_ends_with($entry, '/') && str_ends_with(strtolower($entry), '.docx') && ! str_starts_with(basename($entry), '~$')) {
+                $docxFiles[] = $entry;
+            }
+        }
+
+        return $docxFiles;
+    }
+
+    /**
      * Find all XML/DAT files containing QTI assessment or pool data in the ZIP.
      *
      * @return list<string>
@@ -75,9 +147,14 @@ class ExamViewImportService
             $entryName = $zip->getNameIndex($i);
             if (strcasecmp(basename($entryName), 'imsmanifest.xml') === 0) {
                 $manifest = $zip->getFromIndex($i);
-                if ($manifest && preg_match_all('/<resource[^>]+href=["\']([^"\']+)["\']/i', $manifest, $m)) {
-                    foreach ($m[1] as $href) {
-                        $preferredHrefs[] = strtolower(basename($href));
+                if ($manifest) {
+                    if (str_starts_with($manifest, "\xFF\xFE") || str_starts_with($manifest, "\xFE\xFF")) {
+                        $manifest = mb_convert_encoding($manifest, 'UTF-8', 'UTF-16');
+                    }
+                    if (preg_match_all('/<(?:resource|file)[^>]+(?:href|bb:file|file)=["\']([^"\']+)["\']/i', $manifest, $m)) {
+                        foreach ($m[1] as $href) {
+                            $preferredHrefs[] = strtolower(basename($href));
+                        }
                     }
                 }
                 break;
@@ -101,6 +178,10 @@ class ExamViewImportService
             $raw = $zip->getFromIndex($i);
             if (! $raw) {
                 continue;
+            }
+
+            if (str_starts_with($raw, "\xFF\xFE") || str_starts_with($raw, "\xFE\xFF")) {
+                $raw = mb_convert_encoding($raw, 'UTF-8', 'UTF-16');
             }
 
             $baseNameLower = strtolower(basename($entryName));
