@@ -30,24 +30,6 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         return Inertia::render('Help');
     })->name('help');
 
-    Route::post('folders', [QuizFolderController::class, 'store'])->name('folders.store');
-    Route::patch('folders/{quizFolder}', [QuizFolderController::class, 'update'])->name('folders.update');
-    Route::delete('folders/{quizFolder}', [QuizFolderController::class, 'destroy'])->name('folders.destroy');
-    Route::get('forms/create/{template?}', [QuizFormController::class, 'create'])->name('forms.create');
-    Route::get('forms/{quizForm:slug}/edit', [QuizFormController::class, 'edit'])->name('forms.edit');
-    Route::post('forms/{quizForm}/duplicate', [QuizFormController::class, 'duplicate'])->name('forms.duplicate');
-    Route::patch('forms/{quizForm}/folder', [QuizFormController::class, 'moveToFolder'])->name('forms.folder');
-    Route::patch('forms/{quizForm}', [QuizFormController::class, 'update'])->name('forms.update');
-    Route::delete('forms/{quizForm}', [QuizFormController::class, 'destroy'])->name('forms.destroy');
-    Route::patch('forms/{quizForm}/restore', [QuizFormController::class, 'restore'])->withTrashed()->name('forms.restore');
-    Route::delete('forms/{quizForm}/force-delete', [QuizFormController::class, 'forceDelete'])->withTrashed()->name('forms.force-delete');
-    Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('forms.media.upload');
-    Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
-    Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
-    Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
-    Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
-    Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
-
     // Developer Support Routes
     Route::post('support/suggestion', [DeveloperSupportController::class, 'storeSuggestion'])->middleware('throttle:10,1')->name('support.suggestion');
     Route::post('support/donate', [DeveloperSupportController::class, 'storeDonation'])->middleware('throttle:10,1')->name('support.donate');
@@ -55,25 +37,30 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('support/stats', [DeveloperSupportController::class, 'getStats'])->middleware('throttle:30,1')->name('support.stats');
     Route::post('support/withdraw', [DeveloperSupportController::class, 'storeWithdrawal'])->middleware('throttle:5,1')->name('support.withdraw');
 
-    // Unlock Request Admin Routes
-    Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
-    Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
-
-    // User Management (Admin Only)
-    Route::middleware('can:admin-only')->group(function (): void {
-        Route::get('users', [UserController::class, 'index'])->name('users.index');
-        Route::post('users', [UserController::class, 'store'])->name('users.store');
-        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
-        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
-        Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
-        Route::post('users/{user}/change-password', [UserController::class, 'changePassword'])->name('users.change-password');
-        Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
-        Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
-        Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
-    });
-
-    // Cohort & Student Management (Teacher & Admin Only)
+    // Forms, Folders & Question Management (Teacher & Admin Only)
     Route::middleware('can:teacher-or-admin')->group(function (): void {
+        Route::post('folders', [QuizFolderController::class, 'store'])->name('folders.store');
+        Route::patch('folders/{quizFolder}', [QuizFolderController::class, 'update'])->name('folders.update');
+        Route::delete('folders/{quizFolder}', [QuizFolderController::class, 'destroy'])->name('folders.destroy');
+        Route::get('forms/create/{template?}', [QuizFormController::class, 'create'])->name('forms.create');
+        Route::get('forms/{quizForm:slug}/edit', [QuizFormController::class, 'edit'])->name('forms.edit');
+        Route::post('forms/{quizForm}/duplicate', [QuizFormController::class, 'duplicate'])->name('forms.duplicate');
+        Route::patch('forms/{quizForm}/folder', [QuizFormController::class, 'moveToFolder'])->name('forms.folder');
+        Route::patch('forms/{quizForm}', [QuizFormController::class, 'update'])->name('forms.update');
+        Route::delete('forms/{quizForm}', [QuizFormController::class, 'destroy'])->name('forms.destroy');
+        Route::patch('forms/{quizForm}/restore', [QuizFormController::class, 'restore'])->withTrashed()->name('forms.restore');
+        Route::delete('forms/{quizForm}/force-delete', [QuizFormController::class, 'forceDelete'])->withTrashed()->name('forms.force-delete');
+        Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('forms.media.upload');
+        Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
+        Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
+        Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
+        Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
+        Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
+
+        // Unlock Request Admin / Teacher Routes
+        Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
+        Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
+
         // Cohort Management Routes
         Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');
         Route::post('cohorts', [CohortController::class, 'store'])->name('cohorts.store');
@@ -93,6 +80,19 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('students/template', [StudentController::class, 'downloadTemplate'])->name('students.template');
         Route::post('students/{student}/reset-password', [StudentController::class, 'resetPassword'])->name('students.reset-password');
         Route::post('students/{student}/change-password', [StudentController::class, 'changePassword'])->name('students.change-password');
+    });
+
+    // User Management (Admin Only)
+    Route::middleware('can:admin-only')->group(function (): void {
+        Route::get('users', [UserController::class, 'index'])->name('users.index');
+        Route::post('users', [UserController::class, 'store'])->name('users.store');
+        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+        Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
+        Route::post('users/{user}/change-password', [UserController::class, 'changePassword'])->name('users.change-password');
+        Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+        Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
+        Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
     });
 });
 

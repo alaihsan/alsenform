@@ -9,36 +9,36 @@ class QuizFolderPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return ! $user->isStudent();
     }
 
     public function view(User $user, QuizFolder $quizFolder): bool
     {
-        return $user->is($quizFolder->user);
+        return ! $user->isStudent() && $user->is($quizFolder->user);
     }
 
     public function create(User $user): bool
     {
-        return true;
+        return ! $user->isStudent();
     }
 
     public function update(User $user, QuizFolder $quizFolder): bool
     {
-        return $user->is($quizFolder->user);
+        return ! $user->isStudent() && $user->is($quizFolder->user);
     }
 
     public function delete(User $user, QuizFolder $quizFolder): bool
     {
-        return $user->is($quizFolder->user);
+        return ! $user->isStudent() && $user->is($quizFolder->user);
     }
 
     public function restore(User $user, QuizFolder $quizFolder): bool
     {
-        return $user->is($quizFolder->user);
+        return ! $user->isStudent() && $user->is($quizFolder->user);
     }
 
     public function forceDelete(User $user, QuizFolder $quizFolder): bool
     {
-        return $user->is($quizFolder->user);
+        return ! $user->isStudent() && $user->is($quizFolder->user);
     }
 }

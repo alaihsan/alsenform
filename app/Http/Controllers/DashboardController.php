@@ -17,6 +17,85 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
+        if ($user->isStudent()) {
+            $userCohortIds = $user->cohorts()->pluck('cohorts.id')->all();
+
+            $forms = QuizForm::query()
+                ->whereNotNull('published_at')
+                ->whereNull('deleted_at')
+                ->where(function ($query) use ($userCohortIds): void {
+                    $query->whereDoesntHave('cohorts');
+                    if (! empty($userCohortIds)) {
+                        $query->orWhereHas('cohorts', function ($q) use ($userCohortIds): void {
+                            $q->whereIn('cohorts.id', $userCohortIds);
+                        });
+                    }
+                })
+                ->with(['user:id,name', 'cohorts:id,name'])
+                ->latest('published_at')
+                ->limit(100)
+                ->get();
+
+            $submittedFormIds = QuizResponse::query()
+                ->where('user_id', $user->id)
+                ->whereIn('quiz_form_id', $forms->pluck('id'))
+                ->pluck('quiz_form_id')
+                ->all();
+
+            $recentForms = $forms->map(function (QuizForm $quizForm) use ($submittedFormIds): array {
+                $hasSubmitted = in_array($quizForm->id, $submittedFormIds, true);
+
+                return [
+                    'id' => $quizForm->id,
+                    'title' => $quizForm->title,
+                    'description' => $quizForm->description ?? '',
+                    'folderId' => null,
+                    'folder' => null,
+                    'slug' => $quizForm->slug,
+                    'editUrl' => '',
+                    'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
+                    'duplicateUrl' => '',
+                    'moveFolderUrl' => '',
+                    'deleteUrl' => '',
+                    'restoreUrl' => '',
+                    'forceDeleteUrl' => '',
+                    'isPublished' => true,
+                    'isTrashed' => false,
+                    'isCollaborator' => false,
+                    'tone' => 'bg-indigo-50',
+                    'stripe' => 'bg-indigo-600',
+                    'accent' => 'bg-indigo-500',
+                    'ownerName' => $quizForm->user?->name ?? 'Guru',
+                    'questionsCount' => count($quizForm->questions ?? []),
+                    'updatedLabel' => $quizForm->published_at?->diffForHumans() ?? '',
+                    'updatedAt' => (string) $quizForm->published_at,
+                    'hasSubmitted' => $hasSubmitted,
+                ];
+            });
+
+            $completedCount = count($submittedFormIds);
+            $totalCount = $forms->count();
+            $pendingCount = max(0, $totalCount - $completedCount);
+
+            return Inertia::render('Dashboard', [
+                'recentForms' => $recentForms,
+                'folders' => [],
+                'createFolderUrl' => '',
+                'stats' => [
+                    'totalForms' => $totalCount,
+                    'publishedForms' => $completedCount,
+                    'totalResponses' => $pendingCount,
+                    'pendingUnlocks' => 0,
+                ],
+                'studentStats' => [
+                    'totalAssigned' => $totalCount,
+                    'completed' => $completedCount,
+                    'pending' => $pendingCount,
+                    'className' => $user->kelas ?? 'Siswa',
+                ],
+            ]);
+        }
+
         $recentForms = QuizForm::query()
             ->withTrashed()
             ->with(['quizFolder', 'user:id,name,email'])

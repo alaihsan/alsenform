@@ -164,6 +164,7 @@ export type RecentForm = {
     isTrashed: boolean;
     isCollaborator?: boolean;
     ownerName?: string;
+    hasSubmitted?: boolean;
 };
 
 export type QuizFolder = {

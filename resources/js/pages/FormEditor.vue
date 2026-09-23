@@ -238,9 +238,9 @@ const removeCollaborator = (collaboratorId: number, isSelf = false) => {
 const statusMessage = ref('All changes saved locally');
 const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
-const appOrigin = ref(typeof window === 'undefined' ? 'http://172.16.0.208:8000' : window.location.origin);
+const appOrigin = ref(typeof window === 'undefined' ? '' : window.location.origin);
 const publicSlug = ref(props.quizForm?.slug ?? 'untitled-form');
-const publicUrl = ref(props.quizForm?.publicUrl ?? `${appOrigin.value}/forms/untitled-form`);
+const publicUrl = ref(props.quizForm?.publicUrl ?? (appOrigin.value ? `${appOrigin.value}/forms/untitled-form` : '/forms/untitled-form'));
 const slugWarning = ref('');
 const isSaving = ref(false);
 const isPublished = ref(props.quizForm?.isPublished ?? false);

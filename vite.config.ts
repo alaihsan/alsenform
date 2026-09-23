@@ -1,9 +1,22 @@
 import vue from '@vitejs/plugin-vue';
 import autoprefixer from 'autoprefixer';
 import laravel from 'laravel-vite-plugin';
+import os from 'os';
 import path from 'path';
 import tailwindcss from 'tailwindcss';
 import { defineConfig, loadEnv } from 'vite';
+
+function getLocalIp(): string {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name] || []) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+}
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
@@ -12,7 +25,7 @@ export default defineConfig(({ mode }) => {
         server: {
             host: '0.0.0.0',
             hmr: {
-                host: env.VITE_HMR_HOST || '172.16.0.208',
+                host: env.VITE_HMR_HOST || getLocalIp(),
             },
             cors: true,
         },

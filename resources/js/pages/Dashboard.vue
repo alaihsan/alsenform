@@ -22,6 +22,7 @@ import {
     Trash2,
     Users,
     BookOpen,
+    Check,
     X,
 } from 'lucide-vue-next';
 import { computed, ref, onMounted } from 'vue';
@@ -54,7 +55,21 @@ const props = defineProps<{
         totalResponses: number;
         pendingUnlocks: number;
     };
+    studentStats?: {
+        totalAssigned: number;
+        completed: number;
+        pending: number;
+        className: string;
+    };
 }>();
+
+const page = usePage<any>();
+const user = computed(() => page.props.auth?.user);
+const isStudent = computed(() => {
+    const u = user.value;
+    if (!u) return false;
+    return u.role === 'siswa' || u.role === 'murid' || (!u.is_admin && u.role !== 'guru' && !!u.nis);
+});
 
 const dashboardStats = computed(() => props.stats ?? {
     totalForms: props.recentForms.filter((f) => !f.isTrashed).length,
@@ -66,7 +81,7 @@ const dashboardStats = computed(() => props.stats ?? {
 const showTemplateHint = ref(false);
 const searchQuery = ref('');
 const viewMode = ref<'grid' | 'list'>('grid');
-const statusFilter = ref<'all' | 'published' | 'draft' | 'trash'>('all');
+const statusFilter = ref<'all' | 'published' | 'draft' | 'trash' | 'pending' | 'completed'>('all');
 const folderFilter = ref<number | ''>('');
 const sortDirection = ref<'desc' | 'asc'>('desc');
 const isAppsOpen = ref(false);
@@ -90,9 +105,19 @@ const filteredRecentForms = computed(() => {
     const filtered = props.recentForms.filter((form) => {
         const matchesSearch =
             !normalizedSearchQuery.value ||
-            [form.title, form.description, form.updatedLabel, form.folder ?? ''].some((value) =>
+            [form.title, form.description, form.updatedLabel, form.folder ?? '', form.ownerName ?? ''].some((value) =>
                 value.toLowerCase().includes(normalizedSearchQuery.value),
             );
+
+        if (isStudent.value) {
+            const matchesStudentStatus =
+                statusFilter.value === 'all' ||
+                (statusFilter.value === 'pending' && !form.hasSubmitted) ||
+                (statusFilter.value === 'completed' && form.hasSubmitted);
+
+            return matchesSearch && matchesStudentStatus;
+        }
+
         const matchesStatus =
             (statusFilter.value === 'all' && !form.isTrashed) ||
             (statusFilter.value === 'published' && form.isPublished && !form.isTrashed) ||
@@ -113,6 +138,17 @@ const filteredRecentForms = computed(() => {
 
 const visibleTemplates = computed(() => (isTemplateGalleryOpen.value ? formTemplates : formTemplates.slice(0, 3)));
 const statusFilterLabel = computed(() => {
+    if (isStudent.value) {
+        if (statusFilter.value === 'pending') {
+            return 'Belum Dikerjakan';
+        }
+        if (statusFilter.value === 'completed') {
+            return 'Sudah Dikerjakan';
+        }
+
+        return 'Semua Kuis';
+    }
+
     if (statusFilter.value === 'published') {
         return 'Published';
     }
@@ -430,8 +466,6 @@ function goHome(): void {
 // ==========================================
 // DEVELOPER SUPPORT & PROFILE SETTINGS LOGIC
 // ==========================================
-const page = usePage<any>();
-const user = computed(() => page.props.auth.user);
 
 // Modals reactive states
 const isProfileModalOpen = ref(false);
@@ -1025,7 +1059,7 @@ function closeDonationModal(): void {
             </div>
         </header>
 
-        <section class="bg-slate-100/80">
+        <section v-if="!isStudent" class="bg-slate-100/80">
             <div class="mx-auto max-w-[1180px] px-4 py-4 sm:px-6">
                 <label class="mb-4 flex h-10 items-center gap-3 rounded-full bg-white px-4 text-slate-500 shadow-sm md:hidden">
                     <Search class="h-5 w-5" />
@@ -1116,7 +1150,55 @@ function closeDonationModal(): void {
 
         <!-- QUICK STATS BAR -->
         <section v-if="!searchQuery.trim()" class="mx-auto max-w-[1180px] px-4 pt-5 pb-1 sm:px-6">
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <!-- Student Stats Bar -->
+            <div v-if="isStudent" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <!-- Stat 1: Total Kuis -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                        <ClipboardList class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Total Soal & Kuis</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ studentStats?.totalAssigned ?? recentForms.length }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 2: Sudah Dikerjakan -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                        <Award class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Sudah Dikerjakan</p>
+                        <p class="text-lg font-bold text-emerald-600 leading-tight">{{ studentStats?.completed ?? 0 }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 3: Belum Dikerjakan -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                        <FilePenLine class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Belum Dikerjakan</p>
+                        <p class="text-lg font-bold text-amber-600 leading-tight">{{ studentStats?.pending ?? 0 }}</p>
+                    </div>
+                </div>
+
+                <!-- Stat 4: Kelas Siswa -->
+                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                        <GraduationCap class="h-5 w-5" />
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-slate-500 truncate">Kelas Siswa</p>
+                        <p class="text-lg font-bold text-slate-800 leading-tight truncate">{{ studentStats?.className || user?.kelas || 'Siswa' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teacher / Admin Stats Bar -->
+            <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <!-- Stat 1: Total Kuis -->
                 <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
@@ -1186,15 +1268,19 @@ function closeDonationModal(): void {
             <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-base font-semibold">
-                        Recent forms
+                        {{ isStudent ? 'Daftar Soal & Kuis' : 'Recent forms' }}
                         <span v-if="filteredRecentForms.length" class="text-xs font-normal text-slate-500">({{ filteredRecentForms.length }})</span>
                     </h2>
                     <p v-if="searchQuery.trim()" class="mt-1 text-sm font-medium text-slate-500">
                         Menampilkan hasil pencarian: <span class="text-slate-800">"{{ searchQuery.trim() }}"</span>
                     </p>
+                    <p v-else-if="isStudent" class="mt-0.5 text-xs text-slate-500">
+                        Pilih kuis di bawah ini untuk mulai mengerjakan soal ujian
+                    </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3 text-slate-600">
                     <button
+                        v-if="!isStudent"
                         type="button"
                         aria-label="Create folder"
                         class="flex h-9 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -1205,6 +1291,17 @@ function closeDonationModal(): void {
                     </button>
                     <div class="relative">
                         <select
+                            v-if="isStudent"
+                            v-model="statusFilter"
+                            class="h-9 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                            aria-label="Filter kuis"
+                        >
+                            <option value="all">Semua Kuis</option>
+                            <option value="pending">Belum Dikerjakan</option>
+                            <option value="completed">Sudah Dikerjakan</option>
+                        </select>
+                        <select
+                            v-else
                             v-model="statusFilter"
                             class="h-9 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                             aria-label="Filter forms"
@@ -1216,6 +1313,7 @@ function closeDonationModal(): void {
                         </select>
                     </div>
                     <select
+                        v-if="!isStudent"
                         v-model="folderFilter"
                         class="h-9 max-w-40 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                         aria-label="Filter folders"
@@ -1241,7 +1339,7 @@ function closeDonationModal(): void {
                     >
                         <AArrowDown :class="['h-6 w-6 transition-transform', sortDirection === 'asc' ? 'rotate-180' : '']" />
                     </button>
-                    <button type="button" aria-label="Back to all folders" class="rounded-full p-1.5 hover:bg-slate-100" @click="folderFilter = ''">
+                    <button v-if="!isStudent" type="button" aria-label="Back to all folders" class="rounded-full p-1.5 hover:bg-slate-100" @click="folderFilter = ''">
                         <Folder class="h-7 w-7" />
                     </button>
                 </div>
@@ -1299,7 +1397,7 @@ function closeDonationModal(): void {
                 </button>
             </div>
 
-            <div v-if="folders.length" class="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <div v-if="!isStudent && folders.length" class="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
                 <article
                     v-for="folder in folders"
                     :key="folder.id"
@@ -1368,16 +1466,21 @@ function closeDonationModal(): void {
                 <article
                     v-for="form in filteredRecentForms"
                     :key="form.id"
-                    :draggable="!form.isTrashed"
+                    :draggable="!isStudent && !form.isTrashed"
                     :class="[
                         'relative overflow-visible rounded-xl border border-slate-300 bg-white transition hover:-translate-y-0.5 hover:shadow-lg',
                         viewMode === 'list' ? 'flex items-stretch' : '',
-                        !form.isTrashed ? 'cursor-grab active:cursor-grabbing' : '',
+                        !isStudent && !form.isTrashed ? 'cursor-grab active:cursor-grabbing' : '',
                     ]"
-                    @dragstart="startDraggingForm(form, $event)"
-                    @dragend="endDraggingForm"
+                    @dragstart="!isStudent && startDraggingForm(form, $event)"
+                    @dragend="!isStudent && endDraggingForm()"
                 >
-                    <Link v-if="!form.isTrashed" :href="form.editUrl" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
+                    <!-- For Student: Click card to OPEN / TAKE QUIZ -->
+                    <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block cursor-pointer']">
+                        <FormCardPreview :form="form" :view-mode="viewMode" />
+                    </a>
+                    <!-- For Teacher: Click card to EDIT -->
+                    <Link v-else-if="!form.isTrashed" :href="form.editUrl" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
                         <FormCardPreview :form="form" :view-mode="viewMode" />
                     </Link>
                     <div v-else :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
@@ -1389,66 +1492,98 @@ function closeDonationModal(): void {
                     >
                         <div class="min-w-0 flex-1">
                             <div class="mb-2 flex items-center justify-between gap-2">
-                                <Link v-if="!form.isTrashed" :href="form.editUrl" class="min-w-0">
+                                <!-- Title for Student -->
+                                <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" class="min-w-0">
+                                    <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-indigo-600" :title="form.title" dir="auto">
+                                        {{ form.title }}
+                                    </h3>
+                                </a>
+                                <!-- Title for Teacher -->
+                                <Link v-else-if="!form.isTrashed" :href="form.editUrl" class="min-w-0">
                                     <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title" dir="auto">
                                         {{ form.title }}
                                     </h3>
                                 </Link>
                                 <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title" dir="auto">{{ form.title }}</h3>
                                 <div class="flex items-center gap-1.5 shrink-0">
-                                    <span
-                                        v-if="form.isCollaborator"
-                                        class="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700"
-                                        title="Anda berkolaborasi pada kuis ini"
-                                    >
-                                        Kolaborasi
-                                    </span>
-                                    <span
-                                        v-if="form.questionsCount !== undefined"
-                                        class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600"
-                                        :title="form.questionsCount + ' butir soal'"
-                                    >
-                                        {{ form.questionsCount }} Soal
-                                    </span>
-                                    <span
-                                        :class="[
-                                            'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-                                            form.isTrashed
-                                                ? 'border border-slate-200 bg-slate-100 text-slate-600'
-                                                : form.isPublished
-                                                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                                                  : 'border border-amber-200 bg-amber-50 text-amber-700',
-                                        ]"
-                                    >
-                                        {{ form.isTrashed ? 'Trash' : form.isPublished ? 'Published' : 'Draft' }}
-                                    </span>
+                                    <!-- Badges -->
+                                    <template v-if="isStudent">
+                                        <span
+                                            v-if="form.hasSubmitted"
+                                            class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+                                        >
+                                            Sudah Dikerjakan
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                                        >
+                                            Belum Dikerjakan
+                                        </span>
+                                    </template>
+                                    <template v-else>
+                                        <span
+                                            v-if="form.isCollaborator"
+                                            class="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700"
+                                            title="Anda berkolaborasi pada kuis ini"
+                                        >
+                                            Kolaborasi
+                                        </span>
+                                        <span
+                                            v-if="form.questionsCount !== undefined"
+                                            class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600"
+                                            :title="form.questionsCount + ' butir soal'"
+                                        >
+                                            {{ form.questionsCount }} Soal
+                                        </span>
+                                        <span
+                                            :class="[
+                                                'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                                                form.isTrashed
+                                                    ? 'border border-slate-200 bg-slate-100 text-slate-600'
+                                                    : form.isPublished
+                                                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                      : 'border border-amber-200 bg-amber-50 text-amber-700',
+                                            ]"
+                                        >
+                                            {{ form.isTrashed ? 'Trash' : form.isPublished ? 'Published' : 'Draft' }}
+                                        </span>
+                                    </template>
                                 </div>
                             </div>
-                            <div class="flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500">
-                                <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
-                                    <ClipboardList class="h-3.5 w-3.5" />
-                                </span>
-                                <Users class="h-4 w-4 shrink-0" />
-                                <span
-                                    class="min-w-0 flex-1 truncate text-[11px]"
-                                    :title="'Terakhir diperbarui: ' + form.updatedLabel"
-                                >
-                                    {{ form.updatedLabel ? form.updatedLabel.replace(/^Opened\s+/i, '') : '' }}
-                                </span>
-                                <span
-                                    v-if="form.isCollaborator && form.ownerName"
-                                    class="max-w-28 shrink truncate rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700"
-                                    :title="'Pemilik: ' + form.ownerName"
-                                >
-                                    Oleh: {{ form.ownerName }}
-                                </span>
-                                <span
-                                    v-if="form.folder && !form.isTrashed"
-                                    class="max-w-20 shrink truncate rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
-                                >
-                                    {{ form.folder }}
-                                </span>
-                                <div class="relative shrink-0">
+                            <div class="flex min-w-0 items-center justify-between gap-1.5 text-xs font-medium text-slate-500">
+                                <div class="flex min-w-0 items-center gap-1.5 truncate">
+                                    <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
+                                        <ClipboardList class="h-3.5 w-3.5" />
+                                    </span>
+                                    <span v-if="isStudent && form.ownerName" class="truncate text-[11px] text-slate-600 font-semibold">
+                                        Guru: {{ form.ownerName }}
+                                    </span>
+                                    <span v-else class="truncate text-[11px]">
+                                        {{ form.updatedLabel ? form.updatedLabel.replace(/^Opened\s+/i, '') : '' }}
+                                    </span>
+                                </div>
+
+                                <!-- Action button for Student -->
+                                <div v-if="isStudent" class="shrink-0">
+                                    <a
+                                        :href="form.publicUrl"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        :class="[
+                                            'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition shadow-xs',
+                                            form.hasSubmitted
+                                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                        ]"
+                                    >
+                                        <ExternalLink class="h-3.5 w-3.5" />
+                                        {{ form.hasSubmitted ? 'Lihat Soal' : 'Kerjakan' }}
+                                    </a>
+                                </div>
+
+                                <!-- Teacher Menu -->
+                                <div v-else class="relative shrink-0">
                                     <button
                                         type="button"
                                         aria-label="More options"
@@ -1559,15 +1694,19 @@ function closeDonationModal(): void {
             <div v-else class="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
                 <ClipboardList class="mx-auto h-10 w-10 text-slate-400" />
                 <h3 class="mt-4 text-lg font-semibold text-slate-700">
-                    {{ searchQuery.trim() ? `Quiz "${searchQuery.trim()}" tidak tersedia` : 'Belum ada recent form' }}
+                    {{
+                        searchQuery.trim()
+                            ? (isStudent ? `Kuis "${searchQuery.trim()}" tidak ditemukan` : `Quiz "${searchQuery.trim()}" tidak tersedia`)
+                            : (isStudent ? 'Belum ada kuis yang ditugaskan' : 'Belum ada recent form')
+                    }}
                 </h3>
                 <p class="mt-2 text-sm text-slate-500">
                     {{
                         searchQuery.trim()
-                            ? 'Coba kata kunci lain atau buat quiz baru dari template.'
-                            : statusFilter === 'all'
-                              ? 'Buat form dari blank form atau template, lalu form akan muncul di sini.'
-                              : `Tidak ada form dengan status ${statusFilterLabel}.`
+                            ? (isStudent ? 'Coba gunakan kata kunci pencarian lain.' : 'Coba kata kunci lain atau buat quiz baru dari template.')
+                            : isStudent
+                              ? 'Saat guru menugaskan atau mempublikasikan kuis untuk kelas Anda, kuis akan muncul di sini untuk dikerjakan.'
+                              : (statusFilter === 'all' ? 'Buat form dari blank form atau template, lalu form akan muncul di sini.' : `Tidak ada form dengan status ${statusFilterLabel}.`)
                     }}
                 </p>
             </div>

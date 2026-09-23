@@ -115,7 +115,11 @@ class User extends Authenticatable
      */
     public function isStudent(): bool
     {
-        return $this->role === 'siswa' || ! empty($this->nis);
+        if ($this->isAdmin() || $this->role === 'guru') {
+            return false;
+        }
+
+        return $this->role === 'siswa' || $this->role === 'murid' || ! empty($this->nis);
     }
 
     /**

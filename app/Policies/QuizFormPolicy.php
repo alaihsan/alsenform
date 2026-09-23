@@ -14,31 +14,31 @@ class QuizFormPolicy
 
     public function view(User $user, QuizForm $quizForm): bool
     {
-        return $quizForm->canBeEditedBy($user);
+        return ! $user->isStudent() && $quizForm->canBeEditedBy($user);
     }
 
     public function create(User $user): bool
     {
-        return true;
+        return ! $user->isStudent();
     }
 
     public function update(User $user, QuizForm $quizForm): bool
     {
-        return $quizForm->canBeEditedBy($user);
+        return ! $user->isStudent() && $quizForm->canBeEditedBy($user);
     }
 
     public function delete(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user) || $user->isAdmin();
+        return ! $user->isStudent() && ($user->is($quizForm->user) || $user->isAdmin());
     }
 
     public function restore(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user) || $user->isAdmin();
+        return ! $user->isStudent() && ($user->is($quizForm->user) || $user->isAdmin());
     }
 
     public function forceDelete(User $user, QuizForm $quizForm): bool
     {
-        return $user->is($quizForm->user) || $user->isAdmin();
+        return ! $user->isStudent() && ($user->is($quizForm->user) || $user->isAdmin());
     }
 }
