@@ -15,7 +15,8 @@ class ServeLanCommand extends Command
     protected $signature = 'lan:serve 
                             {--port=8000 : Port untuk menjalankan server}
                             {--host=0.0.0.0 : Host binding address}
-                            {--build : Build asset Vite sebelum menjalankan server}';
+                            {--build : Build asset Vite sebelum menjalankan server}
+                            {--force : Hentikan proses yang sedang menggunakan port yang dipilih}';
 
     /**
      * The console command description.
@@ -46,6 +47,14 @@ class ServeLanCommand extends Command
             }
         }
 
+        if ($this->isPortInUse($port, $host)) {
+            $resolvedPort = $this->resolveBusyPort($port, $host);
+            if ($resolvedPort === null) {
+                return self::FAILURE;
+            }
+            $port = $resolvedPort;
+        }
+
         $interfaces = $this->detectNetworkInterfaces();
         $hostname = $this->detectLocalHostName();
 
@@ -64,11 +73,174 @@ class ServeLanCommand extends Command
         $process = new Process($command, base_path(), null, null, null);
         $process->setTty(Process::isTtySupported());
 
-        $process->run(function ($type, $buffer): void {
-            $this->output->write($buffer);
-        });
+        $cleanup = function () use ($process, $port): void {
+            if ($process->isRunning()) {
+                $process->stop(1, SIGINT);
+            }
+            $this->killPortProcesses($port);
+        };
+
+        if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+            pcntl_async_signals(true);
+            pcntl_signal(SIGINT, function () use ($cleanup): void {
+                $cleanup();
+                exit(0);
+            });
+            pcntl_signal(SIGTERM, function () use ($cleanup): void {
+                $cleanup();
+                exit(0);
+            });
+        }
+
+        try {
+            $process->run(function ($type, $buffer): void {
+                $this->output->write($buffer);
+            });
+        } finally {
+            $cleanup();
+        }
 
         return $process->getExitCode() ?? self::SUCCESS;
+    }
+
+    /**
+     * Check if a specific port is already in use.
+     */
+    public function isPortInUse(int $port, string $host = '127.0.0.1'): bool
+    {
+        $testHost = in_array($host, ['0.0.0.0', '::', ''], true) ? '127.0.0.1' : $host;
+        $connection = @fsockopen($testHost, $port, $errno, $errstr, 0.2);
+
+        if (is_resource($connection)) {
+            fclose($connection);
+
+            return true;
+        }
+
+        $output = @shell_exec("lsof -ti :{$port} 2>/dev/null");
+
+        return ! empty(trim((string) $output));
+    }
+
+    /**
+     * Retrieve process IDs listening on the given port.
+     *
+     * @return array<int, string>
+     */
+    public function getPortPids(int $port): array
+    {
+        $output = @shell_exec("lsof -ti :{$port} 2>/dev/null");
+        if (! $output) {
+            return [];
+        }
+
+        $pids = array_filter(array_map('trim', explode("\n", (string) $output)));
+
+        return array_values(array_unique($pids));
+    }
+
+    /**
+     * Terminate processes listening on the given port.
+     */
+    public function killPortProcesses(int $port): bool
+    {
+        $pids = $this->getPortPids($port);
+        if (empty($pids)) {
+            return true;
+        }
+
+        foreach ($pids as $pid) {
+            if (is_numeric($pid)) {
+                @shell_exec("kill -9 {$pid} 2>/dev/null");
+            }
+        }
+
+        usleep(250 * 1000);
+
+        return ! $this->isPortInUse($port);
+    }
+
+    /**
+     * Find the next available port.
+     */
+    public function findAvailablePort(int $startPort, int $maxTries = 10): int
+    {
+        for ($i = 0; $i < $maxTries; $i++) {
+            $candidate = $startPort + $i;
+            if (! $this->isPortInUse($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $startPort;
+    }
+
+    /**
+     * Resolve action when requested port is already busy.
+     */
+    protected function resolveBusyPort(int $port, string $host): ?int
+    {
+        $pids = $this->getPortPids($port);
+        $pidStr = ! empty($pids) ? ' (PID: '.implode(', ', $pids).')' : '';
+
+        if ($this->option('force')) {
+            $this->warn("⚠️  Port {$port} sedang digunakan{$pidStr}. Menghentikan proses lama (--force)...");
+            if ($this->killPortProcesses($port)) {
+                $this->info("✓ Port {$port} berhasil dibebaskan.");
+
+                return $port;
+            }
+            $this->error("Gagal menghentikan proses pada port {$port}.");
+
+            return null;
+        }
+
+        if ($this->input->isInteractive()) {
+            $this->newLine();
+            $this->warn("⚠️  Port {$port} sedang digunakan oleh proses lain{$pidStr}.");
+
+            if ($this->confirm("Apakah Anda ingin menghentikan proses lama tersebut dan melanjutkan di port {$port}?", true)) {
+                $this->info("Menghentikan proses lama pada port {$port}...");
+                if ($this->killPortProcesses($port)) {
+                    $this->info("✓ Port {$port} berhasil dibebaskan.");
+
+                    return $port;
+                }
+                $this->error("Gagal menghentikan proses pada port {$port}.");
+
+                return null;
+            }
+
+            if ($this->confirm('Gunakan port alternatif berikutnya yang tersedia?', true)) {
+                $availablePort = $this->findAvailablePort($port + 1);
+                $this->info("Mengalihkan ke port {$availablePort}...");
+
+                return $availablePort;
+            }
+
+            $this->error('Server dibatalkan.');
+
+            return null;
+        }
+
+        if (! $this->hasExplicitOption('port')) {
+            $availablePort = $this->findAvailablePort($port + 1);
+            $this->warn("⚠️  Port {$port} sedang digunakan. Otomatis beralih ke port {$availablePort}.");
+
+            return $availablePort;
+        }
+
+        $this->error("Port {$port} sedang digunakan{$pidStr}. Gunakan opsi --force untuk menghentikannya atau tentukan port lain dengan --port.");
+
+        return null;
+    }
+
+    /**
+     * Determine if an option was explicitly specified on the command line.
+     */
+    protected function hasExplicitOption(string $name): bool
+    {
+        return $this->input->hasParameterOption("--{$name}");
     }
 
     /**
