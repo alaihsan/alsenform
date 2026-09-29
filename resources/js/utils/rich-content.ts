@@ -4,7 +4,8 @@ import katex from 'katex';
 export const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
 // Match continuous Arabic words, numbers, and Quranic punctuation
-export const ARABIC_BLOCK_REGEX = /([\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0660-\u0669\s\(\)\[\]\{\}\uFD3E\uFD3F\u06DD\u06DE\u06D6-\u06ED]+)/g;
+export const ARABIC_BLOCK_REGEX =
+    /([\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0660-\u0669\s\(\)\[\]\{\}\uFD3E\uFD3F\u06DD\u06DE\u06D6-\u06ED]+)/g;
 
 /**
  * Checks if a string contains any Arabic or Quranic script.
@@ -30,11 +31,11 @@ export function isPredominantlyArabic(text?: string | null): boolean {
     if (!text) return false;
     const clean = text.replace(/<[^>]+>/g, '').trim();
     if (!clean) return false;
-    
+
     // Count Arabic characters vs Latin characters
     const arabicMatches = clean.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || [];
     const latinMatches = clean.match(/[a-zA-Z]/g) || [];
-    
+
     return arabicMatches.length > latinMatches.length;
 }
 
@@ -42,12 +43,7 @@ export function isPredominantlyArabic(text?: string | null): boolean {
  * Escape HTML special characters for safe rendering.
  */
 function escapeHtml(str: string): string {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 /**
@@ -60,7 +56,7 @@ export function renderLatex(latex: string, displayMode: boolean = false): string
             throwOnError: false,
             output: 'htmlAndMathml',
             strict: false,
-            trust: true,
+            trust: false,
         });
     } catch {
         return `<span class="katex-error text-red-500 font-mono text-xs">${escapeHtml(latex)}</span>`;
@@ -114,13 +110,16 @@ export function formatRichContent(rawContent?: string | null): string {
             return `<span class="inline-math px-0.5">${renderLatex(math, false)}</span>`;
         }
 
-        // It's regular text or HTML: process Arabic Quran characters
-        if (hasArabic(part)) {
+        // User-provided text must never become HTML. Only KaTeX and the
+        // controlled Arabic wrappers generated below are rendered as markup.
+        const escapedPart = escapeHtml(part);
+
+        if (hasArabic(escapedPart)) {
             // If the whole block is predominantly Arabic, wrap whole block or words in font-quran
-            return processArabicText(part);
+            return processArabicText(escapedPart);
         }
 
-        return part;
+        return escapedPart;
     });
 
     return formattedParts.join('');
@@ -130,31 +129,10 @@ export function formatRichContent(rawContent?: string | null): string {
  * Wrap Arabic segments in authentic Quran Madinah font typography.
  */
 function processArabicText(text: string): string {
-    // If text already has HTML tags, avoid breaking tags while wrapping Arabic text
-    const htmlTagRegex = /(<[^>]+>)/g;
-    const tokens = text.split(htmlTagRegex);
+    return text.replace(ARABIC_BLOCK_REGEX, (match) => {
+        const trimmed = match.trim();
+        if (!trimmed || !hasArabic(trimmed)) return match;
 
-    return tokens
-        .map((token) => {
-            if (!token) return '';
-            // Don't touch existing HTML tags
-            if (token.startsWith('<') && token.endsWith('>')) {
-                return token;
-            }
-
-            // Wrap Arabic character sequences with .font-quran
-            if (hasArabic(token)) {
-                return token.replace(
-                    ARABIC_BLOCK_REGEX,
-                    (match) => {
-                        const trimmed = match.trim();
-                        if (!trimmed || !hasArabic(trimmed)) return match;
-                        return `<span class="font-quran text-[1.25em] leading-[2.2] tracking-wide inline-block px-1 align-baseline select-text" dir="rtl">${match}</span>`;
-                    }
-                );
-            }
-
-            return token;
-        })
-        .join('');
+        return `<span class="font-quran text-[1.25em] leading-[2.2] tracking-wide inline-block px-1 align-baseline select-text" dir="rtl">${match}</span>`;
+    });
 }

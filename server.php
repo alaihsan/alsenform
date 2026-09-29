@@ -4,17 +4,30 @@
  * Laravel - A PHP Framework For Web Artisans
  * Emulate Apache/Nginx mod_rewrite for PHP CLI Built-in Web Server.
  */
+$publicPath = realpath(__DIR__.'/public');
+$publicStoragePath = realpath(__DIR__.'/storage/app/public');
 
-$publicPath = __DIR__.'/public';
-
-$uri = urldecode(
+$uri = rawurldecode(
     parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? ''
 );
 
-$filePath = $publicPath.$uri;
+$filePath = realpath($publicPath.'/'.ltrim($uri, '/'));
+
+/**
+ * Determine whether a resolved file remains inside an explicitly public directory.
+ */
+$isPublicFile = static function (string $path) use ($publicPath, $publicStoragePath): bool {
+    foreach (array_filter([$publicPath, $publicStoragePath]) as $allowedPath) {
+        if ($path === $allowedPath || str_starts_with($path, $allowedPath.DIRECTORY_SEPARATOR)) {
+            return true;
+        }
+    }
+
+    return false;
+};
 
 // If the requested URI exists as a static file in public/, stream it directly with proper MIME type
-if ($uri !== '/' && file_exists($filePath) && ! is_dir($filePath)) {
+if ($uri !== '/' && $filePath !== false && is_file($filePath) && $isPublicFile($filePath) && pathinfo($filePath, PATHINFO_EXTENSION) !== 'php') {
     $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
     $mimeTypes = [

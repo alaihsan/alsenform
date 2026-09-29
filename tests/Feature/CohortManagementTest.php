@@ -100,6 +100,23 @@ test('teacher can sync cohorts automatically from existing classes', function ()
         ->and($c9a->users()->count())->toBe(1);
 });
 
+test('teacher cannot sync into cohorts owned by another teacher', function () {
+    $owner = User::factory()->create(['role' => 'guru', 'is_admin' => false]);
+    $otherTeacher = User::factory()->create(['role' => 'guru', 'is_admin' => false]);
+    $student = User::factory()->create(['role' => 'siswa', 'kelas' => '9A']);
+    $cohort = Cohort::create([
+        'name' => 'Cohort 9A',
+        'code' => 'KLS-9A',
+        'created_by' => $owner->id,
+    ]);
+
+    $this->actingAs($otherTeacher)
+        ->post(route('cohorts.sync-from-classes'))
+        ->assertForbidden();
+
+    expect($cohort->users()->whereKey($student)->exists())->toBeFalse();
+});
+
 test('teacher can add and remove members from a cohort', function () {
     $teacher = User::factory()->create(['role' => 'guru', 'is_admin' => false]);
     $this->actingAs($teacher);

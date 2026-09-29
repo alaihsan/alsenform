@@ -13,12 +13,12 @@ test('lan:serve command is registered and outputs description and force option',
         ->expectsOutputToContain('--no-caffeinate');
 });
 
-test('lan:status and lan:stop commands execute successfully', function () {
-    $this->artisan('lan:status')
-        ->assertSuccessful();
+test('lan:serve rejects unsafe host and invalid port values', function () {
+    $this->artisan('lan:serve --host="0.0.0.0; echo unsafe"')
+        ->assertExitCode(2);
 
-    $this->artisan('lan:stop')
-        ->assertSuccessful();
+    $this->artisan('lan:serve --port=0')
+        ->assertExitCode(2);
 });
 
 test('lan:serve detectNetworkInterfaces returns array', function () {

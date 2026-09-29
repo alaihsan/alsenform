@@ -275,7 +275,7 @@ class CohortController extends Controller
     /**
      * Automatically sync/create cohorts from existing student classes in 1-click.
      */
-    public function syncFromClasses(): RedirectResponse
+    public function syncFromClasses(Request $request): RedirectResponse
     {
         Gate::authorize('teacher-or-admin');
         $classes = User::query()
@@ -291,23 +291,33 @@ class CohortController extends Controller
 
         $createdCount = 0;
         $attachedTotal = 0;
+        $cohortCodes = $classes
+            ->map(fn (string $className): string => 'KLS-'.Str::upper(Str::slug($className, '-')))
+            ->all();
+        $existingCohorts = Cohort::query()
+            ->whereIn('code', $cohortCodes)
+            ->get()
+            ->keyBy('code');
+
+        foreach ($existingCohorts as $cohort) {
+            $this->authorizeCohortManagement($request, $cohort);
+        }
 
         foreach ($classes as $className) {
             $code = 'KLS-'.Str::upper(Str::slug($className, '-'));
-            $cohort = Cohort::firstOrCreate(
-                ['code' => $code],
-                [
+            $cohort = $existingCohorts->get($code);
+
+            if (! $cohort) {
+                $cohort = Cohort::create([
+                    'code' => $code,
                     'name' => "Cohort {$className}",
                     'description' => "Cohort otomatis untuk murid {$className}",
                     'created_by' => Auth::id(),
-                ]
-            );
-
-            if ($cohort->wasRecentlyCreated) {
+                ]);
                 $createdCount++;
             }
 
-            $studentIds = User::where('kelas', $className)->pluck('id');
+            $studentIds = User::query()->students()->where('kelas', $className)->pluck('id');
             if ($studentIds->isNotEmpty()) {
                 $cohort->users()->syncWithoutDetaching($studentIds);
                 $attachedTotal += $studentIds->count();
