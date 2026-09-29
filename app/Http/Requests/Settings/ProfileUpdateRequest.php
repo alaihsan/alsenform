@@ -19,14 +19,19 @@ class ProfileUpdateRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => [
-                'required',
+                $this->user()->isAdmin() ? 'required' : 'nullable',
                 'string',
                 'lowercase',
                 'email',
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
             ],
-            'nip' => ['nullable', 'string', 'max:50'],
+            'nip' => [
+                $this->user()->isTeacher() ? 'required' : 'nullable',
+                'string',
+                'max:50',
+                Rule::unique(User::class)->ignore($this->user()->id),
+            ],
             'phone' => ['nullable', 'string', 'max:30'],
             'subject' => ['nullable', 'string', 'max:100'],
             'school_origin' => ['nullable', 'string', 'max:150'],

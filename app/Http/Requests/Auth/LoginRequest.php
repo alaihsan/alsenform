@@ -4,6 +4,7 @@ namespace App\Http\Requests\Auth;
 
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -28,7 +29,7 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string'],
+            'identifier' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ];
     }
@@ -42,28 +43,38 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        $loginInput = trim((string) $this->input('email'));
-        $isEmail = filter_var($loginInput, FILTER_VALIDATE_EMAIL) !== false;
-        $primaryField = $isEmail ? 'email' : 'nis';
-
-        $attempt = Auth::attempt([
-            $primaryField => $loginInput,
-            'password' => $this->input('password'),
-        ], $this->boolean('remember'));
-
-        if (! $attempt) {
-            $fallbackField = $primaryField === 'email' ? 'nis' : 'email';
+        $identifier = trim((string) $this->input('identifier'));
+        if (filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false) {
             $attempt = Auth::attempt([
-                $fallbackField => $loginInput,
+                'email' => Str::lower($identifier),
+                'password' => $this->input('password'),
+                fn (Builder $query): Builder => $query->where(function (Builder $query): void {
+                    $query->where('role', 'admin')->orWhere('is_admin', true);
+                }),
+            ], $this->boolean('remember'));
+        } else {
+            $attempt = Auth::attempt([
+                'nip' => $identifier,
+                'role' => 'guru',
+                'is_admin' => false,
                 'password' => $this->input('password'),
             ], $this->boolean('remember'));
+
+            if (! $attempt) {
+                $attempt = Auth::attempt([
+                    'nis' => $identifier,
+                    'is_admin' => false,
+                    'password' => $this->input('password'),
+                    fn (Builder $query): Builder => $query->whereIn('role', ['siswa', 'murid']),
+                ], $this->boolean('remember'));
+            }
         }
 
         if (! $attempt) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'identifier' => trans('auth.failed'),
             ]);
         }
 
@@ -86,7 +97,7 @@ class LoginRequest extends FormRequest
         $seconds = RateLimiter::availableIn($this->throttleKey());
 
         throw ValidationException::withMessages([
-            'email' => trans('auth.throttle', [
+            'identifier' => trans('auth.throttle', [
                 'seconds' => $seconds,
                 'minutes' => ceil($seconds / 60),
             ]),
@@ -98,6 +109,6 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        return Str::transliterate(Str::lower($this->string('identifier').'|'.$this->ip()));
     }
 }

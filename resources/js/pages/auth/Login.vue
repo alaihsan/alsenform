@@ -15,7 +15,7 @@ defineProps<{
 }>();
 
 const form = useForm({
-    email: '',
+    identifier: '',
     password: '',
     remember: false,
 });
@@ -28,7 +28,7 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Masuk ke akunmu" description="Gunakan email atau NIS serta password untuk membuka akun">
+    <AuthBase title="Masuk ke akunmu" description="Admin memakai email, guru memakai NIP, dan murid memakai NIS.">
         <Head title="Login" />
 
         <div v-if="status" class="mb-4 text-center text-sm font-medium text-green-600">
@@ -38,18 +38,18 @@ const submit = () => {
         <form @submit.prevent="submit" class="flex flex-col gap-6">
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="email">Email atau NIS</Label>
+                    <Label for="identifier">Email / NIP / NIS</Label>
                     <Input
-                        id="email"
+                        id="identifier"
                         type="text"
                         required
                         autofocus
                         tabindex="1"
                         autocomplete="username"
-                        v-model="form.email"
-                        placeholder="email@example.com atau NIS murid"
+                        v-model="form.identifier"
+                        placeholder="Masukkan email admin, NIP, atau NIS"
                     />
-                    <InputError :message="form.errors.email" />
+                    <InputError :message="form.errors.identifier" />
                 </div>
 
                 <div class="grid gap-2">
@@ -82,9 +82,7 @@ const submit = () => {
                 </Button>
             </div>
 
-            <div class="text-center text-xs text-muted-foreground">
-                Akun dikelola oleh Administrator Sekolah.
-            </div>
+            <div class="text-center text-xs text-muted-foreground">Akun dikelola oleh Administrator Sekolah.</div>
         </form>
     </AuthBase>
 </template>

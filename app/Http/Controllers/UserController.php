@@ -33,6 +33,7 @@ class UserController extends Controller
                 $q->where(function ($sub) use ($search): void {
                     $sub->where('name', 'like', "%{$search}%")
                         ->orWhere('nis', 'like', "%{$search}%")
+                        ->orWhere('nip', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
@@ -64,6 +65,7 @@ class UserController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'nis' => $u->nis,
+                'nip' => $u->nip,
                 'kelas' => $u->kelas,
                 'role' => $u->is_admin ? 'admin' : ($u->role ?: ($u->nis ? 'siswa' : 'guru')),
                 'is_admin' => (bool) $u->is_admin,
@@ -119,6 +121,10 @@ class UserController extends Controller
             $rules['nis'] = ['required', 'string', 'max:50', 'unique:users,nis'];
             $rules['kelas'] = ['nullable', 'string', 'max:50'];
             $rules['email'] = ['nullable', 'string', 'email', 'max:255', 'unique:users,email'];
+        } elseif ($role === 'guru') {
+            $rules['nip'] = ['required', 'string', 'max:50', 'unique:users,nip'];
+            $rules['email'] = ['nullable', 'string', 'email', 'max:255', 'unique:users,email'];
+            $rules['password'] = ['required', 'string', 'min:6'];
         } else {
             $rules['email'] = ['required', 'string', 'email', 'max:255', 'unique:users,email'];
             $rules['password'] = ['required', 'string', 'min:6'];
@@ -130,11 +136,19 @@ class UserController extends Controller
 
         if ($role === 'siswa') {
             $nis = trim($validated['nis']);
+            $nip = null;
             $password = Hash::make(User::defaultPasswordForNis($nis));
             $email = ! empty($validated['email']) ? $validated['email'] : null;
             $kelas = ! empty($validated['kelas']) ? trim($validated['kelas']) : null;
+        } elseif ($role === 'guru') {
+            $nis = null;
+            $nip = trim($validated['nip']);
+            $kelas = null;
+            $email = ! empty($validated['email']) ? trim($validated['email']) : null;
+            $password = Hash::make($validated['password']);
         } else {
             $nis = null;
+            $nip = null;
             $kelas = null;
             $email = trim($validated['email']);
             $password = Hash::make($validated['password']);
@@ -144,6 +158,7 @@ class UserController extends Controller
             'name' => trim($validated['name']),
             'email' => $email,
             'nis' => $nis,
+            'nip' => $nip,
             'kelas' => $kelas,
             'password' => $password,
             'must_change_password' => $role === 'siswa',
@@ -173,12 +188,15 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'role' => ['required', 'string', Rule::in(['admin', 'guru', 'siswa'])],
             'nis' => ['nullable', 'string', 'max:50', Rule::unique('users', 'nis')->ignore($user->id)],
+            'nip' => ['nullable', 'string', 'max:50', Rule::unique('users', 'nip')->ignore($user->id)],
             'email' => ['nullable', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'kelas' => ['nullable', 'string', 'max:50'],
         ];
 
-        if ($role !== 'siswa') {
+        if ($role === 'admin') {
             $rules['email'] = ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)];
+        } elseif ($role === 'guru') {
+            $rules['nip'] = ['required', 'string', 'max:50', Rule::unique('users', 'nip')->ignore($user->id)];
         }
 
         $validated = $request->validate($rules);
@@ -189,6 +207,7 @@ class UserController extends Controller
             'name' => trim($validated['name']),
             'email' => ! empty($validated['email']) ? trim($validated['email']) : null,
             'nis' => $role === 'siswa' && ! empty($validated['nis']) ? trim($validated['nis']) : ($role === 'siswa' ? $user->nis : null),
+            'nip' => $role === 'guru' ? trim($validated['nip']) : null,
             'kelas' => $role === 'siswa' && ! empty($validated['kelas']) ? trim($validated['kelas']) : null,
             'role' => $role,
             'is_admin' => $isAdmin,
@@ -214,6 +233,10 @@ class UserController extends Controller
         // Do not demote yourself if you are the logged in admin
         if ($user->id === Auth::id() && ! $isAdmin) {
             return back()->withErrors(['error' => 'Anda tidak dapat mencabut peran admin dari akun Anda sendiri.']);
+        }
+
+        if ($newRole === 'guru' && blank($user->nip)) {
+            return back()->withErrors(['error' => 'Lengkapi NIP pengguna terlebih dahulu melalui Edit Data sebelum menetapkannya sebagai guru.']);
         }
 
         $user->update([

@@ -21,7 +21,6 @@ import {
 import { computed, ref } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -229,14 +228,9 @@ const isStudent = computed(() => {
                         <form @submit.prevent="submitProfile" class="space-y-6">
                             <!-- Avatar Upload Section -->
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-                                <div class="relative group">
+                                <div class="group relative">
                                     <Avatar class="h-24 w-24 rounded-2xl border-2 border-border shadow-inner">
-                                        <AvatarImage
-                                            v-if="currentAvatarDisplay"
-                                            :src="currentAvatarDisplay"
-                                            :alt="user.name"
-                                            class="object-cover"
-                                        />
+                                        <AvatarImage v-if="currentAvatarDisplay" :src="currentAvatarDisplay" :alt="user.name" class="object-cover" />
                                         <AvatarFallback class="rounded-2xl bg-muted text-xl font-bold">
                                             {{ getInitials(user.name) }}
                                         </AvatarFallback>
@@ -247,7 +241,7 @@ const isStudent = computed(() => {
                                         class="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-black/50 text-white opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
                                         title="Ubah Foto Profil"
                                     >
-                                        <Camera class="h-5 w-5 mb-1" />
+                                        <Camera class="mb-1 h-5 w-5" />
                                         <span class="text-[10px] font-medium">Ubah</span>
                                     </button>
                                 </div>
@@ -261,13 +255,7 @@ const isStudent = computed(() => {
                                         @change="handleAvatarSelected"
                                     />
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            @click="triggerAvatarUpload"
-                                            class="h-9 gap-1.5"
-                                        >
+                                        <Button type="button" variant="outline" size="sm" @click="triggerAvatarUpload" class="h-9 gap-1.5">
                                             <Camera class="h-4 w-4" />
                                             Pilih Foto Baru
                                         </Button>
@@ -295,13 +283,7 @@ const isStudent = computed(() => {
                                 <!-- Nama Lengkap -->
                                 <div class="space-y-2">
                                     <Label for="name">Nama Lengkap</Label>
-                                    <Input
-                                        id="name"
-                                        v-model="form.name"
-                                        required
-                                        autocomplete="name"
-                                        placeholder="Nama Lengkap beserta gelar"
-                                    />
+                                    <Input id="name" v-model="form.name" required autocomplete="name" placeholder="Nama Lengkap beserta gelar" />
                                     <InputError :message="form.errors.name" />
                                 </div>
 
@@ -324,22 +306,17 @@ const isStudent = computed(() => {
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
                                             <Label for="nis">Nomor Induk Siswa (NIS/NISN)</Label>
-                                            <span class="text-[11px] text-muted-foreground flex items-center gap-1">
+                                            <span class="flex items-center gap-1 text-[11px] text-muted-foreground">
                                                 <Lock class="h-3 w-3" /> Data Sekolah
                                             </span>
                                         </div>
-                                        <Input
-                                            id="nis"
-                                            :value="user.nis || '-'"
-                                            disabled
-                                            class="bg-muted/50 cursor-not-allowed font-mono text-sm"
-                                        />
+                                        <Input id="nis" :value="user.nis || '-'" disabled class="cursor-not-allowed bg-muted/50 font-mono text-sm" />
                                     </div>
 
                                     <div class="space-y-2">
                                         <div class="flex items-center justify-between">
                                             <Label for="kelas">Kelas / Rombel</Label>
-                                            <span class="text-[11px] text-muted-foreground flex items-center gap-1">
+                                            <span class="flex items-center gap-1 text-[11px] text-muted-foreground">
                                                 <Lock class="h-3 w-3" /> Data Sekolah
                                             </span>
                                         </div>
@@ -347,7 +324,7 @@ const isStudent = computed(() => {
                                             id="kelas"
                                             :value="user.kelas || '-'"
                                             disabled
-                                            class="bg-muted/50 cursor-not-allowed font-medium text-sm"
+                                            class="cursor-not-allowed bg-muted/50 text-sm font-medium"
                                         />
                                     </div>
                                 </template>
@@ -359,6 +336,7 @@ const isStudent = computed(() => {
                                         <Input
                                             id="nip"
                                             v-model="form.nip"
+                                            :required="user.role === 'guru' && !user.is_admin"
                                             placeholder="Contoh: 198501012010011001"
                                         />
                                         <InputError :message="form.errors.nip" />
@@ -368,12 +346,7 @@ const isStudent = computed(() => {
                                         <Label for="subject">Mata Pelajaran yang Diampu</Label>
                                         <div class="relative">
                                             <BookOpen class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input
-                                                id="subject"
-                                                v-model="form.subject"
-                                                class="pl-9"
-                                                placeholder="Contoh: Matematika, PAI, Fisika"
-                                            />
+                                            <Input id="subject" v-model="form.subject" class="pl-9" placeholder="Contoh: Matematika, PAI, Fisika" />
                                         </div>
                                         <InputError :message="form.errors.subject" />
                                     </div>
@@ -382,12 +355,7 @@ const isStudent = computed(() => {
                                         <Label for="school_origin">Asal Sekolah / Lembaga</Label>
                                         <div class="relative">
                                             <Building2 class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input
-                                                id="school_origin"
-                                                v-model="form.school_origin"
-                                                class="pl-9"
-                                                placeholder="Contoh: SMA Al-Ihsan"
-                                            />
+                                            <Input id="school_origin" v-model="form.school_origin" class="pl-9" placeholder="Contoh: SMA Al-Ihsan" />
                                         </div>
                                         <InputError :message="form.errors.school_origin" />
                                     </div>
@@ -396,12 +364,7 @@ const isStudent = computed(() => {
                                         <Label for="phone">Nomor Kontak / WhatsApp</Label>
                                         <div class="relative">
                                             <Phone class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input
-                                                id="phone"
-                                                v-model="form.phone"
-                                                class="pl-9"
-                                                placeholder="081234567890"
-                                            />
+                                            <Input id="phone" v-model="form.phone" class="pl-9" placeholder="081234567890" />
                                         </div>
                                         <InputError :message="form.errors.phone" />
                                     </div>
@@ -415,7 +378,7 @@ const isStudent = computed(() => {
                                         :href="route('verification.send')"
                                         method="post"
                                         as="button"
-                                        class="underline hover:text-amber-800 font-medium"
+                                        class="font-medium underline hover:text-amber-800"
                                     >
                                         Kirim ulang link verifikasi email.
                                     </Link>
@@ -454,14 +417,7 @@ const isStudent = computed(() => {
                             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                                 <div class="space-y-2">
                                     <Label for="default_kkm">Standar KKM Default</Label>
-                                    <Input
-                                        id="default_kkm"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        v-model="prefForm.default_kkm"
-                                        placeholder="75"
-                                    />
+                                    <Input id="default_kkm" type="number" min="0" max="100" v-model="prefForm.default_kkm" placeholder="75" />
                                     <p class="text-xs text-muted-foreground">Kriteria Ketuntasan Minimal untuk indikator kelulusan</p>
                                 </div>
 
@@ -483,14 +439,16 @@ const isStudent = computed(() => {
                                     <select
                                         id="default_arabic_font"
                                         v-model="prefForm.default_arabic_font"
-                                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-hidden focus:ring-2 focus:ring-ring"
+                                        class="shadow-xs focus:outline-hidden w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring"
                                     >
                                         <option value="Amiri Quran">Amiri Quran (Standar Mushaf Madinah)</option>
                                         <option value="Scheherazade New">Scheherazade New (Khas Naskh Klasik)</option>
                                         <option value="Noto Naskh Arabic">Noto Naskh Arabic (Modern & Bersih)</option>
                                         <option value="Amiri">Amiri (Standar Teks Arab)</option>
                                     </select>
-                                    <p class="text-xs text-muted-foreground">Font yang diterapkan saat editor mendeteksi ketikan bahasa Arab / ayat Al-Qur'an</p>
+                                    <p class="text-xs text-muted-foreground">
+                                        Font yang diterapkan saat editor mendeteksi ketikan bahasa Arab / ayat Al-Qur'an
+                                    </p>
                                 </div>
 
                                 <div class="space-y-2">
@@ -506,7 +464,7 @@ const isStudent = computed(() => {
 
                             <!-- Toggle Flags -->
                             <div class="space-y-3 pt-2">
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <label class="flex cursor-pointer items-center gap-3">
                                     <input
                                         type="checkbox"
                                         v-model="prefForm.default_shuffle_questions"
@@ -514,11 +472,13 @@ const isStudent = computed(() => {
                                     />
                                     <div>
                                         <p class="text-sm font-medium">Acak Urutan Soal Secara Default</p>
-                                        <p class="text-xs text-muted-foreground">Tiap peserta ujian akan mendapatkan urutan nomor soal yang berlainan</p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Tiap peserta ujian akan mendapatkan urutan nomor soal yang berlainan
+                                        </p>
                                     </div>
                                 </label>
 
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <label class="flex cursor-pointer items-center gap-3">
                                     <input
                                         type="checkbox"
                                         v-model="prefForm.default_shuffle_options"
@@ -526,11 +486,13 @@ const isStudent = computed(() => {
                                     />
                                     <div>
                                         <p class="text-sm font-medium">Acak Pilihan Jawaban Secara Default</p>
-                                        <p class="text-xs text-muted-foreground">Opsi pilihan ganda A, B, C, D diacak secara otomatis untuk mencegah contek</p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Opsi pilihan ganda A, B, C, D diacak secara otomatis untuk mencegah contek
+                                        </p>
                                     </div>
                                 </label>
 
-                                <label class="flex items-center gap-3 cursor-pointer">
+                                <label class="flex cursor-pointer items-center gap-3">
                                     <input
                                         type="checkbox"
                                         v-model="prefForm.default_anti_cheat_blur"
@@ -538,7 +500,9 @@ const isStudent = computed(() => {
                                     />
                                     <div>
                                         <p class="text-sm font-medium">Aktifkan Anti-Curang (Lock on Blur) Default</p>
-                                        <p class="text-xs text-muted-foreground">Kunci ujian otomatis jika siswa berganti tab, membuka aplikasi lain, atau minimize layar</p>
+                                        <p class="text-xs text-muted-foreground">
+                                            Kunci ujian otomatis jika siswa berganti tab, membuka aplikasi lain, atau minimize layar
+                                        </p>
                                     </div>
                                 </label>
                             </div>
@@ -599,7 +563,7 @@ const isStudent = computed(() => {
                                         v-model="pinForm.pin"
                                         placeholder="Contoh: 123456"
                                         required
-                                        class="font-mono tracking-widest text-center text-base"
+                                        class="text-center font-mono text-base tracking-widest"
                                     />
                                     <InputError :message="pinForm.errors.pin" />
                                 </div>
@@ -618,9 +582,7 @@ const isStudent = computed(() => {
                             </div>
 
                             <div class="flex items-center gap-4 pt-1">
-                                <Button :disabled="pinForm.processing" class="gap-1.5">
-                                    <KeyRound class="h-4 w-4" /> Simpan PIN Pengawas
-                                </Button>
+                                <Button :disabled="pinForm.processing" class="gap-1.5"> <KeyRound class="h-4 w-4" /> Simpan PIN Pengawas </Button>
 
                                 <TransitionRoot
                                     :show="pinForm.recentlySuccessful"
@@ -648,7 +610,7 @@ const isStudent = computed(() => {
                             </div>
                             <Dialog v-model:open="logoutOtherOpen">
                                 <DialogTrigger as-child>
-                                    <Button variant="outline" size="sm" class="gap-1.5 shrink-0">
+                                    <Button variant="outline" size="sm" class="shrink-0 gap-1.5">
                                         <Shield class="h-3.5 w-3.5" /> Keluar Sesi Lain
                                     </Button>
                                 </DialogTrigger>
@@ -657,7 +619,8 @@ const isStudent = computed(() => {
                                         <DialogHeader>
                                             <DialogTitle>Keluar dari Semua Sesi Lain?</DialogTitle>
                                             <DialogDescription>
-                                                Tindakan ini akan mengakhiri sesi login di semua komputer atau ponsel lain. Masukkan kata sandi akun Anda untuk konfirmasi.
+                                                Tindakan ini akan mengakhiri sesi login di semua komputer atau ponsel lain. Masukkan kata sandi akun
+                                                Anda untuk konfirmasi.
                                             </DialogDescription>
                                         </DialogHeader>
 
@@ -688,11 +651,7 @@ const isStudent = computed(() => {
                     </CardHeader>
                     <CardContent>
                         <div v-if="sessions && sessions.length > 0" class="divide-y divide-border/60">
-                            <div
-                                v-for="session in sessions"
-                                :key="session.id"
-                                class="flex items-center justify-between py-3.5 first:pt-0 last:pb-0"
-                            >
+                            <div v-for="session in sessions" :key="session.id" class="flex items-center justify-between py-3.5 first:pt-0 last:pb-0">
                                 <div class="flex items-center gap-3.5">
                                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                                         <Laptop v-if="session.agent.is_desktop" class="h-5 w-5" />
@@ -700,9 +659,7 @@ const isStudent = computed(() => {
                                     </div>
                                     <div class="space-y-0.5">
                                         <div class="flex items-center gap-2">
-                                            <p class="text-sm font-medium leading-none">
-                                                {{ session.agent.platform }} — {{ session.agent.browser }}
-                                            </p>
+                                            <p class="text-sm font-medium leading-none">{{ session.agent.platform }} — {{ session.agent.browser }}</p>
                                             <span
                                                 v-if="session.is_current_device"
                                                 class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
@@ -733,10 +690,8 @@ const isStudent = computed(() => {
                                     Unduh salinan seluruh kuis, butir soal, kunci jawaban, dan konfigurasi yang pernah Anda buat
                                 </CardDescription>
                             </div>
-                            <Button as-child variant="outline" class="gap-1.5 shrink-0">
-                                <a :href="route('profile.quizzes.export')" download>
-                                    <Download class="h-4 w-4" /> Download Backup (.json)
-                                </a>
+                            <Button as-child variant="outline" class="shrink-0 gap-1.5">
+                                <a :href="route('profile.quizzes.export')" download> <Download class="h-4 w-4" /> Download Backup (.json) </a>
                             </Button>
                         </div>
                     </CardHeader>

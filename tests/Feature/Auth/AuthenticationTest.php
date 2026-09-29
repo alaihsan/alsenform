@@ -8,11 +8,11 @@ test('login screen can be rendered', function () {
     $response->assertStatus(200);
 });
 
-test('users can authenticate using the login screen', function () {
-    $user = User::factory()->create();
+test('administrators authenticate using email', function () {
+    $user = User::factory()->create(['role' => 'admin', 'is_admin' => true]);
 
     $response = $this->post('/login', [
-        'email' => $user->email,
+        'identifier' => $user->email,
         'password' => 'password',
     ]);
 
@@ -20,13 +20,46 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
-test('users can not authenticate with invalid password', function () {
-    $user = User::factory()->create();
+test('teachers authenticate using NIP and cannot use email', function () {
+    $teacher = User::factory()->create([
+        'role' => 'guru',
+        'is_admin' => false,
+        'nip' => '198501012010011001',
+    ]);
 
     $this->post('/login', [
-        'email' => $user->email,
-        'password' => 'wrong-password',
+        'identifier' => $teacher->nip,
+        'password' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+
+    $this->post('/logout');
+
+    $this->post('/login', [
+        'identifier' => $teacher->email,
+        'password' => 'password',
+    ])->assertSessionHasErrors('identifier');
+
+    $this->assertGuest();
+});
+
+test('students authenticate using NIS and cannot use email', function () {
+    $student = User::factory()->create([
+        'role' => 'siswa',
+        'is_admin' => false,
+        'nis' => '00202401001',
     ]);
+
+    $this->post('/login', [
+        'identifier' => $student->nis,
+        'password' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+
+    $this->post('/logout');
+
+    $this->post('/login', [
+        'identifier' => $student->email,
+        'password' => 'password',
+    ])->assertSessionHasErrors('identifier');
 
     $this->assertGuest();
 });

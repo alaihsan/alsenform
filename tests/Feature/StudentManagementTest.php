@@ -197,7 +197,7 @@ test('student can log in using NIS and default 6-digit password without email', 
     ]);
 
     $response = $this->post(route('login'), [
-        'email' => '202409876543', // Log in using NIS into the identifier field
+        'identifier' => '202409876543',
         'password' => '876543',
     ]);
 

@@ -238,9 +238,6 @@ function syncFromClasses(): void {
                             <h1 class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
                                 Kelompok Belajar (Cohort)
                             </h1>
-                            <span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">
-                                Moodle Style
-                            </span>
                         </div>
                         <p class="text-xs text-slate-500 hidden sm:block">
                             Kelola kelompok siswa/rombel untuk memudahkan penugasan kuis secara massal

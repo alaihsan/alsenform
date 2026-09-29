@@ -64,6 +64,7 @@ test('avatar can be removed', function () {
 
     $user = User::factory()->create([
         'avatar' => $avatarPath,
+        'nip' => '198501012010011002',
     ]);
 
     $response = $this
@@ -71,6 +72,7 @@ test('avatar can be removed', function () {
         ->post('/settings/profile', [
             'name' => $user->name,
             'email' => $user->email,
+            'nip' => $user->nip,
             'remove_avatar' => true,
         ]);
 

@@ -76,18 +76,30 @@ test('superadmin can create a new teacher user', function () {
     $response = $this->post(route('users.store'), [
         'role' => 'guru',
         'name' => 'Ibu Guru Ani',
-        'email' => 'ani@sekolah.sch.id',
+        'nip' => '198501012010011001',
         'password' => 'guru12345',
     ]);
 
     $response->assertRedirect();
-    $teacher = User::where('email', 'ani@sekolah.sch.id')->first();
+    $teacher = User::where('nip', '198501012010011001')->first();
 
     expect($teacher)->not->toBeNull()
         ->and($teacher->role)->toBe('guru')
+        ->and($teacher->nip)->toBe('198501012010011001')
         ->and($teacher->is_admin)->toBeFalse()
         ->and($teacher->isTeacher())->toBeTrue()
         ->and(Hash::check('guru12345', $teacher->password))->toBeTrue();
+});
+
+test('superadmin must provide a NIP when creating a teacher user', function () {
+    $admin = User::factory()->create(['role' => 'admin', 'is_admin' => true]);
+    $this->actingAs($admin);
+
+    $this->post(route('users.store'), [
+        'role' => 'guru',
+        'name' => 'Guru Tanpa NIP',
+        'password' => 'guru12345',
+    ])->assertSessionHasErrors('nip');
 });
 
 test('superadmin can create a new student user with default 6 digit NIS password', function () {
@@ -118,6 +130,7 @@ test('superadmin can update user role directly to admin or guru or siswa', funct
     $teacher = User::create([
         'name' => 'Pak Joko',
         'email' => 'joko@sekolah.sch.id',
+        'nip' => '197901012005011001',
         'password' => Hash::make('password123'),
         'role' => 'guru',
         'is_admin' => false,
@@ -156,6 +169,18 @@ test('superadmin cannot demote their own admin role', function () {
     $admin->refresh();
     expect($admin->role)->toBe('admin')
         ->and($admin->is_admin)->toBeTrue();
+});
+
+test('superadmin cannot assign the teacher role before a NIP is recorded', function () {
+    $admin = User::factory()->create(['role' => 'admin', 'is_admin' => true]);
+    $student = User::factory()->create(['role' => 'siswa', 'nis' => '202401001']);
+    $this->actingAs($admin);
+
+    $this->patch(route('users.update-role', $student), [
+        'role' => 'guru',
+    ])->assertSessionHasErrors('error');
+
+    expect($student->fresh()->role)->toBe('siswa');
 });
 
 test('superadmin can change password for any user', function () {

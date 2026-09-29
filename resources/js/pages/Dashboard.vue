@@ -1,46 +1,55 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
-import { formTemplates } from '@/constants/dashboard';
-import { useToast } from '@/composables/useToast';
-import type { QuizFolder, RecentForm } from '@/types/quiz';
-import {
-    AArrowDown,
-    Clipboard,
-    ClipboardList,
-    ExternalLink,
-    FilePenLine,
-    Folder,
-    FolderPlus,
-    Grid3X3,
-    LayoutDashboard,
-    List,
-    MoreVertical,
-    RotateCcw,
-    Search,
-    Send,
-    Sparkles,
-    Trash2,
-    Users,
-    BookOpen,
-    Check,
-    X,
-} from 'lucide-vue-next';
-import { computed, ref, onMounted } from 'vue';
+import FormCardPreview from '@/components/FormCardPreview.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuGroup,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { getInitials } from '@/composables/useInitials';
-import { usePage, useForm } from '@inertiajs/vue3';
-import { LogOut, User, Key, MessageSquare, Heart, Coins, Award, Shield, Wallet, History, HelpCircle, Settings, PlusCircle, GraduationCap } from 'lucide-vue-next';
+import { useToast } from '@/composables/useToast';
+import { formTemplates } from '@/constants/dashboard';
+import type { QuizFolder, RecentForm } from '@/types/quiz';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
-import FormCardPreview from '@/components/FormCardPreview.vue';
+import {
+    AArrowDown,
+    Award,
+    BookOpen,
+    Clipboard,
+    ClipboardList,
+    Coins,
+    ExternalLink,
+    FilePenLine,
+    Folder,
+    FolderPlus,
+    GraduationCap,
+    Grid3X3,
+    Heart,
+    HelpCircle,
+    History,
+    Key,
+    LayoutDashboard,
+    List,
+    LogOut,
+    MessageSquare,
+    MoreVertical,
+    PlusCircle,
+    RotateCcw,
+    Search,
+    Settings,
+    Shield,
+    Sparkles,
+    Trash2,
+    User,
+    Users,
+    Wallet,
+    X,
+} from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 type FolderModalMode = 'create' | 'rename' | 'delete';
 type FormDeleteMode = 'trash' | 'force';
@@ -71,12 +80,15 @@ const isStudent = computed(() => {
     return u.role === 'siswa' || u.role === 'murid' || (!u.is_admin && u.role !== 'guru' && !!u.nis);
 });
 
-const dashboardStats = computed(() => props.stats ?? {
-    totalForms: props.recentForms.filter((f) => !f.isTrashed).length,
-    publishedForms: props.recentForms.filter((f) => f.isPublished && !f.isTrashed).length,
-    totalResponses: 0,
-    pendingUnlocks: 0,
-});
+const dashboardStats = computed(
+    () =>
+        props.stats ?? {
+            totalForms: props.recentForms.filter((f) => !f.isTrashed).length,
+            publishedForms: props.recentForms.filter((f) => f.isPublished && !f.isTrashed).length,
+            totalResponses: 0,
+            pendingUnlocks: 0,
+        },
+);
 
 const showTemplateHint = ref(false);
 const searchQuery = ref('');
@@ -563,11 +575,12 @@ function openDonationModal(): void {
 }
 
 function fetchDevStats(): void {
-    axios.get(route('support.stats'))
-        .then(response => {
+    axios
+        .get(route('support.stats'))
+        .then((response) => {
             devStats.value = response.data;
         })
-        .catch(err => {
+        .catch((err) => {
             console.error('Gagal mengambil statistik developer:', err);
         });
 }
@@ -592,7 +605,7 @@ function submitPasswordForm(): void {
         },
         onError: () => {
             passwordForm.reset('password', 'password_confirmation');
-        }
+        },
     });
 }
 
@@ -614,26 +627,30 @@ function submitDonation(): void {
         return;
     }
 
-    axios.post(route('support.donate'), {
-        donor_name: donorName.value,
-        amount: finalAmount,
-        message: donationMessage.value,
-    }).then(response => {
-        if (response.data?.success) {
-            activeDonation.value = response.data.donation;
-        } else {
-            showToast('Gagal memproses donasi. Silakan coba lagi.');
-        }
-    }).catch(err => {
-        showToast('Terjadi kesalahan. Silakan coba lagi.');
-    });
+    axios
+        .post(route('support.donate'), {
+            donor_name: donorName.value,
+            amount: finalAmount,
+            message: donationMessage.value,
+        })
+        .then((response) => {
+            if (response.data?.success) {
+                activeDonation.value = response.data.donation;
+            } else {
+                showToast('Gagal memproses donasi. Silakan coba lagi.');
+            }
+        })
+        .catch((err) => {
+            showToast('Terjadi kesalahan. Silakan coba lagi.');
+        });
 }
 
 function confirmDonationPayment(): void {
     if (!activeDonation.value) return;
 
-    axios.post(route('support.confirm-donation', { donation: activeDonation.value.id }))
-        .then(response => {
+    axios
+        .post(route('support.confirm-donation', { donation: activeDonation.value.id }))
+        .then((response) => {
             if (response.data?.success) {
                 donationSuccessDetails.value = response.data.donation;
                 activeDonation.value = null;
@@ -642,7 +659,7 @@ function confirmDonationPayment(): void {
                 fetchDevStats();
             }
         })
-        .catch(err => {
+        .catch((err) => {
             showToast('Konfirmasi gagal. Silakan coba lagi.');
         });
 }
@@ -669,7 +686,7 @@ function submitWithdrawal(): void {
             if (errs.amount) {
                 showToast(errs.amount);
             }
-        }
+        },
     });
 }
 
@@ -689,10 +706,10 @@ function triggerConfetti(): void {
             if (!ctx) return;
             canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
             canvas.height = canvas.parentElement?.clientHeight || 600;
-            
+
             let particles: any[] = [];
             const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-            
+
             for (let i = 0; i < 120; i++) {
                 particles.push({
                     x: Math.random() * canvas.width,
@@ -702,10 +719,10 @@ function triggerConfetti(): void {
                     color: colors[Math.floor(Math.random() * colors.length)],
                     tilt: Math.random() * 10 - 5,
                     tiltAngleIncremental: Math.random() * 0.07 + 0.02,
-                    tiltAngle: 0
+                    tiltAngle: 0,
                 });
             }
-            
+
             let animationFrameId: number;
             function draw() {
                 if (!ctx) return;
@@ -716,11 +733,11 @@ function triggerConfetti(): void {
                     p.y += (Math.cos(p.d) + 3 + p.r / 2) / 2;
                     p.x += Math.sin(p.tiltAngle);
                     p.tilt = Math.sin(p.tiltAngle - idx / 3) * 15;
-                    
+
                     if (p.y < canvas.height) {
                         active = true;
                     }
-                    
+
                     ctx.beginPath();
                     ctx.lineWidth = p.r;
                     ctx.strokeStyle = p.color;
@@ -728,14 +745,14 @@ function triggerConfetti(): void {
                     ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
                     ctx.stroke();
                 });
-                
+
                 if (active && isConfettiActive.value) {
                     animationFrameId = requestAnimationFrame(draw);
                 } else {
                     isConfettiActive.value = false;
                 }
             }
-            
+
             draw();
             confettiStopFn = () => {
                 cancelAnimationFrame(animationFrameId);
@@ -769,8 +786,8 @@ function closeDonationModal(): void {
                         <span class="rounded-lg bg-white/95"></span>
                     </div>
                     <div class="flex flex-col">
-                        <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight">Alsenform</h1>
-                        <span class="text-[9px] sm:text-[10px] font-medium text-slate-500 leading-none">CBT & Exam Platform</span>
+                        <h1 class="text-base font-bold leading-tight tracking-tight text-slate-900 sm:text-lg">Alsenform</h1>
+                        <span class="text-[9px] font-medium leading-none text-slate-500 sm:text-[10px]">CBT & Exam Platform</span>
                     </div>
                 </div>
 
@@ -790,144 +807,174 @@ function closeDonationModal(): void {
                             <button
                                 type="button"
                                 aria-label="Apps launcher"
-                                class="hidden sm:flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                class="hidden h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 sm:flex"
                             >
                                 <Grid3X3 class="h-5 w-5" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-80 mt-1.5 rounded-2xl shadow-xl border border-slate-200/90 bg-white/95 backdrop-blur-xs p-3.5 z-50">
+                        <DropdownMenuContent
+                            align="end"
+                            class="backdrop-blur-xs z-50 mt-1.5 w-80 rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 shadow-xl"
+                        >
                             <!-- Header Mini Title -->
-                            <div class="flex items-center justify-between px-2 pb-2.5 mb-1.5 border-b border-slate-100">
-                                <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <div class="mb-1.5 flex items-center justify-between border-b border-slate-100 px-2 pb-2.5">
+                                <span class="flex items-center gap-1.5 text-xs font-bold text-slate-800">
                                     <Grid3X3 class="h-3.5 w-3.5 text-slate-500" />
                                     Aplikasi & Pintasan
                                 </span>
-                                <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Alsenform</span>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Alsenform</span>
                             </div>
 
                             <!-- 3-Column App Tiles Grid -->
                             <div class="grid grid-cols-3 gap-2">
                                 <!-- 1. Dashboard -->
-                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
                                         :href="route('dashboard')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 transition-all group-hover:bg-emerald-600 group-hover:text-white"
+                                        >
                                             <LayoutDashboard class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Dashboard</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Dashboard</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
 
                                 <!-- 2. Buat Kuis (Guru / Admin) -->
-                                <DropdownMenuItem v-if="user?.is_admin || user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem
+                                    v-if="user?.is_admin || user?.role === 'guru'"
+                                    :as-child="true"
+                                    class="cursor-pointer p-0 focus:bg-transparent"
+                                >
                                     <Link
                                         :href="route('forms.create')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition-all group-hover:bg-blue-600 group-hover:text-white"
+                                        >
                                             <PlusCircle class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Buat Kuis</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Buat Kuis</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
 
                                 <!-- 3. Template Galeri -->
-                                <DropdownMenuItem class="p-0 focus:bg-transparent cursor-pointer" @select="isTemplateGalleryOpen = true">
+                                <DropdownMenuItem class="cursor-pointer p-0 focus:bg-transparent" @select="isTemplateGalleryOpen = true">
                                     <button
                                         type="button"
-                                        class="group flex w-full flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex w-full flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-all group-hover:bg-indigo-600 group-hover:text-white"
+                                        >
                                             <ClipboardList class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Template</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Template</span
+                                        >
                                     </button>
                                 </DropdownMenuItem>
 
                                 <!-- 4. Cohort & Kelas (Guru / Admin) -->
-                                <DropdownMenuItem v-if="user?.is_admin || user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem
+                                    v-if="user?.is_admin || user?.role === 'guru'"
+                                    :as-child="true"
+                                    class="cursor-pointer p-0 focus:bg-transparent"
+                                >
                                     <Link
                                         :href="route('cohorts.index')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 transition-all group-hover:bg-purple-600 group-hover:text-white"
+                                        >
                                             <BookOpen class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Cohort</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Cohort</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
 
                                 <!-- 5. Data Pengguna / Siswa (Admin / Guru) -->
-                                <DropdownMenuItem v-if="user?.is_admin" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem v-if="user?.is_admin" :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
                                         :href="route('users.index')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 transition-all group-hover:bg-teal-600 group-hover:text-white"
+                                        >
                                             <Users class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Pengguna</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Pengguna</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem v-else-if="user?.role === 'guru'" :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem v-else-if="user?.role === 'guru'" :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
                                         :href="route('cohorts.index')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 transition-all group-hover:bg-teal-600 group-hover:text-white"
+                                        >
                                             <GraduationCap class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Data Siswa</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Data Siswa</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
 
                                 <!-- 6. Panduan Aplikasi (Help Center) -->
-                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
                                         :href="route('help')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 transition-all group-hover:bg-amber-600 group-hover:text-white"
+                                        >
                                             <HelpCircle class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Panduan</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Panduan</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
 
-                                <!-- 7. Saran & Masukan (Non-admin) -->
-                                <DropdownMenuItem v-if="!user?.is_admin" class="p-0 focus:bg-transparent cursor-pointer" @select="openSuggestionModal">
-                                    <button
-                                        type="button"
-                                        class="group flex w-full flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
-                                    >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
-                                            <MessageSquare class="h-5 w-5" />
-                                        </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Saran</span>
-                                    </button>
-                                </DropdownMenuItem>
-
                                 <!-- 8. Pengaturan Profil & Kuis -->
-                                <DropdownMenuItem :as-child="true" class="p-0 focus:bg-transparent cursor-pointer">
+                                <DropdownMenuItem :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
                                         :href="route('profile.edit')"
-                                        class="group flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-slate-100/80 transition-all text-center"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
-                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-slate-700 group-hover:text-white transition-all shadow-xs">
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition-all group-hover:bg-slate-700 group-hover:text-white"
+                                        >
                                             <Settings class="h-5 w-5" />
                                         </div>
-                                        <span class="mt-1.5 text-[11px] font-semibold text-slate-700 group-hover:text-slate-900 leading-tight">Pengaturan</span>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Pengaturan</span
+                                        >
                                     </Link>
                                 </DropdownMenuItem>
                             </div>
 
                             <!-- Footer Shortcut to Help Center -->
-                            <div class="mt-2.5 pt-2 border-t border-slate-100 text-center">
+                            <div class="mt-2.5 border-t border-slate-100 pt-2 text-center">
                                 <Link
                                     :href="route('help')"
-                                    class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition"
+                                    class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 transition hover:text-emerald-800"
                                 >
                                     <Sparkles class="h-3 w-3" />
                                     Pusat Bantuan & Panduan &rarr;
@@ -944,28 +991,35 @@ function closeDonationModal(): void {
                             >
                                 <Avatar class="h-6 w-6 overflow-hidden rounded-full border border-slate-100">
                                     <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
-                                    <AvatarFallback class="bg-indigo-50 font-black text-indigo-700 flex items-center justify-center text-[10px] w-full h-full">
+                                    <AvatarFallback
+                                        class="flex h-full w-full items-center justify-center bg-indigo-50 text-[10px] font-black text-indigo-700"
+                                    >
                                         {{ getInitials(user?.name) }}
                                     </AvatarFallback>
                                 </Avatar>
                                 <span class="hidden max-w-[80px] truncate text-xs font-semibold sm:inline">{{ user?.name }}</span>
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="w-64 mt-1.5 rounded-2xl shadow-xl border border-slate-200/90 bg-white/95 backdrop-blur-xs p-2 z-50">
+                        <DropdownMenuContent
+                            align="end"
+                            class="backdrop-blur-xs z-50 mt-1.5 w-64 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-xl"
+                        >
                             <!-- Mini User Profile Card -->
-                            <div class="px-2.5 py-2.5 mb-1 rounded-xl bg-slate-50/80 border border-slate-100 flex items-center gap-3">
-                                <Avatar class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200/80 shadow-xs">
+                            <div class="mb-1 flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2.5">
+                                <Avatar class="shadow-xs h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200/80">
                                     <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
-                                    <AvatarFallback class="bg-indigo-600 font-bold text-white flex items-center justify-center text-xs w-full h-full">
+                                    <AvatarFallback class="flex h-full w-full items-center justify-center bg-indigo-600 text-xs font-bold text-white">
                                         {{ getInitials(user?.name) }}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-xs font-bold text-slate-900 truncate leading-tight">{{ user?.name }}</p>
-                                    <p class="text-[11px] text-slate-500 truncate leading-tight mt-0.5">{{ user?.email }}</p>
+                                    <p class="truncate text-xs font-bold leading-tight text-slate-900">{{ user?.name }}</p>
+                                    <p class="mt-0.5 truncate text-[11px] leading-tight text-slate-500">{{ user?.email }}</p>
                                     <div class="mt-1.5 flex items-center gap-1.5">
-                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-emerald-100/70 text-emerald-800 border border-emerald-200/50">
-                                            {{ user?.is_admin ? 'Admin' : (user?.role === 'guru' ? 'Guru' : (user?.role || 'Siswa')) }}
+                                        <span
+                                            class="inline-flex items-center rounded border border-emerald-200/50 bg-emerald-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-800"
+                                        >
+                                            {{ user?.is_admin ? 'Admin' : user?.role === 'guru' ? 'Guru' : user?.role || 'Siswa' }}
                                         </span>
                                     </div>
                                 </div>
@@ -974,18 +1028,21 @@ function closeDonationModal(): void {
                             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
 
                             <!-- Group 1: Akun -->
-                            <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Akun</div>
+                            <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Akun</div>
                             <DropdownMenuGroup>
                                 <DropdownMenuItem :as-child="true">
                                     <Link
                                         :href="route('profile.edit')"
-                                        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
                                     >
                                         <User class="h-4 w-4 text-slate-500" />
                                         <span>Pengaturan Profil</span>
                                     </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem @select="openPasswordModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
+                                <DropdownMenuItem
+                                    @select="openPasswordModal"
+                                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                                >
                                     <Key class="h-4 w-4 text-slate-500" />
                                     <span>Ubah Password</span>
                                 </DropdownMenuItem>
@@ -994,12 +1051,12 @@ function closeDonationModal(): void {
                             <!-- Group 2: Akademik (Admin / Guru) -->
                             <template v-if="user?.is_admin || user?.role === 'guru'">
                                 <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-                                <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Akademik</div>
+                                <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Akademik</div>
                                 <DropdownMenuGroup>
                                     <DropdownMenuItem v-if="user?.is_admin" :as-child="true">
                                         <Link
                                             :href="route('users.index')"
-                                            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
                                         >
                                             <Users class="h-4 w-4 text-slate-500" />
                                             <span>Pengaturan User</span>
@@ -1008,7 +1065,7 @@ function closeDonationModal(): void {
                                     <DropdownMenuItem :as-child="true">
                                         <Link
                                             :href="route('cohorts.index')"
-                                            class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors"
+                                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
                                         >
                                             <BookOpen class="h-4 w-4 text-slate-500" />
                                             <span>Cohort & Kelas</span>
@@ -1019,24 +1076,16 @@ function closeDonationModal(): void {
 
                             <!-- Group 3: Bantuan & Dukungan -->
                             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-                            <div class="px-2.5 pt-1.5 pb-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Bantuan & Dukungan</div>
+                            <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Bantuan & Dukungan</div>
                             <DropdownMenuGroup>
                                 <DropdownMenuItem :as-child="true">
                                     <Link
                                         :href="route('help')"
-                                        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100/80 cursor-pointer transition-colors"
+                                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-emerald-50/70 px-2.5 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/80"
                                     >
                                         <HelpCircle class="h-4 w-4 text-emerald-600" />
                                         <span>Panduan Aplikasi (Help)</span>
                                     </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem v-if="!user?.is_admin" @select="openSuggestionModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
-                                    <MessageSquare class="h-4 w-4 text-slate-500" />
-                                    <span>Kirim Saran & Masukan</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem v-if="!user?.is_admin" @select="openDonationModal" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 cursor-pointer transition-colors">
-                                    <Heart class="h-4 w-4 text-rose-500 fill-rose-500/20" />
-                                    <span>Dukung Developer</span>
                                 </DropdownMenuItem>
                             </DropdownMenuGroup>
 
@@ -1047,7 +1096,7 @@ function closeDonationModal(): void {
                                     method="post"
                                     :href="route('logout')"
                                     as="button"
-                                    class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 cursor-pointer transition-colors"
+                                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
                                 >
                                     <LogOut class="h-4 w-4 text-rose-500" />
                                     <span>Keluar</span>
@@ -1116,13 +1165,8 @@ function closeDonationModal(): void {
                                 <span class="absolute right-0 top-1/2 h-3 w-1/2 -translate-y-1/2 bg-blue-500"></span>
                                 <span class="absolute left-1/2 top-0 h-1/2 w-3 -translate-x-1/2 bg-red-500"></span>
                             </div>
-                            <div v-else class="w-3/5 overflow-hidden rounded-xl bg-white shadow-sm border border-slate-200/80">
-                                <div
-                                    :class="[
-                                        'h-5 sm:h-6 flex items-center px-2',
-                                        template.stripe || 'bg-indigo-600',
-                                    ]"
-                                >
+                            <div v-else class="w-3/5 overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+                                <div :class="['flex h-5 items-center px-2 sm:h-6', template.stripe || 'bg-indigo-600']">
                                     <span class="h-1.5 w-1/2 rounded-full bg-white/70"></span>
                                 </div>
                                 <div class="space-y-1.5 p-2 sm:p-2.5">
@@ -1142,57 +1186,65 @@ function closeDonationModal(): void {
                                 </div>
                             </div>
                         </div>
-                        <p class="mt-1.5 truncate text-xs sm:text-sm font-semibold text-slate-900" :title="template.title">{{ template.title }}</p>
+                        <p class="mt-1.5 truncate text-xs font-semibold text-slate-900 sm:text-sm" :title="template.title">{{ template.title }}</p>
                     </a>
                 </div>
             </div>
         </section>
 
         <!-- QUICK STATS BAR -->
-        <section v-if="!searchQuery.trim()" class="mx-auto max-w-[1180px] px-4 pt-5 pb-1 sm:px-6">
+        <section v-if="!searchQuery.trim()" class="mx-auto max-w-[1180px] px-4 pb-1 pt-5 sm:px-6">
             <!-- Student Stats Bar -->
             <div v-if="isStudent" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <!-- Stat 1: Total Kuis -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                         <ClipboardList class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Total Soal & Kuis</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ studentStats?.totalAssigned ?? recentForms.length }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Total Soal & Kuis</p>
+                        <p class="text-lg font-bold leading-tight text-slate-800">{{ studentStats?.totalAssigned ?? recentForms.length }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 2: Sudah Dikerjakan -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                         <Award class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Sudah Dikerjakan</p>
-                        <p class="text-lg font-bold text-emerald-600 leading-tight">{{ studentStats?.completed ?? 0 }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Sudah Dikerjakan</p>
+                        <p class="text-lg font-bold leading-tight text-emerald-600">{{ studentStats?.completed ?? 0 }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 3: Belum Dikerjakan -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                         <FilePenLine class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Belum Dikerjakan</p>
-                        <p class="text-lg font-bold text-amber-600 leading-tight">{{ studentStats?.pending ?? 0 }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Belum Dikerjakan</p>
+                        <p class="text-lg font-bold leading-tight text-amber-600">{{ studentStats?.pending ?? 0 }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 4: Kelas Siswa -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                         <GraduationCap class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Kelas Siswa</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight truncate">{{ studentStats?.className || user?.kelas || 'Siswa' }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Kelas Siswa</p>
+                        <p class="truncate text-lg font-bold leading-tight text-slate-800">{{ studentStats?.className || user?.kelas || 'Siswa' }}</p>
                     </div>
                 </div>
             </div>
@@ -1200,61 +1252,67 @@ function closeDonationModal(): void {
             <!-- Teacher / Admin Stats Bar -->
             <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <!-- Stat 1: Total Kuis -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                         <ClipboardList class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Total Bank Soal</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.totalForms }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Total Bank Soal</p>
+                        <p class="text-lg font-bold leading-tight text-slate-800">{{ dashboardStats.totalForms }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 2: Ujian Aktif (Published) -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                         <Award class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Ujian Aktif</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.publishedForms }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Ujian Aktif</p>
+                        <p class="text-lg font-bold leading-tight text-slate-800">{{ dashboardStats.publishedForms }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 3: Respon Siswa -->
-                <div class="flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs transition hover:border-slate-300">
+                <div
+                    class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
+                >
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                         <Users class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Respon Siswa</p>
-                        <p class="text-lg font-bold text-slate-800 leading-tight">{{ dashboardStats.totalResponses }}</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Respon Siswa</p>
+                        <p class="text-lg font-bold leading-tight text-slate-800">{{ dashboardStats.totalResponses }}</p>
                     </div>
                 </div>
 
                 <!-- Stat 4: Permintaan Buka Kunci (Unlock) -->
                 <div
                     :class="[
-                        'flex items-center gap-3.5 rounded-2xl border p-3.5 shadow-xs transition',
+                        'shadow-xs flex items-center gap-3.5 rounded-2xl border p-3.5 transition',
                         dashboardStats.pendingUnlocks > 0
-                            ? 'border-red-200 bg-red-50/70 text-red-900 animate-pulse'
-                            : 'border-slate-200/80 bg-white hover:border-slate-300'
+                            ? 'animate-pulse border-red-200 bg-red-50/70 text-red-900'
+                            : 'border-slate-200/80 bg-white hover:border-slate-300',
                     ]"
                 >
                     <div
                         :class="[
                             'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-                            dashboardStats.pendingUnlocks > 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'
+                            dashboardStats.pendingUnlocks > 0 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600',
                         ]"
                     >
                         <Shield class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="text-xs font-medium text-slate-500 truncate">Perlu Buka Kunci</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Perlu Buka Kunci</p>
                         <p
                             :class="[
                                 'text-lg font-bold leading-tight',
-                                dashboardStats.pendingUnlocks > 0 ? 'text-red-600 font-black' : 'text-slate-800'
+                                dashboardStats.pendingUnlocks > 0 ? 'font-black text-red-600' : 'text-slate-800',
                             ]"
                         >
                             {{ dashboardStats.pendingUnlocks }} Siswa
@@ -1274,9 +1332,7 @@ function closeDonationModal(): void {
                     <p v-if="searchQuery.trim()" class="mt-1 text-sm font-medium text-slate-500">
                         Menampilkan hasil pencarian: <span class="text-slate-800">"{{ searchQuery.trim() }}"</span>
                     </p>
-                    <p v-else-if="isStudent" class="mt-0.5 text-xs text-slate-500">
-                        Pilih kuis di bawah ini untuk mulai mengerjakan soal ujian
-                    </p>
+                    <p v-else-if="isStudent" class="mt-0.5 text-xs text-slate-500">Pilih kuis di bawah ini untuk mulai mengerjakan soal ujian</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3 text-slate-600">
                     <button
@@ -1339,7 +1395,13 @@ function closeDonationModal(): void {
                     >
                         <AArrowDown :class="['h-6 w-6 transition-transform', sortDirection === 'asc' ? 'rotate-180' : '']" />
                     </button>
-                    <button v-if="!isStudent" type="button" aria-label="Back to all folders" class="rounded-full p-1.5 hover:bg-slate-100" @click="folderFilter = ''">
+                    <button
+                        v-if="!isStudent"
+                        type="button"
+                        aria-label="Back to all folders"
+                        class="rounded-full p-1.5 hover:bg-slate-100"
+                        @click="folderFilter = ''"
+                    >
                         <Folder class="h-7 w-7" />
                     </button>
                 </div>
@@ -1476,7 +1538,13 @@ function closeDonationModal(): void {
                     @dragend="!isStudent && endDraggingForm()"
                 >
                     <!-- For Student: Click card to OPEN / TAKE QUIZ -->
-                    <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block cursor-pointer']">
+                    <a
+                        v-if="isStudent"
+                        :href="form.publicUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block cursor-pointer']"
+                    >
                         <FormCardPreview :form="form" :view-mode="viewMode" />
                     </a>
                     <!-- For Teacher: Click card to EDIT -->
@@ -1504,8 +1572,10 @@ function closeDonationModal(): void {
                                         {{ form.title }}
                                     </h3>
                                 </Link>
-                                <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title" dir="auto">{{ form.title }}</h3>
-                                <div class="flex items-center gap-1.5 shrink-0">
+                                <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title" dir="auto">
+                                    {{ form.title }}
+                                </h3>
+                                <div class="flex shrink-0 items-center gap-1.5">
                                     <!-- Badges -->
                                     <template v-if="isStudent">
                                         <span
@@ -1556,7 +1626,7 @@ function closeDonationModal(): void {
                                     <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
                                         <ClipboardList class="h-3.5 w-3.5" />
                                     </span>
-                                    <span v-if="isStudent && form.ownerName" class="truncate text-[11px] text-slate-600 font-semibold">
+                                    <span v-if="isStudent && form.ownerName" class="truncate text-[11px] font-semibold text-slate-600">
                                         Guru: {{ form.ownerName }}
                                     </span>
                                     <span v-else class="truncate text-[11px]">
@@ -1571,10 +1641,10 @@ function closeDonationModal(): void {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         :class="[
-                                            'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition shadow-xs',
+                                            'shadow-xs inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition',
                                             form.hasSubmitted
                                                 ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                : 'bg-indigo-600 text-white hover:bg-indigo-700',
                                         ]"
                                     >
                                         <ExternalLink class="h-3.5 w-3.5" />
@@ -1696,17 +1766,25 @@ function closeDonationModal(): void {
                 <h3 class="mt-4 text-lg font-semibold text-slate-700">
                     {{
                         searchQuery.trim()
-                            ? (isStudent ? `Kuis "${searchQuery.trim()}" tidak ditemukan` : `Quiz "${searchQuery.trim()}" tidak tersedia`)
-                            : (isStudent ? 'Belum ada kuis yang ditugaskan' : 'Belum ada recent form')
+                            ? isStudent
+                                ? `Kuis "${searchQuery.trim()}" tidak ditemukan`
+                                : `Quiz "${searchQuery.trim()}" tidak tersedia`
+                            : isStudent
+                              ? 'Belum ada kuis yang ditugaskan'
+                              : 'Belum ada recent form'
                     }}
                 </h3>
                 <p class="mt-2 text-sm text-slate-500">
                     {{
                         searchQuery.trim()
-                            ? (isStudent ? 'Coba gunakan kata kunci pencarian lain.' : 'Coba kata kunci lain atau buat quiz baru dari template.')
+                            ? isStudent
+                                ? 'Coba gunakan kata kunci pencarian lain.'
+                                : 'Coba kata kunci lain atau buat quiz baru dari template.'
                             : isStudent
                               ? 'Saat guru menugaskan atau mempublikasikan kuis untuk kelas Anda, kuis akan muncul di sini untuk dikerjakan.'
-                              : (statusFilter === 'all' ? 'Buat form dari blank form atau template, lalu form akan muncul di sini.' : `Tidak ada form dengan status ${statusFilterLabel}.`)
+                              : statusFilter === 'all'
+                                ? 'Buat form dari blank form atau template, lalu form akan muncul di sini.'
+                                : `Tidak ada form dengan status ${statusFilterLabel}.`
                     }}
                 </p>
             </div>
@@ -1842,7 +1920,7 @@ function closeDonationModal(): void {
         >
             <div
                 v-if="showTemplateHint"
-                class="fixed bottom-6 right-6 z-40 hidden lg:flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-lg backdrop-blur-xs"
+                class="backdrop-blur-xs fixed bottom-6 right-6 z-40 hidden items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-lg lg:flex"
             >
                 <div class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                     <Sparkles class="h-3.5 w-3.5" />
@@ -1860,14 +1938,18 @@ function closeDonationModal(): void {
         </transition>
 
         <!-- MODAL UBAH PROFIL & PASSWORD -->
-        <div v-if="isProfileModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs px-4">
-            <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div v-if="isProfileModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+            <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl duration-150 animate-in fade-in zoom-in-95">
                 <div class="mb-4 flex items-start justify-between gap-4">
                     <div>
                         <h2 class="text-lg font-bold text-slate-900">Pengaturan Akun</h2>
                         <p class="mt-1 text-xs text-slate-500">Perbarui informasi profil atau ganti password akun Anda.</p>
                     </div>
-                    <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" @click="isProfileModalOpen = false">
+                    <button
+                        type="button"
+                        class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        @click="isProfileModalOpen = false"
+                    >
                         <X class="h-5 w-5" />
                     </button>
                 </div>
@@ -1878,8 +1960,10 @@ function closeDonationModal(): void {
                         type="button"
                         @click="profileModalTab = 'profile'"
                         :class="[
-                            'flex-1 pb-3 text-sm font-bold border-b-2 transition-all',
-                            profileModalTab === 'profile' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                            'flex-1 border-b-2 pb-3 text-sm font-bold transition-all',
+                            profileModalTab === 'profile'
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700',
                         ]"
                     >
                         Profil
@@ -1888,8 +1972,10 @@ function closeDonationModal(): void {
                         type="button"
                         @click="profileModalTab = 'password'"
                         :class="[
-                            'flex-1 pb-3 text-sm font-bold border-b-2 transition-all',
-                            profileModalTab === 'password' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                            'flex-1 border-b-2 pb-3 text-sm font-bold transition-all',
+                            profileModalTab === 'password'
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700',
                         ]"
                     >
                         Password
@@ -1906,7 +1992,7 @@ function closeDonationModal(): void {
                             class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             required
                         />
-                        <span v-if="profileForm.errors.name" class="text-xs text-red-500 font-semibold">{{ profileForm.errors.name }}</span>
+                        <span v-if="profileForm.errors.name" class="text-xs font-semibold text-red-500">{{ profileForm.errors.name }}</span>
                     </div>
 
                     <div class="space-y-1.5 text-left">
@@ -1917,7 +2003,7 @@ function closeDonationModal(): void {
                             class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             required
                         />
-                        <span v-if="profileForm.errors.email" class="text-xs text-red-500 font-semibold">{{ profileForm.errors.email }}</span>
+                        <span v-if="profileForm.errors.email" class="text-xs font-semibold text-red-500">{{ profileForm.errors.email }}</span>
                     </div>
 
                     <div class="flex justify-end gap-2 pt-2">
@@ -1948,7 +2034,9 @@ function closeDonationModal(): void {
                             class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             required
                         />
-                        <span v-if="passwordForm.errors.current_password" class="text-xs text-red-500 font-semibold">{{ passwordForm.errors.current_password }}</span>
+                        <span v-if="passwordForm.errors.current_password" class="text-xs font-semibold text-red-500">{{
+                            passwordForm.errors.current_password
+                        }}</span>
                     </div>
 
                     <div class="space-y-1.5 text-left">
@@ -1959,7 +2047,7 @@ function closeDonationModal(): void {
                             class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             required
                         />
-                        <span v-if="passwordForm.errors.password" class="text-xs text-red-500 font-semibold">{{ passwordForm.errors.password }}</span>
+                        <span v-if="passwordForm.errors.password" class="text-xs font-semibold text-red-500">{{ passwordForm.errors.password }}</span>
                     </div>
 
                     <div class="space-y-1.5 text-left">
@@ -1970,7 +2058,9 @@ function closeDonationModal(): void {
                             class="h-10 w-full rounded-xl border border-slate-200 px-3.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                             required
                         />
-                        <span v-if="passwordForm.errors.password_confirmation" class="text-xs text-red-500 font-semibold">{{ passwordForm.errors.password_confirmation }}</span>
+                        <span v-if="passwordForm.errors.password_confirmation" class="text-xs font-semibold text-red-500">{{
+                            passwordForm.errors.password_confirmation
+                        }}</span>
                     </div>
 
                     <div class="flex justify-end gap-2 pt-2">
@@ -1994,8 +2084,8 @@ function closeDonationModal(): void {
         </div>
 
         <!-- MODAL SARAN & MASUKAN -->
-        <div v-if="isSuggestionModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs px-4">
-            <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div v-if="isSuggestionModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+            <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl duration-150 animate-in fade-in zoom-in-95">
                 <div class="mb-4 flex items-start justify-between gap-4">
                     <div class="flex items-center gap-2.5">
                         <div class="rounded-xl bg-emerald-50 p-2 text-emerald-600">
@@ -2006,7 +2096,11 @@ function closeDonationModal(): void {
                             <p class="mt-0.5 text-xs text-slate-500">Kirim feedback Anda untuk membantu kami menjadi lebih baik.</p>
                         </div>
                     </div>
-                    <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" @click="isSuggestionModalOpen = false">
+                    <button
+                        type="button"
+                        class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        @click="isSuggestionModalOpen = false"
+                    >
                         <X class="h-5 w-5" />
                     </button>
                 </div>
@@ -2021,7 +2115,9 @@ function closeDonationModal(): void {
                             placeholder="Mis. Masukan Fitur Baru"
                             required
                         />
-                        <span v-if="suggestionForm.errors.subject" class="text-xs text-red-500 font-semibold">{{ suggestionForm.errors.subject }}</span>
+                        <span v-if="suggestionForm.errors.subject" class="text-xs font-semibold text-red-500">{{
+                            suggestionForm.errors.subject
+                        }}</span>
                     </div>
 
                     <div class="space-y-1.5">
@@ -2029,11 +2125,13 @@ function closeDonationModal(): void {
                         <textarea
                             v-model="suggestionForm.message"
                             rows="4"
-                            class="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 resize-none animate-none"
+                            class="w-full animate-none resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             placeholder="Tuliskan ide, masukan, atau kritik membangun Anda..."
                             required
                         ></textarea>
-                        <span v-if="suggestionForm.errors.message" class="text-xs text-red-500 font-semibold">{{ suggestionForm.errors.message }}</span>
+                        <span v-if="suggestionForm.errors.message" class="text-xs font-semibold text-red-500">{{
+                            suggestionForm.errors.message
+                        }}</span>
                     </div>
 
                     <div class="flex justify-end gap-2 pt-2">
@@ -2057,13 +2155,15 @@ function closeDonationModal(): void {
         </div>
 
         <!-- MODAL DUKUNGAN DEVELOPER (DONASI) -->
-        <div v-if="isDonationModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs px-4">
-            <section class="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+        <div v-if="isDonationModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+            <section
+                class="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl duration-150 animate-in fade-in zoom-in-95"
+            >
                 <!-- Canvas for confetti -->
-                <canvas v-if="isConfettiActive" ref="confettiCanvasRef" class="absolute inset-0 pointer-events-none z-50 w-full h-full"></canvas>
+                <canvas v-if="isConfettiActive" ref="confettiCanvasRef" class="pointer-events-none absolute inset-0 z-50 h-full w-full"></canvas>
 
                 <!-- Modal Header -->
-                <div class="border-b border-slate-100 bg-slate-50/50 p-5 flex items-center justify-between">
+                <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-5">
                     <div class="flex items-center gap-2.5">
                         <div class="rounded-xl bg-pink-50 p-2 text-pink-600">
                             <Heart class="h-5 w-5 fill-pink-500" />
@@ -2073,31 +2173,43 @@ function closeDonationModal(): void {
                             <p class="text-xs text-slate-500">Dukung keberlanjutan dan pengembangan Alsenform.</p>
                         </div>
                     </div>
-                    <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 z-10" @click="closeDonationModal">
+                    <button
+                        type="button"
+                        class="z-10 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        @click="closeDonationModal"
+                    >
                         <X class="h-5 w-5" />
                     </button>
                 </div>
 
                 <!-- Modal Body Scrollable -->
-                <div class="p-6 max-h-[65vh] overflow-y-auto bg-white text-left">
+                <div class="max-h-[65vh] overflow-y-auto bg-white p-6 text-left">
                     <!-- VIEW A: PAYMENT SUCCESS CARD -->
-                    <div v-if="donationSuccessDetails" class="text-center py-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div v-if="donationSuccessDetails" class="space-y-4 py-6 text-center duration-300 animate-in fade-in slide-in-from-bottom-4">
                         <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-inner">
                             <Award class="h-8 w-8" />
                         </div>
                         <div class="space-y-1">
                             <h3 class="text-xl font-black text-slate-900">Terima Kasih, {{ donationSuccessDetails.donor_name }}!</h3>
-                            <p class="text-sm text-slate-500">Donasi Anda sebesar <span class="font-extrabold text-emerald-600">Rp {{ numberFormat(donationSuccessDetails.amount) }}</span> telah sukses kami terima.</p>
+                            <p class="text-sm text-slate-500">
+                                Donasi Anda sebesar
+                                <span class="font-extrabold text-emerald-600">Rp {{ numberFormat(donationSuccessDetails.amount) }}</span> telah sukses
+                                kami terima.
+                            </p>
                         </div>
-                        <div class="rounded-2xl bg-indigo-50/50 p-4 border border-indigo-100 max-w-sm mx-auto text-left space-y-2">
-                            <div class="text-[10px] uppercase tracking-wider font-extrabold text-indigo-500">Pesan Dukungan Anda:</div>
-                            <p class="text-xs font-medium text-indigo-950 italic">"{{ donationSuccessDetails.message || 'Dukungan tanpa pesan.' }}"</p>
+                        <div class="mx-auto max-w-sm space-y-2 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 text-left">
+                            <div class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500">Pesan Dukungan Anda:</div>
+                            <p class="text-xs font-medium italic text-indigo-950">
+                                "{{ donationSuccessDetails.message || 'Dukungan tanpa pesan.' }}"
+                            </p>
                         </div>
-                        <p class="text-xs text-slate-400 font-semibold text-center">Dukungan Anda sangat berarti untuk memelihara server dan terus merilis fitur-fitur baru.</p>
-                        <div class="pt-4 flex justify-center">
+                        <p class="text-center text-xs font-semibold text-slate-400">
+                            Dukungan Anda sangat berarti untuk memelihara server dan terus merilis fitur-fitur baru.
+                        </p>
+                        <div class="flex justify-center pt-4">
                             <button
                                 type="button"
-                                class="rounded-full bg-slate-900 px-6 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
+                                class="rounded-full bg-slate-900 px-6 py-2.5 text-xs font-bold text-white transition-colors hover:bg-slate-800"
                                 @click="donationSuccessDetails = null"
                             >
                                 Donasi Lagi
@@ -2106,26 +2218,30 @@ function closeDonationModal(): void {
                     </div>
 
                     <!-- VIEW B: QRIS SCREEN -->
-                    <div v-else-if="activeDonation" class="space-y-5 animate-in fade-in zoom-in-95 duration-200">
-                        <div class="rounded-2xl bg-pink-50/50 border border-pink-100 p-4 text-center">
+                    <div v-else-if="activeDonation" class="space-y-5 duration-200 animate-in fade-in zoom-in-95">
+                        <div class="rounded-2xl border border-pink-100 bg-pink-50/50 p-4 text-center">
                             <div class="text-xs font-bold text-pink-700">QRIS Pembayaran</div>
-                            <div class="text-2xl font-black text-slate-900 mt-1">Rp {{ numberFormat(activeDonation.amount) }}</div>
-                            <div class="text-[10px] font-semibold text-slate-500 mt-0.5">Ref: {{ activeDonation.payment_reference }}</div>
+                            <div class="mt-1 text-2xl font-black text-slate-900">Rp {{ numberFormat(activeDonation.amount) }}</div>
+                            <div class="mt-0.5 text-[10px] font-semibold text-slate-500">Ref: {{ activeDonation.payment_reference }}</div>
                         </div>
 
                         <!-- Mock QRIS QR Code -->
-                        <div class="mx-auto max-w-[200px] border border-slate-200 rounded-2xl p-4 bg-white shadow-sm flex flex-col items-center justify-center space-y-2">
+                        <div
+                            class="mx-auto flex max-w-[200px] flex-col items-center justify-center space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                        >
                             <!-- QRIS Logo mock -->
-                            <div class="flex items-center gap-1 font-black text-slate-800 text-[10px] pb-1 border-b border-slate-100 w-full justify-center">
-                                <span class="text-red-500 font-black">Q</span>
-                                <span class="text-indigo-500 font-black">R</span>
-                                <span class="text-amber-500 font-black">I</span>
-                                <span class="text-teal-500 font-black">S</span>
-                                <span class="text-[8px] text-slate-400 font-bold ml-1">Merchant</span>
+                            <div
+                                class="flex w-full items-center justify-center gap-1 border-b border-slate-100 pb-1 text-[10px] font-black text-slate-800"
+                            >
+                                <span class="font-black text-red-500">Q</span>
+                                <span class="font-black text-indigo-500">R</span>
+                                <span class="font-black text-amber-500">I</span>
+                                <span class="font-black text-teal-500">S</span>
+                                <span class="ml-1 text-[8px] font-bold text-slate-400">Merchant</span>
                             </div>
                             <!-- Mock dynamic QR representation -->
-                            <div class="relative w-36 h-36 border border-slate-100 p-1 rounded-lg bg-slate-50 flex items-center justify-center">
-                                <svg viewBox="0 0 100 100" class="w-full h-full text-slate-800 fill-current opacity-90">
+                            <div class="relative flex h-36 w-36 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 p-1">
+                                <svg viewBox="0 0 100 100" class="h-full w-full fill-current text-slate-800 opacity-90">
                                     <rect x="0" y="0" width="25" height="25" />
                                     <rect x="3" y="3" width="19" height="19" fill="white" />
                                     <rect x="7" y="7" width="11" height="11" />
@@ -2148,18 +2264,25 @@ function closeDonationModal(): void {
                                     <rect x="30" y="85" width="25" height="10" />
                                     <rect x="80" y="85" width="15" height="12" />
                                 </svg>
-                                <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent flex items-center justify-center">
-                                    <div class="h-6 w-6 rounded-md bg-white border border-slate-100 flex items-center justify-center text-[8px] font-black text-pink-600 shadow-xs">AL</div>
+                                <div
+                                    class="absolute inset-0 flex items-center justify-center bg-gradient-to-tr from-transparent via-white/5 to-transparent"
+                                >
+                                    <div
+                                        class="shadow-xs flex h-6 w-6 items-center justify-center rounded-md border border-slate-100 bg-white text-[8px] font-black text-pink-600"
+                                    >
+                                        AL
+                                    </div>
                                 </div>
                             </div>
                             <div class="text-[8px] font-extrabold text-slate-400">ALSENFORM DEV SUPPORT</div>
                         </div>
 
-                        <div class="text-xs text-slate-500 leading-relaxed text-center max-w-sm mx-auto">
-                            Scan QRIS di atas dengan aplikasi pembayaran Anda. Setelah melakukan pembayaran, klik tombol simulasi di bawah untuk verifikasi pembayaran secara instan.
+                        <div class="mx-auto max-w-sm text-center text-xs leading-relaxed text-slate-500">
+                            Scan QRIS di atas dengan aplikasi pembayaran Anda. Setelah melakukan pembayaran, klik tombol simulasi di bawah untuk
+                            verifikasi pembayaran secara instan.
                         </div>
 
-                        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                        <div class="flex justify-end gap-2 border-t border-slate-100 pt-2">
                             <button
                                 type="button"
                                 class="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100"
@@ -2169,7 +2292,7 @@ function closeDonationModal(): void {
                             </button>
                             <button
                                 type="button"
-                                class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700 shadow-md flex items-center gap-1.5 transition-colors"
+                                class="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold text-white shadow-md transition-colors hover:bg-emerald-700"
                                 @click="confirmDonationPayment"
                             >
                                 <Coins class="h-4 w-4" />
@@ -2179,10 +2302,13 @@ function closeDonationModal(): void {
                     </div>
 
                     <!-- VIEW C: INPUT DONATION FORM -->
-                    <div v-else class="space-y-5 animate-in fade-in duration-200">
+                    <div v-else class="space-y-5 duration-200 animate-in fade-in">
                         <div class="rounded-2xl bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-600 p-5 text-white shadow-md">
-                            <div class="text-xs font-bold opacity-80 uppercase tracking-widest">Dukung Developer</div>
-                            <p class="text-[10px] opacity-90 mt-2 leading-relaxed font-medium">Bantuan donasi Anda digunakan untuk biaya operasional hosting, domain kustom, serta kelancaran pemeliharaan aplikasi Alsenform.</p>
+                            <div class="text-xs font-bold uppercase tracking-widest opacity-80">Dukung Developer</div>
+                            <p class="mt-2 text-[10px] font-medium leading-relaxed opacity-90">
+                                Bantuan donasi Anda digunakan untuk biaya operasional hosting, domain kustom, serta kelancaran pemeliharaan aplikasi
+                                Alsenform.
+                            </p>
                         </div>
 
                         <form class="space-y-4" @submit.prevent="submitDonation">
@@ -2200,7 +2326,7 @@ function closeDonationModal(): void {
                             <div class="space-y-1.5">
                                 <label class="text-xs font-bold text-slate-700">Nominal Donasi</label>
                                 <!-- Preset Grid -->
-                                <div class="grid grid-cols-4 gap-2 mb-2">
+                                <div class="mb-2 grid grid-cols-4 gap-2">
                                     <button
                                         type="button"
                                         v-for="amt in [10000, 25000, 50000, 100000]"
@@ -2210,8 +2336,10 @@ function closeDonationModal(): void {
                                             customAmount = '';
                                         "
                                         :class="[
-                                            'h-9 rounded-xl text-xs font-bold border transition-all',
-                                            donationAmount === amt ? 'bg-pink-50 border-pink-500 text-pink-600 ring-2 ring-pink-100' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                            'h-9 rounded-xl border text-xs font-bold transition-all',
+                                            donationAmount === amt
+                                                ? 'border-pink-500 bg-pink-50 text-pink-600 ring-2 ring-pink-100'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                                         ]"
                                     >
                                         Rp {{ numberFormat(amt) }}
@@ -2220,8 +2348,10 @@ function closeDonationModal(): void {
                                         type="button"
                                         @click="donationAmount = 0"
                                         :class="[
-                                            'h-9 rounded-xl text-xs font-bold border col-span-4 transition-all',
-                                            donationAmount === 0 ? 'bg-pink-50 border-pink-500 text-pink-600 ring-2 ring-pink-100' : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                            'col-span-4 h-9 rounded-xl border text-xs font-bold transition-all',
+                                            donationAmount === 0
+                                                ? 'border-pink-500 bg-pink-50 text-pink-600 ring-2 ring-pink-100'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                                         ]"
                                     >
                                         Masukkan Nominal Lain
@@ -2260,7 +2390,7 @@ function closeDonationModal(): void {
                                 </button>
                                 <button
                                     type="submit"
-                                    class="rounded-xl bg-pink-600 px-5 py-2 text-xs font-extrabold text-white hover:bg-pink-700 shadow-md transition-colors"
+                                    class="rounded-xl bg-pink-600 px-5 py-2 text-xs font-extrabold text-white shadow-md transition-colors hover:bg-pink-700"
                                 >
                                     Lanjut ke QRIS
                                 </button>
@@ -2272,10 +2402,12 @@ function closeDonationModal(): void {
         </div>
 
         <!-- MODAL PANEL ADMIN (DONASI & SARAN) - KHUSUS SUPERADMIN -->
-        <div v-if="isAdminModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs px-4">
-            <section class="w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+        <div v-if="isAdminModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+            <section
+                class="w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl duration-150 animate-in fade-in zoom-in-95"
+            >
                 <!-- Modal Header -->
-                <div class="border-b border-slate-100 bg-slate-50/50 p-5 flex items-center justify-between">
+                <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-5">
                     <div class="flex items-center gap-2.5">
                         <div class="rounded-xl bg-indigo-50 p-2 text-indigo-600">
                             <Shield class="h-5 w-5" />
@@ -2285,19 +2417,25 @@ function closeDonationModal(): void {
                             <p class="text-xs text-slate-500">Kelola keuangan donasi dan tinjau saran masukan dari pengguna.</p>
                         </div>
                     </div>
-                    <button type="button" class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" @click="isAdminModalOpen = false">
+                    <button
+                        type="button"
+                        class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        @click="isAdminModalOpen = false"
+                    >
                         <X class="h-5 w-5" />
                     </button>
                 </div>
 
                 <!-- Tabs -->
-                <div class="flex border-b border-slate-100 px-5 bg-white">
+                <div class="flex border-b border-slate-100 bg-white px-5">
                     <button
                         type="button"
                         @click="adminModalTab = 'finance'"
                         :class="[
-                            'py-3.5 text-xs font-extrabold border-b-2 mr-6 transition-all flex items-center gap-1.5',
-                            adminModalTab === 'finance' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                            'mr-6 flex items-center gap-1.5 border-b-2 py-3.5 text-xs font-extrabold transition-all',
+                            adminModalTab === 'finance'
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700',
                         ]"
                     >
                         <Wallet class="h-3.5 w-3.5" />
@@ -2307,8 +2445,10 @@ function closeDonationModal(): void {
                         type="button"
                         @click="adminModalTab = 'suggestions'"
                         :class="[
-                            'py-3.5 text-xs font-extrabold border-b-2 transition-all flex items-center gap-1.5',
-                            adminModalTab === 'suggestions' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+                            'flex items-center gap-1.5 border-b-2 py-3.5 text-xs font-extrabold transition-all',
+                            adminModalTab === 'suggestions'
+                                ? 'border-indigo-600 text-indigo-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700',
                         ]"
                     >
                         <MessageSquare class="h-3.5 w-3.5" />
@@ -2317,40 +2457,39 @@ function closeDonationModal(): void {
                 </div>
 
                 <!-- Scrollable Body -->
-                <div class="p-6 max-h-[60vh] overflow-y-auto bg-white text-left">
-                    
+                <div class="max-h-[60vh] overflow-y-auto bg-white p-6 text-left">
                     <!-- TAB 1: FINANCE -->
                     <div v-if="adminModalTab === 'finance'" class="space-y-6">
                         <!-- Stats Cards -->
                         <div class="grid grid-cols-3 gap-4 text-center">
                             <div class="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Masuk</div>
-                                <div class="text-base font-extrabold text-slate-800 mt-1">Rp {{ numberFormat(devStats.total_received) }}</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Masuk</div>
+                                <div class="mt-1 text-base font-extrabold text-slate-800">Rp {{ numberFormat(devStats.total_received) }}</div>
                             </div>
                             <div class="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Telah Ditarik</div>
-                                <div class="text-base font-extrabold text-slate-800 mt-1">Rp {{ numberFormat(devStats.total_withdrawn) }}</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Telah Ditarik</div>
+                                <div class="mt-1 text-base font-extrabold text-slate-800">Rp {{ numberFormat(devStats.total_withdrawn) }}</div>
                             </div>
                             <div class="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-4">
-                                <div class="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Saldo Tersedia</div>
-                                <div class="text-base font-black text-indigo-700 mt-1">Rp {{ numberFormat(devStats.balance) }}</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Saldo Tersedia</div>
+                                <div class="mt-1 text-base font-black text-indigo-700">Rp {{ numberFormat(devStats.balance) }}</div>
                             </div>
                         </div>
 
                         <!-- Tarik Saldo Form -->
-                        <section class="rounded-2xl border border-slate-100 p-4 space-y-3 bg-slate-50/30">
-                            <h3 class="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                        <section class="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/30 p-4">
+                            <h3 class="flex items-center gap-1.5 text-xs font-extrabold text-slate-800">
                                 <Coins class="h-4 w-4 text-indigo-500" />
                                 Form Pencairan Saldo
                             </h3>
-                            
+
                             <form class="space-y-3" @submit.prevent="submitWithdrawal">
                                 <div class="grid grid-cols-2 gap-3">
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-slate-700 text-left block">Bank / E-Wallet</label>
+                                        <label class="block text-left text-[10px] font-bold text-slate-700">Bank / E-Wallet</label>
                                         <select
                                             v-model="withdrawalForm.bank_name"
-                                            class="h-9 w-full rounded-xl border border-slate-200 px-2 text-xs outline-none bg-white focus:border-indigo-500"
+                                            class="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none focus:border-indigo-500"
                                             required
                                         >
                                             <option value="BCA">BCA</option>
@@ -2364,7 +2503,7 @@ function closeDonationModal(): void {
                                         </select>
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-slate-700 text-left block">Nominal Penarikan (Rp)</label>
+                                        <label class="block text-left text-[10px] font-bold text-slate-700">Nominal Penarikan (Rp)</label>
                                         <input
                                             v-model="withdrawalForm.amount"
                                             type="number"
@@ -2378,7 +2517,7 @@ function closeDonationModal(): void {
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-slate-700 text-left block">Nomor Rekening / No. HP</label>
+                                        <label class="block text-left text-[10px] font-bold text-slate-700">Nomor Rekening / No. HP</label>
                                         <input
                                             v-model="withdrawalForm.account_number"
                                             type="text"
@@ -2388,7 +2527,7 @@ function closeDonationModal(): void {
                                         />
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-slate-700 text-left block">Nama Pemilik Rekening</label>
+                                        <label class="block text-left text-[10px] font-bold text-slate-700">Nama Pemilik Rekening</label>
                                         <input
                                             v-model="withdrawalForm.account_name"
                                             type="text"
@@ -2403,7 +2542,7 @@ function closeDonationModal(): void {
                                     <button
                                         type="submit"
                                         :disabled="withdrawalForm.processing || devStats.balance < 5000"
-                                        class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-40 transition-colors"
+                                        class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:opacity-40"
                                     >
                                         Tarik Saldo Sekarang
                                     </button>
@@ -2415,42 +2554,46 @@ function closeDonationModal(): void {
                         <div class="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                             <!-- Supporters log -->
                             <div class="space-y-2">
-                                <h4 class="text-xs font-extrabold text-slate-800 flex items-center gap-1">
+                                <h4 class="flex items-center gap-1 text-xs font-extrabold text-slate-800">
                                     <Heart class="h-3.5 w-3.5 text-pink-500" />
                                     Donatur Terbaru
                                 </h4>
-                                <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                    <div v-if="devStats.supporters?.length === 0" class="text-[10px] text-slate-400 font-semibold py-3 text-center">Belum ada donatur.</div>
+                                <div class="max-h-48 space-y-2 overflow-y-auto pr-1">
+                                    <div v-if="devStats.supporters?.length === 0" class="py-3 text-center text-[10px] font-semibold text-slate-400">
+                                        Belum ada donatur.
+                                    </div>
                                     <div
                                         v-for="sup in devStats.supporters"
                                         :key="sup.id"
-                                        class="rounded-xl bg-slate-50 p-2.5 text-[10px] border border-slate-100"
+                                        class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px]"
                                     >
                                         <div class="flex justify-between font-bold text-slate-800">
                                             <span>{{ sup.donor_name }}</span>
-                                            <span class="text-pink-600 flex items-center">Rp {{ numberFormat(sup.amount) }}</span>
+                                            <span class="flex items-center text-pink-600">Rp {{ numberFormat(sup.amount) }}</span>
                                         </div>
-                                        <p v-if="sup.message" class="text-slate-500 mt-1 italic leading-normal">"{{ sup.message }}"</p>
+                                        <p v-if="sup.message" class="mt-1 italic leading-normal text-slate-500">"{{ sup.message }}"</p>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Withdrawal logs -->
                             <div class="space-y-2">
-                                <h4 class="text-xs font-extrabold text-slate-800 flex items-center gap-1">
+                                <h4 class="flex items-center gap-1 text-xs font-extrabold text-slate-800">
                                     <History class="h-3.5 w-3.5 text-indigo-500" />
                                     Riwayat Penarikan
                                 </h4>
-                                <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                    <div v-if="devStats.withdrawals?.length === 0" class="text-[10px] text-slate-400 font-semibold py-3 text-center">Belum ada riwayat penarikan.</div>
+                                <div class="max-h-48 space-y-2 overflow-y-auto pr-1">
+                                    <div v-if="devStats.withdrawals?.length === 0" class="py-3 text-center text-[10px] font-semibold text-slate-400">
+                                        Belum ada riwayat penarikan.
+                                    </div>
                                     <div
                                         v-for="wd in devStats.withdrawals"
                                         :key="wd.id"
-                                        class="rounded-xl bg-slate-50 p-2.5 text-[10px] border border-slate-100 flex justify-between items-center"
+                                        class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[10px]"
                                     >
                                         <div class="text-left">
-                                            <span class="font-bold text-slate-800 block">{{ wd.bank_name }} - {{ wd.account_number }}</span>
-                                            <span class="text-[8px] text-slate-400 block mt-0.5">{{ wd.account_name }}</span>
+                                            <span class="block font-bold text-slate-800">{{ wd.bank_name }} - {{ wd.account_number }}</span>
+                                            <span class="mt-0.5 block text-[8px] text-slate-400">{{ wd.account_name }}</span>
                                         </div>
                                         <span class="font-extrabold text-slate-700">-Rp {{ numberFormat(wd.amount) }}</span>
                                     </div>
@@ -2461,7 +2604,10 @@ function closeDonationModal(): void {
 
                     <!-- TAB 2: SUGGESTIONS -->
                     <div v-if="adminModalTab === 'suggestions'" class="space-y-4">
-                        <div v-if="devStats.suggestions?.length === 0" class="text-xs text-slate-400 font-semibold py-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                        <div
+                            v-if="devStats.suggestions?.length === 0"
+                            class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center text-xs font-semibold text-slate-400"
+                        >
                             Belum ada saran & masukan dari user.
                         </div>
                         <div v-else class="space-y-3">
@@ -2473,15 +2619,25 @@ function closeDonationModal(): void {
                                 <div class="flex items-start justify-between gap-4">
                                     <div>
                                         <h4 class="text-sm font-bold text-slate-900">{{ sug.subject }}</h4>
-                                        <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-500 font-semibold">
-                                            <span class="text-indigo-600 font-bold">{{ sug.user?.name }}</span>
+                                        <div class="mt-1 flex items-center gap-2 text-[10px] font-semibold text-slate-500">
+                                            <span class="font-bold text-indigo-600">{{ sug.user?.name }}</span>
                                             <span>({{ sug.user?.email }})</span>
                                             <span class="text-slate-300">•</span>
-                                            <span>{{ new Date(sug.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</span>
+                                            <span>{{
+                                                new Date(sug.created_at).toLocaleDateString('id-ID', {
+                                                    day: 'numeric',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })
+                                            }}</span>
                                         </div>
                                     </div>
                                 </div>
-                                <p class="text-xs text-slate-600 mt-3 bg-white border border-slate-100 rounded-xl p-3 leading-relaxed whitespace-pre-wrap">
+                                <p
+                                    class="mt-3 whitespace-pre-wrap rounded-xl border border-slate-100 bg-white p-3 text-xs leading-relaxed text-slate-600"
+                                >
                                     {{ sug.message }}
                                 </p>
                             </div>
@@ -2490,7 +2646,6 @@ function closeDonationModal(): void {
                 </div>
             </section>
         </div>
-
     </main>
 </template>
 
