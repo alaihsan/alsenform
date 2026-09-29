@@ -76,6 +76,7 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.backgroundPatternClass' => ['nullable', 'string', 'max:100'],
             'settings.lockOnBlur' => ['nullable', 'boolean'],
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
+            'settings.questionsPerPage' => ['nullable'],
             'published' => ['nullable', 'boolean'],
             'cohort_ids' => ['nullable', 'array'],
             'cohort_ids.*' => ['integer', 'exists:cohorts,id'],

@@ -1,9 +1,30 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Star, Lock, Unlock, Clock, Key, RefreshCw, ShieldAlert, ArrowLeft, Users, CheckCircle2 } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import {
+    Star,
+    Lock,
+    Unlock,
+    Clock,
+    Key,
+    RefreshCw,
+    ShieldAlert,
+    ArrowLeft,
+    Users,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    ChevronUp,
+    Send,
+    LayoutGrid,
+    AlertCircle,
+    Maximize2,
+    ZoomIn,
+} from 'lucide-vue-next';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
+import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 
 type Question = {
     id: number;
@@ -15,7 +36,13 @@ type Question = {
     columns?: string[];
     answer?: any;
     required: boolean;
-    media?: { type: 'image' | 'video'; url: string }[];
+    media?: {
+        type: 'image' | 'video';
+        url: string;
+        width?: string;
+        align?: 'left' | 'center' | 'right';
+        caption?: string;
+    }[];
     points?: number;
 };
 
@@ -40,6 +67,7 @@ const props = defineProps<{
             backgroundPatternClass?: string;
             lockOnBlur?: boolean;
             timeLimit?: number;
+            questionsPerPage?: string | number;
         };
         submitUrl: string;
     };
@@ -62,6 +90,21 @@ const displayQuestions = ref<Question[]>([]);
 const isSubmitted = ref(false);
 const isSubmitting = ref(false);
 const submissionError = ref('');
+const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+const updateOnlineStatus = () => {
+    isOnline.value = navigator.onLine;
+};
+
+const activeLightboxMedia = ref<{ url: string; type: 'image' | 'video'; caption?: string } | null>(null);
+
+const openLightbox = (media: any) => {
+    activeLightboxMedia.value = {
+        url: media.url,
+        type: media.type,
+        caption: media.caption ?? '',
+    };
+};
 
 // Offline Auto-Save Draft Refs & Logic
 const autoSaveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
@@ -252,6 +295,9 @@ const handleVisibilityChange = () => {
 };
 
 onMounted(() => {
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
     let qs = [...props.quizForm.questions];
     if (props.quizForm.settings.shuffleQuestions) {
         for (let i = qs.length - 1; i > 0; i--) {
@@ -358,6 +404,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    window.removeEventListener('online', updateOnlineStatus);
+    window.removeEventListener('offline', updateOnlineStatus);
     window.removeEventListener('blur', handleBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (timerInterval) {
@@ -375,6 +423,157 @@ const getYoutubeEmbedUrl = (url: string): string | undefined => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : undefined;
+};
+
+const perPage = computed<number>(() => {
+    const val = props.quizForm.settings?.questionsPerPage;
+    if (!val || val === 'all') {
+        return 0;
+    }
+    const parsed = parseInt(String(val), 10);
+    return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
+});
+
+const isPaginated = computed<boolean>(() => perPage.value > 0 && displayQuestions.value.length > perPage.value);
+
+const currentPage = ref(1);
+
+const totalPages = computed<number>(() => {
+    if (!isPaginated.value) {
+        return 1;
+    }
+    return Math.ceil(displayQuestions.value.length / perPage.value);
+});
+
+const currentPagedQuestions = computed<Question[]>(() => {
+    if (!isPaginated.value) {
+        return displayQuestions.value;
+    }
+    const start = (currentPage.value - 1) * perPage.value;
+    return displayQuestions.value.slice(start, start + perPage.value);
+});
+
+const totalQuestionsCount = computed<number>(() => displayQuestions.value.length);
+
+const isQuestionAnswered = (question: Question): boolean => {
+    const ans = answers.value[question.id];
+    if (ans === undefined || ans === null || ans === '') {
+        return false;
+    }
+    if (Array.isArray(ans)) {
+        return ans.length > 0;
+    }
+    if (typeof ans === 'object') {
+        return Object.keys(ans).length > 0;
+    }
+    return true;
+};
+
+const totalAnsweredCount = computed<number>(() => {
+    return displayQuestions.value.filter((q) => isQuestionAnswered(q)).length;
+});
+
+const unansweredRequiredQuestions = computed<Question[]>(() => {
+    return displayQuestions.value.filter((q) => q.required && !isQuestionAnswered(q));
+});
+
+const isQuestionMapOpen = ref(true);
+
+const isCurrentPageQuestion = (questionId: number): boolean => {
+    return currentPagedQuestions.value.some((q) => q.id === questionId);
+};
+
+const getQuestionNumber = (questionId: number): number => {
+    const idx = displayQuestions.value.findIndex((q) => q.id === questionId);
+    return idx >= 0 ? idx + 1 : 1;
+};
+
+const scrollToQuizTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const nextPage = () => {
+    if (currentPage.value < totalPages.value) {
+        currentPage.value++;
+        scrollToQuizTop();
+    }
+};
+
+const prevPage = () => {
+    if (currentPage.value > 1) {
+        currentPage.value--;
+        scrollToQuizTop();
+    }
+};
+
+const goToQuestion = (questionId: number) => {
+    const idx = displayQuestions.value.findIndex((q) => q.id === questionId);
+    if (idx < 0) {
+        return;
+    }
+
+    if (isPaginated.value) {
+        currentPage.value = Math.floor(idx / perPage.value) + 1;
+    }
+
+    nextTick(() => {
+        const el = document.getElementById(`question-card-${questionId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+};
+
+const goToFirstUnansweredRequired = () => {
+    if (unansweredRequiredQuestions.value.length === 0) {
+        return;
+    }
+    const target = unansweredRequiredQuestions.value[0];
+    showSubmitConfirmModal.value = false;
+    goToQuestion(target.id);
+};
+
+const showSubmitConfirmModal = ref(false);
+
+const openSubmitConfirmation = () => {
+    if (props.quizForm.settings.collectEmail && (!email.value || !email.value.trim())) {
+        validationErrors.value[0] = 'Silakan isi alamat email Anda terlebih dahulu.';
+        if (isPaginated.value) {
+            currentPage.value = 1;
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
+    validateForm();
+    showSubmitConfirmModal.value = true;
+};
+
+const confirmAndSubmit = () => {
+    if (unansweredRequiredQuestions.value.length > 0) {
+        return;
+    }
+    showSubmitConfirmModal.value = false;
+    submitResponse();
+};
+
+const autoResizePublicTextarea = (event: Event) => {
+    const el = event.target as HTMLTextAreaElement;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 112)}px`;
+};
+
+const handleShiftEnterKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' && event.shiftKey) {
+        setTimeout(() => {
+            const el = event.target as HTMLTextAreaElement;
+            if (el) {
+                el.style.height = 'auto';
+                el.style.height = `${Math.max(el.scrollHeight, 112)}px`;
+            }
+        }, 0);
+    }
 };
 
 const progress = computed(() => {
@@ -522,10 +721,7 @@ const submitResponse = () => {
     if (!validateForm()) {
         const firstErrorQuestion = props.quizForm.questions.find((q) => validationErrors.value[q.id]);
         if (firstErrorQuestion) {
-            const el = document.getElementById(`question-card-${firstErrorQuestion.id}`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            goToQuestion(firstErrorQuestion.id);
         }
         return;
     }
@@ -551,8 +747,11 @@ const submitResponse = () => {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             },
             onError: (errors: any) => {
-                if (errors.error) {
+                if (errors && errors.error) {
                     submissionError.value = errors.error;
+                } else {
+                    submissionError.value =
+                        'Koneksi intranet terputus atau lambat saat mengirim jawaban. Tenang, jawaban Anda tetap tersimpan aman di perangkat ini. Periksa koneksi Wi-Fi lalu klik tombol "Coba Kirim Ulang Jawaban Sekarang" di bawah.';
                 }
             },
             onFinish: () => {
@@ -568,6 +767,8 @@ const submitAnotherResponse = () => {
     clearDraft();
     isSubmitted.value = false;
     validationErrors.value = {};
+    currentPage.value = 1;
+    showSubmitConfirmModal.value = false;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 </script>
@@ -603,6 +804,15 @@ const submitAnotherResponse = () => {
             quizForm.settings.backgroundPatternClass ?? 'pattern-none',
         ]"
     >
+        <!-- Offline Intranet Warning Banner -->
+        <div
+            v-if="!isOnline"
+            class="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2.5 text-center text-xs sm:text-sm font-bold text-white shadow-md transition-all"
+        >
+            <AlertCircle class="h-4 w-4 shrink-0" />
+            <span>Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
+        </div>
+
         <!-- Access Restricted State (Cohort Restriction) -->
         <section v-if="accessRestricted" class="mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white shadow-xl overflow-hidden my-8">
             <div class="h-3 bg-amber-500"></div>
@@ -665,9 +875,14 @@ const submitAnotherResponse = () => {
                 <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                 <div class="p-6 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
-                        <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
-                            <RichContent :content="quizForm.title" />
-                        </h1>
+                        <div class="flex-1">
+                            <div v-if="isPaginated" class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
+                                <span>Bagian {{ currentPage }} dari {{ totalPages }}</span>
+                            </div>
+                            <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                                <RichContent :content="quizForm.title" />
+                            </h1>
+                        </div>
                         <div v-if="autoSaveStatus !== 'idle'" class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
                             <span v-if="autoSaveStatus === 'saving'" class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
                                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
@@ -680,7 +895,7 @@ const submitAnotherResponse = () => {
                         </div>
                     </div>
                     <RichContent
-                        v-if="quizForm.description"
+                        v-if="quizForm.description && (!isPaginated || currentPage === 1)"
                         :content="quizForm.description"
                         as="p"
                         class="mt-3 text-slate-500"
@@ -690,7 +905,7 @@ const submitAnotherResponse = () => {
             </section>
 
             <!-- Email Collection Card -->
-            <section v-if="quizForm.settings.collectEmail" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section v-if="quizForm.settings.collectEmail && (!isPaginated || currentPage === 1)" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <label class="block">
                     <span class="text-base font-semibold text-slate-900">Email <span class="text-red-500">*</span></span>
                     <input
@@ -703,9 +918,78 @@ const submitAnotherResponse = () => {
                 </label>
             </section>
 
+            <!-- Question Number Navigation Map (Peta Nomor Soal) -->
+            <section class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <LayoutGrid class="h-4 w-4 text-indigo-600 shrink-0" />
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Daftar Nomor Soal</span>
+                        <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
+                            {{ totalAnsweredCount }} / {{ totalQuestionsCount }} Terjawab
+                        </span>
+                        <span v-if="isPaginated" class="text-xs text-slate-400 font-medium hidden sm:inline">
+                            • Halaman {{ currentPage }} dari {{ totalPages }}
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition"
+                        @click="isQuestionMapOpen = !isQuestionMapOpen"
+                    >
+                        <span>{{ isQuestionMapOpen ? 'Sembunyikan' : 'Buka Peta Soal' }}</span>
+                        <ChevronUp v-if="isQuestionMapOpen" class="h-3.5 w-3.5" />
+                        <ChevronDown v-else class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+
+                <!-- Number Grid -->
+                <div v-show="isQuestionMapOpen" class="mt-3 pt-3 border-t border-slate-100">
+                    <div class="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
+                        <button
+                            v-for="(q, idx) in displayQuestions"
+                            :key="q.id"
+                            type="button"
+                            :class="[
+                                'relative flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition-all shadow-sm',
+                                isCurrentPageQuestion(q.id) ? 'ring-2 ring-indigo-600 ring-offset-2 scale-105' : '',
+                                isQuestionAnswered(q)
+                                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                            ]"
+                            :title="`Soal ${idx + 1}: ${isQuestionAnswered(q) ? 'Sudah Dijawab' : (q.required ? 'Belum Dijawab (Wajib)' : 'Belum Dijawab')}`"
+                            @click="goToQuestion(q.id)"
+                        >
+                            <span>{{ idx + 1 }}</span>
+                            <!-- Dot indicator for unanswered required question -->
+                            <span
+                                v-if="q.required && !isQuestionAnswered(q)"
+                                class="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+                            ></span>
+                        </button>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="h-3 w-3 rounded-md bg-emerald-500"></span>
+                            <span>Sudah Dijawab</span>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="h-3 w-3 rounded-md bg-slate-200"></span>
+                            <span>Belum Dijawab</span>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="relative h-3 w-3 rounded-md bg-slate-200">
+                                <span class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500"></span>
+                            </span>
+                            <span>Wajib Diisi</span>
+                        </span>
+                    </div>
+                </div>
+            </section>
+
             <section class="mx-auto mt-5 max-w-3xl space-y-4">
                 <article
-                    v-for="question in displayQuestions"
+                    v-for="question in currentPagedQuestions"
                     :key="question.id"
                     :id="`question-card-${question.id}`"
                     :class="[
@@ -717,6 +1001,9 @@ const submitAnotherResponse = () => {
                         class="flex flex-wrap items-center text-lg font-semibold"
                         :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
                     >
+                        <span class="mr-2.5 inline-flex items-center justify-center rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                            Soal {{ getQuestionNumber(question.id) }}
+                        </span>
                         <RichContent :content="question.title" class="flex-1" />
                         <span v-if="question.required" class="ml-1 text-red-500">*</span>
                         <span
@@ -741,22 +1028,92 @@ const submitAnotherResponse = () => {
                     />
 
                     <!-- Media elements rendering -->
-                    <div v-if="question.media && question.media.length" class="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div v-for="(media, idx) in question.media" :key="idx" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                            <img v-if="media.type === 'image' && media.url" :src="media.url" class="max-h-72 w-full object-contain p-2" />
-                            <iframe
-                                v-else-if="media.type === 'video' && media.url && getYoutubeEmbedUrl(media.url)"
-                                :src="getYoutubeEmbedUrl(media.url)"
-                                class="aspect-video w-full"
-                                frameborder="0"
-                                allowfullscreen
-                            ></iframe>
-                            <video
-                                v-else-if="media.type === 'video' && media.url"
-                                :src="media.url"
-                                controls
-                                class="max-h-72 w-full bg-slate-950"
-                            ></video>
+                    <div v-if="question.media && question.media.length" class="mt-4 space-y-4">
+                        <div
+                            v-for="(media, idx) in question.media"
+                            :key="idx"
+                            class="flex w-full"
+                            :class="{
+                                'justify-start': media.align === 'left',
+                                'justify-center': !media.align || media.align === 'center',
+                                'justify-end': media.align === 'right',
+                            }"
+                        >
+                            <div
+                                class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 transition-all duration-200 hover:shadow-md"
+                                :style="{ width: media.width ?? '100%', maxWidth: '100%' }"
+                            >
+                                <div
+                                    v-if="media.type === 'image' && media.url"
+                                    class="group relative cursor-pointer"
+                                    @click="openLightbox(media)"
+                                >
+                                    <img
+                                        :src="media.url"
+                                        class="max-h-[550px] w-full object-contain p-2 transition-transform duration-200 group-hover:scale-[1.01]"
+                                        loading="lazy"
+                                    />
+                                    <div
+                                        class="absolute inset-0 flex items-center justify-center bg-slate-900/30 opacity-0 backdrop-blur-[1px] transition duration-200 group-hover:opacity-100"
+                                    >
+                                        <span class="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-slate-800 shadow-lg">
+                                            <ZoomIn class="h-4 w-4 text-indigo-600" />
+                                            Klik untuk Layar Penuh & Zoom
+                                        </span>
+                                    </div>
+                                    <p
+                                        v-if="media.caption"
+                                        class="border-t border-slate-100 bg-white px-3 py-2 text-center text-xs italic text-slate-500"
+                                    >
+                                        {{ media.caption }}
+                                    </p>
+                                </div>
+
+                                <div
+                                    v-else-if="media.type === 'video' && media.url && getYoutubeEmbedUrl(media.url)"
+                                    class="relative"
+                                >
+                                    <iframe
+                                        :src="getYoutubeEmbedUrl(media.url)"
+                                        class="aspect-video w-full"
+                                        frameborder="0"
+                                        allowfullscreen
+                                    ></iframe>
+                                    <div class="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
+                                        <span class="truncate italic">{{ media.caption || 'Video Soal' }}</span>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50"
+                                            @click="openLightbox(media)"
+                                        >
+                                            <Maximize2 class="h-3.5 w-3.5" />
+                                            Layar Penuh
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-else-if="media.type === 'video' && media.url"
+                                    class="relative"
+                                >
+                                    <video
+                                        :src="media.url"
+                                        controls
+                                        class="max-h-[500px] w-full bg-slate-950"
+                                    ></video>
+                                    <div class="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
+                                        <span class="truncate italic">{{ media.caption || 'Video Soal' }}</span>
+                                        <button
+                                            type="button"
+                                            class="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50"
+                                            @click="openLightbox(media)"
+                                        >
+                                            <Maximize2 class="h-3.5 w-3.5" />
+                                            Layar Penuh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -770,8 +1127,10 @@ const submitAnotherResponse = () => {
                     <textarea
                         v-else-if="question.type === 'Paragraph'"
                         v-model="answers[question.id]"
-                        class="mt-5 min-h-28 w-full rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-5 min-h-28 w-full resize-none overflow-hidden rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
                         placeholder="Jawaban panjang Anda"
+                        @input="autoResizePublicTextarea($event)"
+                        @keydown="handleShiftEnterKeydown($event)"
                     ></textarea>
                     <select
                         v-else-if="question.type === 'Drop-down'"
@@ -851,14 +1210,14 @@ const submitAnotherResponse = () => {
                         <label
                             v-for="option in question.options"
                             :key="option"
-                            class="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
+                            class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
                             :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
                         >
                             <input
                                 :type="question.type === 'Checkboxes' ? 'checkbox' : 'radio'"
                                 :name="`question-${question.id}`"
                                 :checked="question.type === 'Checkboxes' ? isCheckboxChecked(question.id, option) : answers[question.id] === option"
-                                class="h-5 w-5 accent-indigo-600"
+                                class="mt-0.5 h-5 w-5 shrink-0 accent-indigo-600"
                                 @change="question.type === 'Checkboxes' ? toggleCheckbox(question.id, option) : (answers[question.id] = option)"
                             />
                             <RichContent :content="option" class="text-slate-800 flex-1" />
@@ -880,32 +1239,190 @@ const submitAnotherResponse = () => {
                 </article>
 
                 <!-- Submission / Timeout Error Alert -->
-                <div v-if="submissionError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 space-y-2">
+                <div v-if="submissionError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 space-y-3">
                     <p class="font-semibold">{{ submissionError }}</p>
-                    <button
-                        type="button"
-                        class="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-                        @click="submitOnTimeout"
-                    >
-                        Coba Kirim Ulang Jawaban
-                    </button>
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
+                            @click="submitResponse"
+                        >
+                            <RefreshCw class="h-3.5 w-3.5" />
+                            <span>Coba Kirim Ulang Jawaban Sekarang</span>
+                        </button>
+                    </div>
                 </div>
 
-                <button
-                    type="button"
-                    :disabled="isSubmitting"
-                    :class="[
-                        'rounded-2xl px-6 py-3 font-bold text-white shadow-sm transition-all duration-300',
-                        quizForm.settings.themeColorClass ?? 'bg-indigo-600',
-                        'hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
-                    ]"
-                    @click="submitResponse"
-                >
-                    {{ isSubmitting ? 'Submitting...' : 'Submit' }}
-                </button>
+                <!-- Navigation Controls: Prev, Next, Submit -->
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <!-- Tombol Sebelumnya jika terpaginasi -->
+                    <button
+                        v-if="isPaginated"
+                        type="button"
+                        :disabled="currentPage <= 1 || isSubmitting"
+                        class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        @click="prevPage"
+                    >
+                        <ChevronLeft class="h-4 w-4" />
+                        <span>Sebelumnya</span>
+                    </button>
+                    <div v-else></div>
+
+                    <!-- Indikator Halaman -->
+                    <div v-if="isPaginated" class="text-center">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ currentPage }} dari {{ totalPages }}</span>
+                        <span class="text-xs font-semibold text-slate-600 mt-0.5 block">
+                            Soal {{ (currentPage - 1) * perPage + 1 }} - {{ Math.min(currentPage * perPage, totalQuestionsCount) }} dari {{ totalQuestionsCount }}
+                        </span>
+                    </div>
+
+                    <!-- Tombol Selanjutnya atau Kirim Jawaban -->
+                    <div class="w-full sm:w-auto">
+                        <button
+                            v-if="isPaginated && currentPage < totalPages"
+                            type="button"
+                            :disabled="isSubmitting"
+                            :class="[
+                                'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-sm transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
+                                quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                            ]"
+                            @click="nextPage"
+                        >
+                            <span>Selanjutnya</span>
+                            <ChevronRight class="h-4 w-4" />
+                        </button>
+
+                        <button
+                            v-else
+                            type="button"
+                            :disabled="isSubmitting"
+                            :class="[
+                                'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-md transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
+                                quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                            ]"
+                            @click="openSubmitConfirmation"
+                        >
+                            <Send class="h-4 w-4" />
+                            <span>{{ isSubmitting ? 'Mengirim...' : 'Kirim Jawaban' }}</span>
+                        </button>
+                    </div>
+                </div>
             </section>
         </template>
     </main>
+
+    <!-- Modal Konfirmasi Kirim Jawaban -->
+    <div
+        v-if="showSubmitConfirmModal"
+        class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+    >
+        <div class="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-2xl transition-all">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                        <Send class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Konfirmasi Pengiriman Jawaban</h3>
+                        <p class="text-xs text-slate-500">Periksa kembali jawaban Anda sebelum dikirim</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats & Progress Summary -->
+            <div class="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-200/80">
+                <div class="flex items-center justify-between text-sm font-bold text-slate-800">
+                    <span>Status Pengerjaan</span>
+                    <span :class="totalAnsweredCount === totalQuestionsCount ? 'text-emerald-600' : 'text-indigo-600'">
+                        {{ totalAnsweredCount }} dari {{ totalQuestionsCount }} Soal Terjawab
+                    </span>
+                </div>
+                <div class="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :class="totalAnsweredCount === totalQuestionsCount ? 'bg-emerald-500' : 'bg-indigo-600'"
+                        :style="{ width: `${progress}%` }"
+                    ></div>
+                </div>
+            </div>
+
+            <!-- Warning if Unanswered Required Questions Exist -->
+            <div
+                v-if="unansweredRequiredQuestions.length > 0"
+                class="mt-4 rounded-2xl border border-red-200 bg-red-50/80 p-4 text-xs text-red-800"
+            >
+                <div class="flex items-start gap-2.5 font-bold text-red-700 text-sm">
+                    <AlertCircle class="h-5 w-5 shrink-0 text-red-600" />
+                    <span>Ada {{ unansweredRequiredQuestions.length }} soal wajib (*) yang belum dijawab!</span>
+                </div>
+                <p class="mt-1.5 pl-7 text-xs text-red-600 leading-relaxed">
+                    Anda harus menyelesaikan seluruh soal wajib sebelum dapat mengirimkan jawaban ujian ini.
+                </p>
+                <div class="mt-3 pl-7">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 transition"
+                        @click="goToFirstUnansweredRequired"
+                    >
+                        <span>Menuju Soal Belum Terjawab</span>
+                        <ChevronRight class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            </div>
+
+            <!-- Notice if all required answered, but some optional questions unanswered -->
+            <div
+                v-else-if="totalAnsweredCount < totalQuestionsCount"
+                class="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-800"
+            >
+                <div class="flex items-start gap-2.5 font-bold text-amber-700 text-sm">
+                    <AlertCircle class="h-5 w-5 shrink-0 text-amber-600" />
+                    <span>Masih ada {{ totalQuestionsCount - totalAnsweredCount }} soal belum dijawab.</span>
+                </div>
+                <p class="mt-1.5 pl-7 text-xs text-amber-700 leading-relaxed">
+                    Semua soal wajib sudah terisi, namun masih ada soal opsional yang kosong. Apakah Anda yakin ingin langsung mengumpulkan?
+                </p>
+            </div>
+
+            <!-- Complete check message if all answered -->
+            <div
+                v-else
+                class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs text-emerald-800"
+            >
+                <div class="flex items-center gap-2 font-bold text-emerald-700 text-sm">
+                    <CheckCircle2 class="h-5 w-5 text-emerald-600" />
+                    <span>Luar biasa! Seluruh soal sudah selesai dijawab.</span>
+                </div>
+                <p class="mt-1 text-xs text-emerald-700 pl-7">
+                    Pastikan Anda sudah yakin dengan semua pilihan jawaban sebelum mengirim.
+                </p>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-6 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                    type="button"
+                    class="w-full sm:w-auto rounded-2xl border border-slate-300 px-5 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                    @click="showSubmitConfirmModal = false"
+                >
+                    Periksa Kembali
+                </button>
+                <button
+                    type="button"
+                    :disabled="isSubmitting || unansweredRequiredQuestions.length > 0"
+                    :class="[
+                        'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-bold text-white shadow-md transition-all duration-300',
+                        quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                        'hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50',
+                    ]"
+                    @click="confirmAndSubmit"
+                >
+                    <Send class="h-3.5 w-3.5" />
+                    <span>{{ isSubmitting ? 'Mengirim...' : 'Ya, Kirim Jawaban Sekarang' }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Locked Screen Overlay -->
     <div v-if="isLocked" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md">
@@ -972,6 +1489,13 @@ const submitAnotherResponse = () => {
                 </div>
             </div>
         </section>
+
+        <!-- Fullscreen Media Lightbox Modal with Zoom In/Out -->
+        <MediaLightboxModal
+            :show="!!activeLightboxMedia"
+            :media="activeLightboxMedia"
+            @close="activeLightboxMedia = null"
+        />
     </div>
 </template>
 

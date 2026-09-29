@@ -24,7 +24,7 @@ export type Question = {
     columns?: string[];
     answer: any;
     required: boolean;
-    media: { type: 'image' | 'video'; url: string; sourceType?: 'upload' | 'link'; isUploading?: boolean; uploadError?: string }[];
+    media: { type: 'image' | 'video'; url: string; sourceType?: 'upload' | 'link'; isUploading?: boolean; uploadError?: string; width?: string; align?: 'left' | 'center' | 'right'; caption?: string }[];
     points: number;
 };
 

@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateQuizFormRequest;
 use App\Http\Requests\UploadQuizFormMediaRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
+use App\Services\ImageOptimizationService;
 use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -144,9 +145,9 @@ class QuizFormController extends Controller
         return to_route('dashboard');
     }
 
-    public function uploadMedia(UploadQuizFormMediaRequest $request): JsonResponse
+    public function uploadMedia(UploadQuizFormMediaRequest $request, ImageOptimizationService $imageOptimizer): JsonResponse
     {
-        $path = $request->file('file')->store('media', 'public');
+        $path = $imageOptimizer->optimizeAndStore($request->file('file'), 'media', 'public');
 
         return response()->json([
             'url' => asset('storage/'.$path),

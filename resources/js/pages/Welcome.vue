@@ -3,10 +3,7 @@ import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import {
     ClipboardList,
     LogIn,
-    UserPlus,
     KeyRound,
-    UserCheck,
-    ShieldCheck,
     Eye,
     EyeOff,
     Loader2,
@@ -66,54 +63,12 @@ const submit = () => {
             </div>
         </header>
 
-        <!-- Main Hero & Login Section -->
-        <div class="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-8 sm:py-12">
-            <div class="grid w-full items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(380px,0.9fr)]">
-                <!-- Left: Clean Branding & Features -->
-                <div class="space-y-6">
-                    <div class="inline-flex items-center gap-2 rounded-full bg-emerald-100/90 px-3.5 py-1.5 text-xs font-black text-emerald-800 border border-emerald-200/80">
-                        <ShieldCheck class="h-4 w-4 text-emerald-600" />
-                        Sistem Form & Evaluasi Terintegrasi
-                    </div>
-
-                    <div class="space-y-3">
-                        <h1 class="text-4xl font-black tracking-tight sm:text-5xl text-slate-900 leading-[1.15]">
-                            Masuk ke Akun Alsen Form
-                        </h1>
-                        <p class="text-base font-semibold text-slate-600 max-w-lg">
-                            Gunakan NIS bagi murid atau Email bagi guru untuk mengakses kuis, lembar kerja, dan form sekolah.
-                        </p>
-                    </div>
-
-                    <!-- Highlight Badges -->
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-2">
-                        <div class="flex items-start gap-3 rounded-2xl border border-emerald-200/80 bg-white/80 p-3.5 shadow-sm backdrop-blur">
-                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 font-bold">
-                                🎓
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-900">Akses Murid via NIS</p>
-                                <p class="text-[11px] font-medium text-slate-500">Login instan dengan 6 angka terakhir NIS</p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-start gap-3 rounded-2xl border border-emerald-200/80 bg-white/80 p-3.5 shadow-sm backdrop-blur">
-                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-bold">
-                                📝
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-900">Workspace Guru</p>
-                                <p class="text-[11px] font-medium text-slate-500">Buat soal dan pantau respon secara langsung</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Login Card -->
-                <div class="w-full">
-                    <div class="rounded-[2.2rem] border-2 border-emerald-200 bg-white p-6 sm:p-8 shadow-[0_12px_0_#d9f99d]">
-                        <!-- Direct Login Form -->
-                        <div class="space-y-5">
+        <!-- Main Login Section (Centered) -->
+        <div class="mx-auto flex w-full max-w-md flex-1 items-center justify-center px-4 py-8 sm:py-12">
+            <div class="w-full">
+                <div class="rounded-[2.2rem] border-2 border-emerald-200 bg-white p-6 sm:p-8 shadow-[0_12px_0_#d9f99d]">
+                    <!-- Direct Login Form -->
+                    <div class="space-y-5">
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                                     <KeyRound class="h-5 w-5" />
@@ -216,7 +171,6 @@ const submit = () => {
                     </div>
                 </div>
             </div>
-        </div>
 
         <!-- Footer -->
         <footer class="py-4 text-center text-xs font-semibold text-slate-400">

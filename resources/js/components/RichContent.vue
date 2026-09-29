@@ -29,7 +29,7 @@ const isRtl = computed(() => {
         :is="as"
         :dir="isRtl ? 'rtl' : 'ltr'"
         :class="[
-            'rich-content break-words',
+            'rich-content break-words whitespace-pre-line',
             isRtl ? 'text-right' : '',
         ]"
         v-html="formattedContent"

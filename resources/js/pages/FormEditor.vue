@@ -20,6 +20,9 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
 import {
+    AlignCenter,
+    AlignLeft,
+    AlignRight,
     Archive,
     Check,
     ChevronDown,
@@ -31,6 +34,7 @@ import {
     Image,
     Key,
     Link2,
+    Maximize2,
     MoreVertical,
     Palette,
     PanelTop,
@@ -47,8 +51,10 @@ import {
     UserPlus,
     Video,
     X,
+    ZoomIn,
 } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 
 const getYoutubeEmbedUrl = (url: string): string | undefined => {
     if (!url) {
@@ -121,6 +127,7 @@ const form = reactive({
         backgroundPatternClass: props.quizForm?.settings?.backgroundPatternClass ?? 'pattern-none',
         lockOnBlur: props.quizForm?.settings?.lockOnBlur ?? false,
         timeLimit: props.quizForm?.settings?.timeLimit ?? 0,
+        questionsPerPage: props.quizForm?.settings?.questionsPerPage ?? 'all',
     },
 });
 
@@ -153,6 +160,36 @@ const showPalette = ref(false);
 const openTypeMenuQuestionId = ref<number | null>(null);
 const editingAnswerKeyQuestionId = ref<number | null>(null);
 const draggedQuestionId = ref<number | null>(null);
+const draggableQuestionId = ref<number | null>(null);
+const activeLightboxMedia = ref<{ url: string; type: 'image' | 'video'; caption?: string } | null>(null);
+
+const enableCardDrag = (id: number) => {
+    draggableQuestionId.value = id;
+};
+
+const disableCardDrag = () => {
+    if (draggedQuestionId.value === null) {
+        draggableQuestionId.value = null;
+    }
+};
+
+const setMediaWidth = (media: any, width: string) => {
+    media.width = width;
+    markChanged('Media size updated');
+};
+
+const setMediaAlign = (media: any, align: 'left' | 'center' | 'right') => {
+    media.align = align;
+    markChanged('Media alignment updated');
+};
+
+const openLightbox = (media: any) => {
+    activeLightboxMedia.value = {
+        url: media.url,
+        type: media.type,
+        caption: media.caption ?? '',
+    };
+};
 const fileInput = ref<HTMLInputElement | null>(null);
 const docxFileInput = ref<HTMLInputElement | null>(null);
 const examviewFileInput = ref<HTMLInputElement | null>(null);
@@ -275,8 +312,42 @@ const approveUnlockRequest = async (requestId: number) => {
     }
 };
 
+const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+};
+
+const handleAutoResize = (event: Event) => {
+    autoResize(event.target as HTMLTextAreaElement);
+};
+
+const vAutoResize = {
+    mounted(el: HTMLTextAreaElement) {
+        autoResize(el);
+    },
+    updated(el: HTMLTextAreaElement) {
+        autoResize(el);
+    },
+};
+
+const resizeAllTextareas = () => {
+    nextTick(() => {
+        document.querySelectorAll<HTMLTextAreaElement>('textarea[data-auto-resize]').forEach((el) => {
+            autoResize(el);
+        });
+    });
+};
+
+const handleShiftEnterKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' && event.shiftKey) {
+        setTimeout(() => autoResize(event.target as HTMLTextAreaElement), 0);
+    }
+};
+
 let unlockRequestsInterval: any = null;
 onMounted(() => {
+    resizeAllTextareas();
     unlockRequestsInterval = setInterval(() => {
         if (activeTab.value === 'keamanan') {
             fetchUnlockRequests();
@@ -293,6 +364,9 @@ onUnmounted(() => {
 watch(activeTab, (newTab) => {
     if (newTab === 'keamanan') {
         fetchUnlockRequests();
+    }
+    if (newTab === 'questions') {
+        resizeAllTextareas();
     }
 });
 
@@ -559,6 +633,7 @@ const insertTextIntoQuestion = (question: any, snippet: string) => {
         question.title += ` ${snippet}`;
     }
     markChanged('Question formula or arabic inserted');
+    nextTick(() => resizeAllTextareas());
 };
 
 const duplicateQuestion = (question: Question) => {
@@ -607,6 +682,26 @@ const deleteQuestion = (question: Question) => {
 const addOption = (question: Question, label = `Option ${question.options.length + 1}`) => {
     question.options.push(label);
     markChanged('Option added');
+};
+
+const handleOptionKeydown = (event: KeyboardEvent, question: Question, optionIndex: number) => {
+    if (event.key === 'Enter') {
+        if (event.shiftKey) {
+            setTimeout(() => autoResize(event.target as HTMLTextAreaElement), 0);
+            return;
+        }
+        event.preventDefault();
+        addOption(question);
+        nextTick(() => {
+            const container = (event.target as HTMLElement).closest('.space-y-3');
+            const textareas = container?.querySelectorAll<HTMLTextAreaElement>('textarea');
+            if (textareas && textareas.length > 0) {
+                const last = textareas[textareas.length - 1];
+                last.focus();
+                autoResize(last);
+            }
+        });
+    }
 };
 
 const updateOption = (question: Question, optionIndex: number, value: string) => {
@@ -929,12 +1024,23 @@ const moveQuestion = (fromId: number, toId: number) => {
 };
 
 const handleDragStart = (question: Question, event: DragEvent) => {
+    const target = event.target as HTMLElement;
+    const isFromHandle = target.closest('[data-drag-handle]');
+    if (!draggableQuestionId.value || !isFromHandle) {
+        event.preventDefault();
+        return;
+    }
     draggedQuestionId.value = question.id;
     activeQuestionId.value = question.id;
     event.dataTransfer?.setData('text/plain', String(question.id));
     if (event.dataTransfer) {
         event.dataTransfer.effectAllowed = 'move';
     }
+};
+
+const handleDragEnd = () => {
+    draggedQuestionId.value = null;
+    draggableQuestionId.value = null;
 };
 
 const handleDrop = (question: Question, event: DragEvent) => {
@@ -944,6 +1050,7 @@ const handleDrop = (question: Question, event: DragEvent) => {
         moveQuestion(fromId, question.id);
     }
     draggedQuestionId.value = null;
+    draggableQuestionId.value = null;
 };
 
 const downloadImportTemplate = () => {
@@ -1499,14 +1606,17 @@ watch(
                                 @change="handleTitleBlur"
                                 @keydown.enter.prevent="handleTitleBlur"
                             />
-                            <input
+                            <textarea
                                 v-model="form.description"
-                                type="text"
-                                class="w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
+                                v-auto-resize
+                                data-auto-resize
+                                rows="1"
+                                class="w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
                                 :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                 placeholder="Form description"
-                                @input="markChanged('Description updated')"
-                            />
+                                @input="handleAutoResize($event); markChanged('Description updated')"
+                                @keydown="handleShiftEnterKeydown"
+                            ></textarea>
                         </div>
                     </section>
 
@@ -1524,7 +1634,7 @@ watch(
                         <section
                             v-for="question in form.questions"
                             :key="question.id"
-                            draggable="true"
+                            :draggable="draggableQuestionId === question.id"
                             :class="[
                                 'relative overflow-visible rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md',
                                 draggedQuestionId === question.id ? 'scale-[0.99] opacity-60' : '',
@@ -1533,7 +1643,7 @@ watch(
                             @dragstart="handleDragStart(question, $event)"
                             @dragover.prevent
                             @drop="handleDrop(question, $event)"
-                            @dragend="draggedQuestionId = null"
+                            @dragend="handleDragEnd"
                         >
                             <div
                                 :class="[
@@ -1764,12 +1874,20 @@ watch(
                                     <!-- NORMAL EDIT MODE -->
                                     <div>
                                         <div
-                                            class="mx-auto mb-3 flex w-10 cursor-grab justify-center gap-1 text-slate-300 active:cursor-grabbing"
-                                            title="Drag untuk pindahkan soal"
+                                            data-drag-handle
+                                            class="mx-auto mb-3 flex w-12 cursor-grab justify-center gap-1.5 py-1 text-slate-300 select-none hover:text-slate-500 active:cursor-grabbing"
+                                            title="Tahan dan geser untuk memindahkan urutan soal"
+                                            @mousedown="enableCardDrag(question.id)"
+                                            @mouseenter="enableCardDrag(question.id)"
+                                            @mouseleave="disableCardDrag"
+                                            @mouseup="disableCardDrag"
                                         >
-                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                                            <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
+                                            <span class="h-1 w-1 rounded-full bg-current"></span>
                                         </div>
 
                                         <!-- Math & Arabic Toolbar -->
@@ -1780,12 +1898,15 @@ watch(
 
                                         <textarea
                                             v-model="question.title"
-                                            rows="2"
+                                            v-auto-resize
+                                            data-auto-resize
+                                            rows="1"
                                             :dir="question.isRtl ? 'rtl' : hasArabic(question.title) ? 'rtl' : 'auto'"
-                                            class="mb-3 w-full resize-y rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
+                                            class="mb-3 w-full resize-none overflow-hidden rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
                                             :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                             placeholder="Tulis pertanyaan, rumus matematika $...$, atau ketik bahasa Arab..."
-                                            @input="markChanged('Question updated')"
+                                            @input="handleAutoResize($event); markChanged('Question updated')"
+                                            @keydown="handleShiftEnterKeydown"
                                         ></textarea>
 
                                         <!-- Live Preview of Math & Quran Arabic Rendering -->
@@ -1804,37 +1925,52 @@ watch(
                                             </div>
                                         </div>
 
-                                        <input
+                                        <textarea
                                             v-model="question.description"
-                                            type="text"
-                                            class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
+                                            v-auto-resize
+                                            data-auto-resize
+                                            rows="1"
+                                            class="mb-4 w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
                                             placeholder="Description"
                                             :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                            @input="markChanged('Description updated')"
-                                        />
+                                            @input="handleAutoResize($event); markChanged('Description updated')"
+                                            @keydown="handleShiftEnterKeydown"
+                                        ></textarea>
 
                                         <!-- Media Rendering and Editing -->
-                                        <div v-if="question.media && question.media.length" class="mb-4 grid gap-4 sm:grid-cols-2">
+                                        <div v-if="question.media && question.media.length" class="mb-4 space-y-4">
                                             <div
                                                 v-for="(media, mediaIndex) in question.media"
                                                 :key="mediaIndex"
-                                                class="relative rounded-xl border border-slate-200 bg-slate-50 p-4"
+                                                class="relative rounded-2xl border border-slate-200 bg-slate-50 p-4 transition-all"
                                             >
-                                                <div class="mb-2 flex items-center justify-between">
-                                                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
-                                                        {{ media.type === 'image' ? 'Gambar' : 'Video' }}
+                                                <div class="mb-2.5 flex items-center justify-between">
+                                                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                                        {{ media.type === 'image' ? 'Gambar Soal' : 'Video Soal' }}
                                                     </span>
-                                                    <button
-                                                        type="button"
-                                                        class="text-slate-400 transition hover:text-red-500"
-                                                        title="Hapus media"
-                                                        @click.stop="
-                                                            question.media.splice(mediaIndex, 1);
-                                                            markChanged('Media removed');
-                                                        "
-                                                    >
-                                                        <Trash2 class="h-4 w-4" />
-                                                    </button>
+                                                    <div class="flex items-center gap-2">
+                                                        <button
+                                                            v-if="media.url"
+                                                            type="button"
+                                                            class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
+                                                            title="Buka Layar Penuh & Zoom"
+                                                            @click="openLightbox(media)"
+                                                        >
+                                                            <Maximize2 class="h-3.5 w-3.5" />
+                                                            Layar Penuh
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-lg p-1 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                                                            title="Hapus media"
+                                                            @click.stop="
+                                                                question.media.splice(mediaIndex, 1);
+                                                                markChanged('Media removed');
+                                                            "
+                                                        >
+                                                            <Trash2 class="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <!-- Source Selector Tabs -->
@@ -1906,7 +2042,6 @@ watch(
                                                 <!-- Link Interface -->
                                                 <div v-else class="space-y-2">
                                                     <input
-                                                        media.url
                                                         v-model="media.url"
                                                         type="text"
                                                         :placeholder="
@@ -1919,24 +2054,107 @@ watch(
                                                     />
                                                 </div>
 
-                                                <!-- Preview Display -->
-                                                <div v-if="media.url" class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                                    <img v-if="media.type === 'image'" :src="media.url" class="max-h-48 w-full object-contain p-2" />
-                                                    <iframe
-                                                        v-else-if="media.type === 'video' && getYoutubeEmbedUrl(media.url)"
-                                                        :src="getYoutubeEmbedUrl(media.url)"
-                                                        class="aspect-video w-full"
-                                                        frameborder="0"
-                                                        allowfullscreen
-                                                    ></iframe>
-                                                    <video
-                                                        v-else-if="media.type === 'video'"
-                                                        :src="media.url"
-                                                        controls
-                                                        class="max-h-48 w-full bg-slate-950"
-                                                    ></video>
-                                                    <div v-else class="p-2 text-center text-xs text-slate-400">
-                                                        Format URL video tidak didukung (gunakan link YouTube)
+                                                <!-- Preview, Resize & Fullscreen Zoom Area -->
+                                                <div v-if="media.url" class="mt-3 space-y-2">
+                                                    <!-- Size and Alignment Toolbar -->
+                                                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 text-xs">
+                                                        <!-- Size presets -->
+                                                        <div class="flex items-center gap-1">
+                                                            <span class="mr-1 text-[11px] font-bold text-slate-400">Ukuran:</span>
+                                                            <button
+                                                                v-for="w in ['25%', '50%', '75%', '100%']"
+                                                                :key="w"
+                                                                type="button"
+                                                                :class="[
+                                                                    'rounded-lg px-2.5 py-1 text-xs font-bold transition',
+                                                                    (media.width ?? '100%') === w
+                                                                        ? 'bg-indigo-600 text-white shadow-xs'
+                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                ]"
+                                                                @click="setMediaWidth(media, w)"
+                                                            >
+                                                                {{ w === '100%' ? 'Maks (100%)' : w }}
+                                                            </button>
+                                                        </div>
+
+                                                        <!-- Alignment presets -->
+                                                        <div class="flex items-center gap-1">
+                                                            <span class="mr-1 text-[11px] font-bold text-slate-400">Posisi:</span>
+                                                            <button
+                                                                type="button"
+                                                                :class="[
+                                                                    'rounded-lg p-1.5 transition',
+                                                                    (media.align ?? 'center') === 'left' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                ]"
+                                                                title="Rata Kiri"
+                                                                @click="setMediaAlign(media, 'left')"
+                                                            >
+                                                                <AlignLeft class="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                :class="[
+                                                                    'rounded-lg p-1.5 transition',
+                                                                    (media.align ?? 'center') === 'center' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                ]"
+                                                                title="Rata Tengah"
+                                                                @click="setMediaAlign(media, 'center')"
+                                                            >
+                                                                <AlignCenter class="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                :class="[
+                                                                    'rounded-lg p-1.5 transition',
+                                                                    (media.align ?? 'center') === 'right' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                ]"
+                                                                title="Rata Kanan"
+                                                                @click="setMediaAlign(media, 'right')"
+                                                            >
+                                                                <AlignRight class="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Resizable Media Container -->
+                                                    <div
+                                                        :class="[
+                                                            'flex w-full',
+                                                            media.align === 'left' ? 'justify-start' : media.align === 'right' ? 'justify-end' : 'justify-center'
+                                                        ]"
+                                                    >
+                                                        <div
+                                                            class="group relative max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-indigo-400 hover:shadow-md cursor-pointer"
+                                                            :style="{ width: media.width ?? '100%' }"
+                                                            @click="openLightbox(media)"
+                                                        >
+                                                            <!-- Floating Hover Badge for Fullscreen Zoom -->
+                                                            <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-950/25 opacity-0 transition group-hover:opacity-100">
+                                                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-900/85 px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-xs">
+                                                                    <ZoomIn class="h-4 w-4" />
+                                                                    Klik untuk layar penuh & zoom
+                                                                </span>
+                                                            </div>
+
+                                                            <img
+                                                                v-if="media.type === 'image'"
+                                                                :src="media.url"
+                                                                class="w-full object-contain p-2 transition"
+                                                            />
+                                                            <iframe
+                                                                v-else-if="media.type === 'video' && getYoutubeEmbedUrl(media.url)"
+                                                                :src="getYoutubeEmbedUrl(media.url)"
+                                                                class="aspect-video w-full pointer-events-auto"
+                                                                frameborder="0"
+                                                                allowfullscreen
+                                                            ></iframe>
+                                                            <video
+                                                                v-else-if="media.type === 'video'"
+                                                                :src="media.url"
+                                                                controls
+                                                                class="w-full bg-slate-950 pointer-events-auto"
+                                                            ></video>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2092,15 +2310,18 @@ watch(
                                                     <div
                                                         v-for="(row, rIndex) in question.rows"
                                                         :key="`row-${rIndex}`"
-                                                        class="flex items-center gap-2"
+                                                        class="flex items-start gap-2 pt-1"
                                                     >
-                                                        <span class="text-xs font-bold text-slate-400">#{{ rIndex + 1 }}</span>
-                                                        <input
+                                                        <span class="mt-0.5 text-xs font-bold text-slate-400">#{{ rIndex + 1 }}</span>
+                                                        <textarea
                                                             v-model="question.rows[rIndex]"
-                                                            type="text"
-                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-1 text-xs outline-none focus:border-indigo-500"
-                                                            @input="markChanged('Row label updated')"
-                                                        />
+                                                            v-auto-resize
+                                                            data-auto-resize
+                                                            rows="1"
+                                                            class="min-w-0 flex-1 resize-none overflow-hidden border-b border-slate-200 bg-transparent py-0.5 text-xs outline-none focus:border-indigo-500"
+                                                            @input="handleAutoResize($event); markChanged('Row label updated')"
+                                                            @keydown="handleShiftEnterKeydown"
+                                                        ></textarea>
                                                         <button
                                                             type="button"
                                                             class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
@@ -2126,15 +2347,18 @@ watch(
                                                     <div
                                                         v-for="(col, cIndex) in question.columns"
                                                         :key="`col-${cIndex}`"
-                                                        class="flex items-center gap-2"
+                                                        class="flex items-start gap-2 pt-1"
                                                     >
-                                                        <span class="text-xs font-bold text-slate-400">#{{ cIndex + 1 }}</span>
-                                                        <input
+                                                        <span class="mt-0.5 text-xs font-bold text-slate-400">#{{ cIndex + 1 }}</span>
+                                                        <textarea
                                                             v-model="question.columns[cIndex]"
-                                                            type="text"
-                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-1 text-xs outline-none focus:border-indigo-500"
-                                                            @input="markChanged('Column label updated')"
-                                                        />
+                                                            v-auto-resize
+                                                            data-auto-resize
+                                                            rows="1"
+                                                            class="min-w-0 flex-1 resize-none overflow-hidden border-b border-slate-200 bg-transparent py-0.5 text-xs outline-none focus:border-indigo-500"
+                                                            @input="handleAutoResize($event); markChanged('Column label updated')"
+                                                            @keydown="handleShiftEnterKeydown"
+                                                        ></textarea>
                                                         <button
                                                             type="button"
                                                             class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
@@ -2183,12 +2407,12 @@ watch(
                                                 v-for="(option, optionIndex) in question.options"
                                                 :key="`${question.id}-${optionIndex}`"
                                                 v-show="option !== 'Other' || !isQuestionAnswered(question)"
-                                                class="flex items-center gap-3 text-base transition hover:translate-x-1 sm:text-lg"
+                                                class="flex items-start gap-3 pt-1 text-base transition hover:translate-x-1 sm:text-lg"
                                             >
                                                 <!-- Visual icon only for checkboxes/radio in edit mode -->
                                                 <span
                                                     :class="[
-                                                        'flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
+                                                        'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
                                                         question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
                                                         form.settings.isQuiz && isCorrectAnswer(question, optionIndex)
                                                             ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
@@ -2202,19 +2426,22 @@ watch(
                                                 </span>
 
                                                 <!-- Dropdown number index if it is a Drop-down type -->
-                                                <span v-if="question.type === 'Drop-down'" class="text-xs font-bold text-slate-400">
+                                                <span v-if="question.type === 'Drop-down'" class="mt-0.5 text-xs font-bold text-slate-400">
                                                     #{{ optionIndex + 1 }}
                                                 </span>
 
                                                 <div class="flex min-w-0 flex-1 flex-col gap-1">
-                                                    <input
+                                                    <textarea
                                                         v-model="question.options[optionIndex]"
-                                                        type="text"
+                                                        v-auto-resize
+                                                        data-auto-resize
+                                                        rows="1"
                                                         :dir="hasArabic(question.options[optionIndex]) ? 'rtl' : 'auto'"
-                                                        class="w-full border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
+                                                        class="w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
                                                         :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                                        @input="markChanged('Option updated')"
-                                                    />
+                                                        @input="handleAutoResize($event); markChanged('Option updated')"
+                                                        @keydown="handleOptionKeydown($event, question, optionIndex)"
+                                                    ></textarea>
                                                     <div
                                                         v-if="hasMathOrArabic(question.options[optionIndex])"
                                                         class="inline-flex items-center gap-1 self-start rounded border border-indigo-100 bg-indigo-50/70 px-2 py-0.5 text-xs text-slate-800"
@@ -2225,7 +2452,7 @@ watch(
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    class="rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
+                                                    class="mt-0.5 rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
                                                     @click.stop="removeOption(question, optionIndex)"
                                                 >
                                                     x
@@ -2950,6 +3177,30 @@ watch(
                                         </button>
                                     </div>
 
+                                    <div class="flex items-center justify-between gap-8 pl-11">
+                                        <div>
+                                            <span class="block text-xl font-normal text-slate-950">Pembagian Tampilan Soal</span>
+                                            <span class="mt-1 block text-sm text-slate-500">Atur jumlah butir soal yang ditampilkan per halaman untuk siswa</span>
+                                        </div>
+                                        <select
+                                            v-model="form.settings.questionsPerPage"
+                                            class="h-11 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                                            @change="markSettingsChanged"
+                                        >
+                                            <option value="all">Semua Soal (1 Halaman Penuh)</option>
+                                            <option value="1">1 Soal per Halaman</option>
+                                            <option value="2">2 Soal per Halaman</option>
+                                            <option value="3">3 Soal per Halaman</option>
+                                            <option value="4">4 Soal per Halaman</option>
+                                            <option value="5">5 Soal per Halaman</option>
+                                            <option value="6">6 Soal per Halaman</option>
+                                            <option value="7">7 Soal per Halaman</option>
+                                            <option value="8">8 Soal per Halaman</option>
+                                            <option value="9">9 Soal per Halaman</option>
+                                            <option value="10">10 Soal per Halaman</option>
+                                        </select>
+                                    </div>
+
                                     <p class="pl-11 text-sm font-bold uppercase tracking-widest text-slate-600">After submission</p>
                                     <div class="flex items-start justify-between gap-8 pl-11">
                                         <span>
@@ -3220,6 +3471,7 @@ watch(
                                 {{ question.points }} Poin
                             </span>
                         </p>
+                        <RichContent v-if="question.description" :content="question.description" as="p" class="mt-1 text-sm text-slate-500" />
                         <!-- Preview media display -->
                         <div v-if="question.media && question.media.length" class="mb-4 mt-3 grid gap-4 sm:grid-cols-2">
                             <div
@@ -3845,6 +4097,12 @@ watch(
                 <span>{{ toastMessage }}</span>
             </div>
         </Transition>
+        <!-- Media Lightbox Zoom Modal -->
+        <MediaLightboxModal
+            :show="!!activeLightboxMedia"
+            :media="activeLightboxMedia"
+            @close="activeLightboxMedia = null"
+        />
     </main>
 </template>
 

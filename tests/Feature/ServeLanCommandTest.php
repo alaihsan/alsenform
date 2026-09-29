@@ -6,7 +6,19 @@ test('lan:serve command is registered and outputs description and force option',
     $this->artisan('lan:serve --help')
         ->assertSuccessful()
         ->expectsOutputToContain('Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN)')
-        ->expectsOutputToContain('--force');
+        ->expectsOutputToContain('--force')
+        ->expectsOutputToContain('--daemon')
+        ->expectsOutputToContain('--status')
+        ->expectsOutputToContain('--stop')
+        ->expectsOutputToContain('--no-caffeinate');
+});
+
+test('lan:status and lan:stop commands execute successfully', function () {
+    $this->artisan('lan:status')
+        ->assertSuccessful();
+
+    $this->artisan('lan:stop')
+        ->assertSuccessful();
 });
 
 test('lan:serve detectNetworkInterfaces returns array', function () {

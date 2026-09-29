@@ -15,23 +15,42 @@ class ServeLanCommand extends Command
     protected $signature = 'lan:serve 
                             {--port=8000 : Port untuk menjalankan server}
                             {--host=0.0.0.0 : Host binding address}
+                            {--workers=24 : Jumlah concurrent worker process untuk melayani hingga ratusan siswa}
+                            {--optimize : Jalankan optimasi cache sebelum server mulai}
                             {--build : Build asset Vite sebelum menjalankan server}
-                            {--force : Hentikan proses yang sedang menggunakan port yang dipilih}';
+                            {--force : Hentikan proses yang sedang menggunakan port yang dipilih}
+                            {--d|daemon : Jalankan server di latar belakang (background mode)}
+                            {--stop : Hentikan server yang sedang berjalan di latar belakang}
+                            {--status : Periksa status server yang sedang berjalan di latar belakang}
+                            {--no-caffeinate : Jangan aktifkan proteksi anti-sleep macOS}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN)';
+    protected $description = 'Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN) dengan proteksi Anti-Sleep';
 
     /**
      * Execute the console command.
      */
     public function handle(): int
     {
+        if ($this->option('stop')) {
+            return $this->handleStop();
+        }
+
+        if ($this->option('status')) {
+            return $this->handleStatus();
+        }
+
         $port = (int) $this->option('port');
         $host = (string) $this->option('host');
+        $workers = max(4, (int) $this->option('workers'));
+
+        if ($this->option('optimize')) {
+            $this->call('exam:optimize');
+        }
 
         if ($this->option('build') || ! file_exists(public_path('build/manifest.json'))) {
             $this->info('⚙️  Membuat bundle aset produksi (npm run build)...');
@@ -58,19 +77,32 @@ class ServeLanCommand extends Command
         $interfaces = $this->detectNetworkInterfaces();
         $hostname = $this->detectLocalHostName();
 
-        $this->outputBanner($interfaces, $hostname, $port);
+        if ($this->option('daemon')) {
+            return $this->handleDaemon($port, $host, $workers, $interfaces, $hostname);
+        }
 
-        // Run PHP development server on 0.0.0.0 with multi-worker support
+        $useCaffeinate = ! $this->option('no-caffeinate') && file_exists('/usr/bin/caffeinate');
+
+        $this->outputBanner($interfaces, $hostname, $port, $workers, $useCaffeinate);
+
+        // Run PHP development server on 0.0.0.0 with multi-worker support and Anti-Sleep
+        $serverScript = base_path('server.php');
         $command = [
             PHP_BINARY,
-            'artisan',
-            'serve',
-            "--host={$host}",
-            "--port={$port}",
-            '--no-reload',
+            '-S',
+            "{$host}:{$port}",
+            $serverScript,
         ];
 
-        $process = new Process($command, base_path(), null, null, null);
+        if ($useCaffeinate) {
+            array_unshift($command, '/usr/bin/caffeinate', '-dimsu');
+        }
+
+        $env = array_merge($_ENV, $_SERVER, [
+            'PHP_CLI_SERVER_WORKERS' => (string) $workers,
+        ]);
+
+        $process = new Process($command, base_path(), $env, null, null);
         $process->setTty(Process::isTtySupported());
 
         $cleanup = function () use ($process, $port): void {
@@ -101,6 +133,189 @@ class ServeLanCommand extends Command
         }
 
         return $process->getExitCode() ?? self::SUCCESS;
+    }
+
+    /**
+     * Start the server as a background daemon process.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function handleDaemon(int $port, string $host, int $workers, array $interfaces, ?string $hostname): int
+    {
+        $logPath = storage_path('logs/lan_server.log');
+        $infoFile = storage_path('framework/lan_server.json');
+
+        if (! file_exists(dirname($logPath))) {
+            @mkdir(dirname($logPath), 0755, true);
+        }
+        if (! file_exists(dirname($infoFile))) {
+            @mkdir(dirname($infoFile), 0755, true);
+        }
+
+        $phpBinary = escapeshellarg(PHP_BINARY);
+        $serverScript = escapeshellarg(base_path('server.php'));
+        $useCaffeinate = ! $this->option('no-caffeinate') && file_exists('/usr/bin/caffeinate');
+
+        if ($useCaffeinate) {
+            $execCmd = "/usr/bin/caffeinate -dimsu {$phpBinary} -S {$host}:{$port} {$serverScript}";
+        } else {
+            $execCmd = "{$phpBinary} -S {$host}:{$port} {$serverScript}";
+        }
+
+        $fullCmd = sprintf(
+            'PHP_CLI_SERVER_WORKERS=%d nohup %s < /dev/null >> %s 2>&1 & echo $!',
+            $workers,
+            $execCmd,
+            escapeshellarg($logPath)
+        );
+
+        $pid = trim((string) @shell_exec($fullCmd));
+
+        if (! is_numeric($pid) || (int) $pid <= 0) {
+            $this->error('Gagal menjalankan server di latar belakang.');
+
+            return self::FAILURE;
+        }
+
+        $data = [
+            'pid' => (int) $pid,
+            'port' => $port,
+            'host' => $host,
+            'workers' => $workers,
+            'started_at' => time(),
+            'caffeinate' => $useCaffeinate,
+        ];
+        file_put_contents($infoFile, json_encode($data, JSON_PRETTY_PRINT));
+
+        // Allow child processes to bind to port
+        usleep(800 * 1000);
+
+        $portPids = $this->getPortPids($port);
+        $isAlive = ! empty($portPids) || (! empty(trim((string) @shell_exec("ps -p {$pid} -o pid= 2>/dev/null"))));
+        if (! $isAlive) {
+            $this->error("Server gagal berjalan. Periksa berkas log: {$logPath}");
+            @unlink($infoFile);
+
+            return self::FAILURE;
+        }
+
+        $activePid = ! empty($portPids) ? (int) $portPids[0] : (int) $pid;
+        $data['pid'] = $activePid;
+        file_put_contents($infoFile, json_encode($data, JSON_PRETTY_PRINT));
+
+        $this->outputDaemonBanner($interfaces, $hostname, $port, $workers, $activePid, $useCaffeinate, $logPath);
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Stop the background daemon server.
+     */
+    protected function handleStop(): int
+    {
+        $infoFile = storage_path('framework/lan_server.json');
+        $port = (int) $this->option('port');
+
+        if (! file_exists($infoFile)) {
+            if ($this->isPortInUse($port)) {
+                $this->warn("⚠️  Port {$port} sedang digunakan. Menghentikan proses...");
+                $this->killPortProcesses($port);
+                $this->info("✓ Proses pada port {$port} berhasil dihentikan.");
+            } else {
+                $this->info('ℹ️  Tidak ada server latar belakang yang sedang aktif.');
+            }
+
+            return self::SUCCESS;
+        }
+
+        $data = json_decode((string) file_get_contents($infoFile), true);
+        $pid = (int) ($data['pid'] ?? 0);
+        $serverPort = (int) ($data['port'] ?? $port);
+
+        if ($pid > 0) {
+            @shell_exec("kill -TERM {$pid} 2>/dev/null");
+            usleep(200 * 1000);
+            @shell_exec("kill -9 {$pid} 2>/dev/null");
+        }
+
+        $this->killPortProcesses($serverPort);
+        @unlink($infoFile);
+
+        $this->newLine();
+        $this->output->writeln('<bg=green;fg=white;options=bold> ========================================================================= </>');
+        $this->output->writeln('<bg=green;fg=white;options=bold>   🛑 SERVER ALSENFORM LATAR BELAKANG BERHASIL DIHENTIKAN                 </>');
+        $this->output->writeln('<bg=green;fg=white;options=bold> ========================================================================= </>');
+        $this->newLine();
+        $this->info("✓ Server pada port {$serverPort} telah dihentikan.");
+        $this->info('✓ Proteksi Anti-Sleep dilepas. Pengaturan daya Mac Mini kembali ke mode normal.');
+        $this->newLine();
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Check status of the background daemon server.
+     */
+    protected function handleStatus(): int
+    {
+        $infoFile = storage_path('framework/lan_server.json');
+
+        if (! file_exists($infoFile)) {
+            $port = (int) $this->option('port');
+            if ($this->isPortInUse($port)) {
+                $this->warn("⚠️  Server berjalan pada port {$port} (tanpa rekaman metadata background).");
+            } else {
+                $this->info('ℹ️  Server Alsenform sedang TIDAK berjalan di latar belakang.');
+                $this->line('   Jalankan dengan: <fg=yellow>php artisan lan:serve --daemon</>');
+            }
+
+            return self::SUCCESS;
+        }
+
+        $data = json_decode((string) file_get_contents($infoFile), true);
+        $pid = (int) ($data['pid'] ?? 0);
+        $port = (int) ($data['port'] ?? 8000);
+        $portPids = $this->getPortPids($port);
+        $isRunning = ! empty($portPids) || ($pid > 0 && ! empty(trim((string) @shell_exec("ps -p {$pid} -o pid= 2>/dev/null"))));
+
+        if (! $isRunning) {
+            @unlink($infoFile);
+            $this->warn("⚠️  Proses server (PID {$pid}) sudah tidak aktif. File status dibersihkan.");
+            $this->line('   Jalankan kembali dengan: <fg=yellow>php artisan lan:serve --daemon</>');
+
+            return self::SUCCESS;
+        }
+
+        $uptimeSeconds = time() - (int) ($data['started_at'] ?? time());
+        $uptimeFormatted = sprintf('%02dh %02dm %02ds', ($uptimeSeconds / 3600), ($uptimeSeconds / 60 % 60), $uptimeSeconds % 60);
+
+        $this->newLine();
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🟢 STATUS SERVER ALSENFORM (BACKGROUND DAEMON)                         </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->newLine();
+        $this->output->writeln('   • Status           : <fg=green;options=bold>AKTIF / BERJALAN DI LATAR BELAKANG</>');
+        $this->output->writeln("   • Process ID (PID) : <fg=cyan;options=bold>{$pid}</>");
+        $this->output->writeln("   • Port Jaringan    : <fg=cyan;options=bold>{$port}</>");
+        $this->output->writeln('   • Multi-Workers    : <fg=cyan>'.($data['workers'] ?? 24).' concurrent processes</>');
+        $this->output->writeln("   • Uptime (Aktif)   : <fg=yellow;options=bold>{$uptimeFormatted}</>");
+        $this->output->writeln('   • Anti-Sleep (Mac) : <fg=green;options=bold>AKTIF (Caffeinate - Mac Mini M2 Tidak Akan Sleep/Tidur)</>');
+        $this->output->writeln('   • Berkas Log       : <fg=gray>storage/logs/lan_server.log</>');
+        $this->newLine();
+
+        $interfaces = $this->detectNetworkInterfaces();
+        $this->output->writeln('   🌐 <options=bold>Akses URL Siswa:</>');
+        foreach ($interfaces as $label => $ip) {
+            $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
+        }
+        $this->newLine();
+        $this->output->writeln('   Perintah manajemen:');
+        $this->output->writeln('   • Hentikan server  : <fg=red>php artisan lan:stop</> atau <fg=red>php artisan lan:serve --stop</>');
+        $this->output->writeln('   • Pantau log live  : <fg=yellow>tail -f storage/logs/lan_server.log</>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->newLine();
+
+        return self::SUCCESS;
     }
 
     /**
@@ -199,44 +414,40 @@ class ServeLanCommand extends Command
             $this->newLine();
             $this->warn("⚠️  Port {$port} sedang digunakan oleh proses lain{$pidStr}.");
 
-            if ($this->confirm("Apakah Anda ingin menghentikan proses lama tersebut dan melanjutkan di port {$port}?", true)) {
-                $this->info("Menghentikan proses lama pada port {$port}...");
+            $choices = [
+                'kill' => "Hentikan paksa proses yang menggunakan port {$port} lalu gunakan port ini",
+                'next' => 'Cari dan gunakan port kosong berikutnya secara otomatis',
+                'cancel' => 'Batalkan',
+            ];
+
+            $choice = $this->choice('Pilih tindakan yang ingin dilakukan:', $choices, 'kill');
+
+            if ($choice === 'kill') {
+                $this->info("Menghentikan proses pada port {$port}...");
                 if ($this->killPortProcesses($port)) {
                     $this->info("✓ Port {$port} berhasil dibebaskan.");
 
                     return $port;
                 }
-                $this->error("Gagal menghentikan proses pada port {$port}.");
+                $this->error("Gagal membebaskan port {$port}.");
+            } elseif ($choice === 'next') {
+                $newPort = $this->findAvailablePort($port + 1);
+                $this->info("✓ Menggunakan port baru yang tersedia: {$newPort}");
 
-                return null;
+                return $newPort;
             }
-
-            if ($this->confirm('Gunakan port alternatif berikutnya yang tersedia?', true)) {
-                $availablePort = $this->findAvailablePort($port + 1);
-                $this->info("Mengalihkan ke port {$availablePort}...");
-
-                return $availablePort;
-            }
-
-            $this->error('Server dibatalkan.');
 
             return null;
         }
 
-        if (! $this->hasExplicitOption('port')) {
-            $availablePort = $this->findAvailablePort($port + 1);
-            $this->warn("⚠️  Port {$port} sedang digunakan. Otomatis beralih ke port {$availablePort}.");
+        $newPort = $this->findAvailablePort($port + 1);
+        $this->warn("⚠️  Port {$port} sedang sibuk. Otomatis beralih ke port {$newPort}.");
 
-            return $availablePort;
-        }
-
-        $this->error("Port {$port} sedang digunakan{$pidStr}. Gunakan opsi --force untuk menghentikannya atau tentukan port lain dengan --port.");
-
-        return null;
+        return $newPort;
     }
 
     /**
-     * Determine if an option was explicitly specified on the command line.
+     * Determine if an option was explicitly provided by the user.
      */
     protected function hasExplicitOption(string $name): bool
     {
@@ -323,22 +534,24 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * Print the informative console banner.
+     * Print banner when running as background daemon.
      *
      * @param  array<string, string>  $interfaces
      */
-    protected function outputBanner(array $interfaces, ?string $hostname, int $port): void
+    protected function outputDaemonBanner(array $interfaces, ?string $hostname, int $port, int $workers, int $pid, bool $useCaffeinate, string $logPath): void
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 ALSENFORM - SIAP DIGUNAKAN DI JARINGAN LOKAL (LAN / WI-FI)        </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 ALSENFORM BERJALAN DI LATAR BELAKANG (BACKGROUND DAEMON)           </>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
 
-        $this->output->writeln(' <fg=green;options=bold>✓ Jaringan & Frekuensi yang Didukung:</>');
-        $this->output->writeln('   📶 <options=bold>Wi-Fi 5 GHz</>     : Sangat cepat & latensi rendah (cocok untuk ujian serentak)');
-        $this->output->writeln('   📶 <options=bold>Wi-Fi 2.4 GHz</>   : Jangkauan lebih luas untuk perangkat di kelas/ruang jauh');
-        $this->output->writeln('   🔌 <options=bold>Kabel LAN (RJ45)</>: Koneksi paling stabil untuk komputer lab sekolah');
+        $this->output->writeln(" <fg=green;options=bold>✓ Status Server:</> <fg=green;options=bold>AKTIF</> (PID: <fg=cyan;options=bold>{$pid}</>)");
+        $this->output->writeln(" <fg=green;options=bold>✓ Multi-Workers:</> <fg=cyan>{$workers} concurrent processes</> (mencegah antrean)");
+        if ($useCaffeinate) {
+            $this->output->writeln(' <fg=green;options=bold>✓ Anti-Sleep Mac:</> <fg=cyan;options=bold>AKTIF (Caffeinate)</> - Mac Mini tidak akan tidur selama server aktif');
+        }
+        $this->output->writeln(" <fg=green;options=bold>✓ Berkas Log:</> <fg=gray>{$logPath}</>");
         $this->newLine();
 
         $this->output->writeln(' <fg=yellow;options=bold>🌐 URL Akses untuk Siswa, Guru & Pengawas:</>');
@@ -349,6 +562,61 @@ class ServeLanCommand extends Command
         } else {
             $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
         }
+
+        $this->output->writeln('   👉 <fg=green;options=bold>http://alsenform.test</> <fg=gray>(Jika router memiliki DNS / via Nginx Herd Port 80)</>');
+        if ($hostname) {
+            $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
+        }
+        $this->newLine();
+
+        $this->output->writeln(' <fg=white;options=bold>🕹️ Perintah Manajemen Server:</>');
+        $this->output->writeln('   • Cek status server : <fg=yellow>php artisan lan:status</> atau <fg=yellow>php artisan lan:serve --status</>');
+        $this->output->writeln('   • Hentikan server   : <fg=red>php artisan lan:stop</> atau <fg=red>php artisan lan:serve --stop</>');
+        $this->output->writeln('   • Pantau log live   : <fg=cyan>tail -f storage/logs/lan_server.log</>');
+        $this->newLine();
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->newLine();
+    }
+
+    /**
+     * Print the informative console banner.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function outputBanner(array $interfaces, ?string $hostname, int $port, int $workers = 24, bool $useCaffeinate = true): void
+    {
+        $this->newLine();
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 ALSENFORM - SIAP DIGUNAKAN DI JARINGAN LOKAL (LAN / WI-FI)        </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
+        $this->newLine();
+
+        $this->output->writeln(' <fg=green;options=bold>✓ Performa & Kapasitas Jaringan (200+ Peserta):</>');
+        $this->output->writeln("   ⚡ <options=bold>Multi-Workers</>  : <fg=cyan>{$workers} concurrent processes</> (anti antrean request)");
+        $this->output->writeln('   ⚡ <options=bold>Kompresi Gzip</>  : <fg=cyan>Aktif</> (menghemat bandwidth intranet ~80%)');
+        $this->output->writeln('   ⚡ <options=bold>Cache Aset VITE</>: <fg=cyan>Aktif (Immutable)</> (0-byte reload di browser siswa)');
+        $this->output->writeln('   ⚡ <options=bold>Kompresi Media</> : <fg=cyan>WebP Auto-Scale</> (gambar otomatis < 300KB)');
+        if ($useCaffeinate) {
+            $this->output->writeln('   ⚡ <options=bold>Anti-Sleep (Mac)</>: <fg=cyan;options=bold>AKTIF (Caffeinate)</> (Mac Mini tidak akan tidur selama server aktif)');
+        }
+        $this->newLine();
+
+        $this->output->writeln(' <fg=green;options=bold>✓ Jaringan & Frekuensi yang Didukung:</>');
+        $this->output->writeln('   📶 <options=bold>Wi-Fi 5 GHz</>     : Sangat cepat & latensi rendah (sangat direkomendasikan)');
+        $this->output->writeln('   📶 <options=bold>Wi-Fi 2.4 GHz</>   : Jangkauan lebih luas untuk perangkat di kelas/ruang jauh');
+        $this->output->writeln('   🔌 <options=bold>Kabel LAN (RJ45)</>: Koneksi paling stabil untuk komputer server/lab');
+        $this->newLine();
+
+        $this->output->writeln(' <fg=yellow;options=bold>🌐 URL Akses untuk Siswa, Guru & Pengawas:</>');
+        if (! empty($interfaces)) {
+            foreach ($interfaces as $label => $ip) {
+                $this->output->writeln("   👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
+            }
+        } else {
+            $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
+        }
+
+        $this->output->writeln('   👉 <fg=green;options=bold>http://alsenform.test</> <fg=gray>(Jika router memiliki DNS / via Nginx Herd Port 80)</>');
 
         if ($hostname) {
             $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
@@ -361,6 +629,7 @@ class ServeLanCommand extends Command
         $this->output->writeln('   1. Pastikan perangkat siswa terhubung ke Wi-Fi / kabel router yang sama.');
         $this->output->writeln('   2. Siswa cukup membuka browser (Chrome/Safari) dan mengetik URL di atas.');
         $this->output->writeln('   3. Jika tidak bisa diakses, pastikan fitur "AP Isolation" di router telah dinonaktifkan.');
+        $this->output->writeln('   💡 <options=bold>Jalankan di latar belakang:</> <fg=yellow>php artisan lan:serve --daemon</>');
         $this->newLine();
         $this->output->writeln(' <fg=gray>Tekan CTRL+C untuk menghentikan server.</>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');

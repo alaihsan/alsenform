@@ -138,3 +138,41 @@ test('owners can update lockOnBlur and timeLimit settings', function () {
     expect($form->settings['lockOnBlur'])->toBeTrue();
     expect($form->settings['timeLimit'])->toBe(15);
 });
+
+test('owners can update questionsPerPage setting', function () {
+    $owner = User::factory()->create();
+    $form = QuizForm::factory()->create([
+        'user_id' => $owner->id,
+        'questions' => [
+            [
+                'id' => 1,
+                'title' => 'Sample Question',
+                'description' => '',
+                'type' => 'Short answer',
+                'required' => true,
+                'options' => [],
+                'media' => [],
+            ],
+        ],
+        'settings' => [
+            'collectEmail' => false,
+            'showProgress' => true,
+            'shuffleQuestions' => false,
+            'questionsPerPage' => 'all',
+        ],
+    ]);
+
+    $this->actingAs($owner)
+        ->patch(route('forms.update', $form), [
+            'title' => $form->title,
+            'slug' => $form->slug,
+            'questions' => $form->questions,
+            'settings' => array_merge($form->settings, [
+                'questionsPerPage' => '2',
+            ]),
+        ])
+        ->assertRedirect(route('forms.edit', $form));
+
+    $form = $form->refresh();
+    expect($form->settings['questionsPerPage'])->toBe('2');
+});
