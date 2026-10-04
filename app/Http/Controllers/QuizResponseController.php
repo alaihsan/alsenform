@@ -83,35 +83,30 @@ class QuizResponseController extends Controller
             }
         }
 
-        // Sanitize questions: strip answer keys to prevent answer leaks
-        $sanitizedQuestions = array_map(function ($q) {
-            if (is_array($q)) {
-                unset($q['answer']);
-            }
+        $sanitizedQuestions = $this->sanitizedQuestions($quizForm, $mediaUrl);
+        $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
+        $requiresStartConfirmation = $this->requiresStartConfirmation($quizForm);
 
-            return $q;
-        }, $mediaUrl->normalizeQuestions($quizForm->questions));
-
-        // Server-side QuizSession management
-        $timeLimitMinutes = isset($quizForm->settings['timeLimit']) && is_numeric($quizForm->settings['timeLimit']) && $quizForm->settings['timeLimit'] > 0
-            ? (int) $quizForm->settings['timeLimit']
-            : null;
-
+        // Server-side QuizSession management. The session is opened here, but for an exam the
+        // timer only starts once the student confirms the rules (see start()).
         $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
 
         if (! $quizSession) {
             $now = now();
-            $expiresAt = $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null;
             $quizSession = QuizSession::create([
                 'quiz_form_id' => $quizForm->id,
                 'user_id' => $user?->id,
                 'respondent_identifier' => $respondentIdentifier,
-                'started_at' => $now,
-                'expires_at' => $expiresAt,
+                'started_at' => $requiresStartConfirmation ? null : $now,
+                'expires_at' => $requiresStartConfirmation || ! $timeLimitMinutes ? null : (clone $now)->addMinutes($timeLimitMinutes),
                 'is_locked' => false,
                 'session_token' => Str::random(40),
             ]);
         }
+
+        // Until the exam has started the questions stay on the server, so they cannot be read
+        // (from the page source) before the timer runs.
+        $hasStarted = $quizSession->started_at !== null;
 
         if (! $user) {
             cookie()->queue('alsen_resp_id', $respondentIdentifier, 60 * 24 * 30);
@@ -127,9 +122,16 @@ class QuizResponseController extends Controller
                 'slug' => $quizForm->slug,
                 'title' => $quizForm->title,
                 'description' => $quizForm->description,
-                'questions' => $sanitizedQuestions,
+                'questions' => $hasStarted ? $sanitizedQuestions : [],
                 'settings' => $quizForm->settings,
                 'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
+                'startUrl' => route('forms.responses.start', ['quizForm' => $quizForm->slug]),
+            ],
+            'examSummary' => [
+                'questionCount' => count($sanitizedQuestions),
+                'requiredCount' => count(array_filter($sanitizedQuestions, fn ($question) => ! empty($question['required']))),
+                'totalPoints' => array_sum(array_map(fn ($question) => is_numeric($question['points'] ?? null) ? (float) $question['points'] : 0, $sanitizedQuestions)),
+                'timeLimitMinutes' => $timeLimitMinutes,
             ],
             'session' => [
                 'token' => $quizSession->session_token,
@@ -142,6 +144,63 @@ class QuizResponseController extends Controller
                 'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
             'accessRestricted' => false,
+        ]);
+    }
+
+    /**
+     * Start the exam once the student has read the rules and pressed "Kerjakan Sekarang":
+     * the timer begins now and the questions are handed out from this moment on.
+     * Repeating the request (a retry on weak Wi-Fi) keeps the original start time.
+     */
+    public function start(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl): JsonResponse
+    {
+        abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
+
+        if ($quizForm->isRestrictedToCohorts() && ! $quizForm->allowsUser($request->user())) {
+            abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan kuis ini.');
+        }
+
+        $validated = $request->validate([
+            'session_token' => ['required', 'string', 'max:100'],
+        ]);
+
+        $session = QuizSession::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->where('session_token', $validated['session_token'])
+            ->first();
+
+        abort_if($session === null, 404);
+        abort_if($session->user_id !== null && $session->user_id !== $request->user()?->id, 403);
+
+        if ($session->submitted_at !== null) {
+            return response()->json([
+                'message' => 'Jawaban ujian ini sudah dikirim.',
+                'submitted' => true,
+            ], 409);
+        }
+
+        if ($session->started_at === null) {
+            $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
+            $now = now();
+
+            QuizSession::query()
+                ->whereKey($session->id)
+                ->whereNull('started_at')
+                ->update([
+                    'started_at' => $now,
+                    'expires_at' => $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null,
+                ]);
+
+            $session->refresh();
+        }
+
+        return response()->json([
+            'questions' => $this->sanitizedQuestions($quizForm, $mediaUrl),
+            'session' => [
+                'started_at' => $session->started_at?->toISOString(),
+                'expires_at' => $session->expires_at?->toISOString(),
+                'server_time' => now()->toISOString(),
+            ],
         ]);
     }
 
@@ -229,6 +288,41 @@ class QuizResponseController extends Controller
     /**
      * The exam session of a student (by account) or of an anonymous respondent (by identifier).
      */
+    /**
+     * The questions as sent to respondents: answer keys removed, media URLs host independent.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl): array
+    {
+        return array_values(array_map(function ($question) {
+            if (is_array($question)) {
+                unset($question['answer']);
+            }
+
+            return $question;
+        }, $mediaUrl->normalizeQuestions($quizForm->questions) ?? []));
+    }
+
+    /**
+     * The time limit of the quiz in minutes, or null when it has none.
+     */
+    protected function timeLimitMinutes(QuizForm $quizForm): ?int
+    {
+        $timeLimit = $quizForm->settings['timeLimit'] ?? null;
+
+        return is_numeric($timeLimit) && $timeLimit > 0 ? (int) $timeLimit : null;
+    }
+
+    /**
+     * Exams (quizzes and timed forms) start only after the student confirms the rules;
+     * a plain survey opens directly.
+     */
+    protected function requiresStartConfirmation(QuizForm $quizForm): bool
+    {
+        return ($quizForm->settings['isQuiz'] ?? true) !== false || $this->timeLimitMinutes($quizForm) !== null;
+    }
+
     protected function findExamSession(QuizForm $quizForm, ?User $user, string $respondentIdentifier): ?QuizSession
     {
         return QuizSession::query()

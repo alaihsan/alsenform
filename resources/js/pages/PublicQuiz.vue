@@ -19,6 +19,9 @@ import {
     ArrowLeftRight,
     PanelLeftClose,
     PanelRightClose,
+    ListChecks,
+    Play,
+    ScrollText,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -67,13 +70,22 @@ const props = defineProps<{
             lockOnBlur?: boolean;
             timeLimit?: number;
             questionsPerPage?: string | number;
+            disableRespondentAutosave?: boolean;
+            limitOneResponse?: boolean;
         };
         submitUrl: string;
+        startUrl?: string;
+    };
+    examSummary?: {
+        questionCount: number;
+        requiredCount: number;
+        totalPoints: number;
+        timeLimitMinutes: number | null;
     };
     session?: {
         token?: string;
         respondent_identifier?: string;
-        started_at?: string;
+        started_at?: string | null;
         expires_at?: string | null;
         server_time?: string;
         is_locked?: boolean;
@@ -471,6 +483,213 @@ const handleVisibilityChange = () => {
     }
 };
 
+/*
+ * Exam start: the questions and the timer arrive only after the student has read the rules
+ * and pressed "Kerjakan Sekarang". A resumed exam (page reload) continues directly.
+ */
+const examStartedAt = ref<string | null>(props.session?.started_at ?? null);
+const examExpiresAt = ref<string | null>(props.session?.expires_at ?? null);
+let examClockOffset = serverClockOffset;
+const isStartingExam = ref(false);
+const startExamError = ref('');
+let hasExamBegun = false;
+
+const hasExamStarted = computed<boolean>(() => !props.session?.token || examStartedAt.value !== null);
+
+const isStartModalOpen = computed<boolean>(() => !props.accessRestricted && !isSubmitted.value && !hasExamStarted.value);
+
+const formatCountdown = (remaining: number): string => {
+    const totalSeconds = Math.floor(remaining / 1000);
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    const pad = (value: number) => value.toString().padStart(2, '0');
+
+    return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
+};
+
+const startCountdown = () => {
+    let endTime: number | null = null;
+    let clockOffset = 0;
+
+    if (examExpiresAt.value) {
+        // Server-enforced time limit
+        endTime = new Date(examExpiresAt.value).getTime();
+        clockOffset = examClockOffset;
+    } else {
+        const timeLimit = props.quizForm.settings?.timeLimit;
+        if (!timeLimit || timeLimit <= 0) {
+            return;
+        }
+        let startTime = localStorage.getItem(`form_start_time_${props.quizForm.id}`);
+        if (!startTime) {
+            startTime = Date.now().toString();
+            localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
+        }
+        endTime = parseInt(startTime) + timeLimit * 60 * 1000;
+    }
+
+    const updateTimer = () => {
+        const remaining = (endTime as number) - (Date.now() + clockOffset);
+
+        if (remaining <= 0) {
+            timeRemaining.value = 0;
+            formattedTime.value = '00:00';
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            if (!isSubmitted.value && !isSubmitting.value) {
+                submitOnTimeout();
+            }
+            return;
+        }
+
+        timeRemaining.value = remaining;
+        formattedTime.value = formatCountdown(remaining);
+    };
+
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+};
+
+const beginExam = (questions: Question[]) => {
+    if (hasExamBegun) {
+        return;
+    }
+    hasExamBegun = true;
+
+    const qs = [...questions];
+    if (props.quizForm.settings.shuffleQuestions) {
+        for (let i = qs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [qs[i], qs[j]] = [qs[j], qs[i]];
+        }
+    }
+    displayQuestions.value = qs;
+
+    // Restore draft answers saved on this device or on the server
+    restoreDraft();
+
+    // Focus Lock (Anti-Cheat): only active while the exam is running, not while reading the rules
+    if (props.quizForm.settings?.lockOnBlur) {
+        window.addEventListener('blur', handleBlur);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        if (props.session?.is_locked || localStorage.getItem(`is_locked_${props.quizForm.id}`) === 'true') {
+            lockQuiz();
+        }
+    }
+
+    startCountdown();
+};
+
+const startExam = async () => {
+    if (isStartingExam.value || !props.quizForm.startUrl) {
+        return;
+    }
+    isStartingExam.value = true;
+    startExamError.value = '';
+
+    for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+        try {
+            const response = await axios.post(props.quizForm.startUrl, { session_token: props.session?.token }, { timeout: REQUEST_TIMEOUT_MS });
+            markServerReachable(true);
+            examClockOffset = new Date(response.data.session.server_time).getTime() - Date.now();
+            examExpiresAt.value = response.data.session.expires_at;
+            examStartedAt.value = response.data.session.started_at;
+            beginExam(response.data.questions);
+            isStartingExam.value = false;
+            window.scrollTo({ top: 0 });
+            return;
+        } catch (error: any) {
+            const status = error?.response?.status;
+            if (status === 419) {
+                await refreshCsrfToken();
+                continue;
+            }
+            if (status === 409) {
+                startExamError.value = 'Jawaban ujian ini sudah dikirim sebelumnya.';
+                break;
+            }
+            if (status && status !== 429 && status < 500) {
+                startExamError.value = error.response?.data?.message || 'Ujian belum dapat dimulai. Silakan hubungi pengawas.';
+                break;
+            }
+            if (isNetworkFailure(error)) {
+                markServerReachable(false);
+            }
+            if (attempt < MAX_SUBMIT_ATTEMPTS) {
+                await wait(retryDelay(attempt));
+            }
+        }
+    }
+
+    if (!startExamError.value) {
+        startExamError.value = 'Server ujian belum terjangkau. Periksa koneksi Wi-Fi, lalu tekan "Kerjakan Sekarang" lagi.';
+    }
+    isStartingExam.value = false;
+};
+
+const examQuestionCount = computed<number>(() => props.examSummary?.questionCount ?? props.quizForm.questions.length);
+
+const examRequiredCount = computed<number>(() => props.examSummary?.requiredCount ?? props.quizForm.questions.filter((q) => q.required).length);
+
+const examTimeLimitMinutes = computed<number | null>(() => {
+    const minutes = props.examSummary?.timeLimitMinutes ?? props.quizForm.settings.timeLimit;
+    return minutes && minutes > 0 ? minutes : null;
+});
+
+const examDurationLabel = computed<string>(() => {
+    const minutes = examTimeLimitMinutes.value;
+    if (!minutes) {
+        return 'Tanpa batas waktu';
+    }
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (hours === 0) {
+        return `${minutes} menit`;
+    }
+    return rest === 0 ? `${hours} jam` : `${hours} jam ${rest} menit`;
+});
+
+/** Rules shown before the exam starts, derived from how the teacher configured the quiz. */
+const examRules = computed<string[]>(() => {
+    const settings = props.quizForm.settings;
+    const rules = ['Baca setiap soal dengan teliti dan kerjakan secara mandiri.'];
+
+    rules.push(
+        examTimeLimitMinutes.value
+            ? `Waktu ${examDurationLabel.value} mulai berjalan saat Anda menekan "Kerjakan Sekarang" dan tetap berjalan walau halaman ditutup. Jawaban terkirim otomatis ketika waktu habis.`
+            : 'Tidak ada batas waktu. Setelah selesai, tekan "Kirim Jawaban" agar jawaban tercatat.',
+    );
+
+    if (examRequiredCount.value > 0) {
+        rules.push(`Soal bertanda * wajib dijawab (${examRequiredCount.value} soal) sebelum jawaban dapat dikirim.`);
+    }
+
+    if (settings.lockOnBlur) {
+        rules.push('Jangan berpindah tab, membuka aplikasi lain, atau meminimalkan browser. Ujian akan terkunci dan hanya dapat dibuka oleh pengawas.');
+    }
+
+    if (!settings.disableRespondentAutosave) {
+        rules.push('Jawaban tersimpan otomatis. Jika koneksi Wi-Fi terputus, tetap lanjutkan: jawaban dikirim begitu koneksi pulih.');
+    }
+
+    const questionsPerPage = Number(settings.questionsPerPage);
+    const pageCount = questionsPerPage > 0 ? Math.ceil(examQuestionCount.value / questionsPerPage) : 1;
+    rules.push(
+        pageCount > 1
+            ? `Soal dibagi ke dalam ${pageCount} halaman. Gunakan panel Nomor Soal untuk berpindah soal.`
+            : 'Gunakan panel Nomor Soal untuk melompat ke soal mana pun.',
+    );
+
+    if (settings.limitOneResponse) {
+        rules.push('Jawaban hanya dapat dikirim satu kali, jadi periksa kembali sebelum mengirim.');
+    }
+
+    return rules;
+});
+
 onMounted(() => {
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
@@ -481,108 +700,8 @@ onMounted(() => {
         }
     }, SERVER_DRAFT_RETRY_INTERVAL_MS);
 
-    const qs = [...props.quizForm.questions];
-    if (props.quizForm.settings.shuffleQuestions) {
-        for (let i = qs.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [qs[i], qs[j]] = [qs[j], qs[i]];
-        }
-    }
-    displayQuestions.value = qs;
-
-    // Restore draft answers from localStorage if available
-    restoreDraft();
-
-    // Focus Lock (Anti-Cheat) initialization
-    if (props.quizForm.settings?.lockOnBlur) {
-        window.addEventListener('blur', handleBlur);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        if (props.session?.is_locked || localStorage.getItem(`is_locked_${props.quizForm.id}`) === 'true') {
-            lockQuiz();
-        }
-    }
-
-    // Server-enforced Time Limiter Initialization
-    if (props.session?.expires_at) {
-        const targetEnd = new Date(props.session.expires_at).getTime();
-        const clockOffset = props.session.server_time ? new Date(props.session.server_time).getTime() - Date.now() : 0;
-
-        const updateTimer = () => {
-            const now = Date.now() + clockOffset;
-            const remaining = targetEnd - now;
-
-            if (remaining <= 0) {
-                timeRemaining.value = 0;
-                formattedTime.value = '00:00';
-                if (timerInterval) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                }
-                if (!isSubmitted.value && !isSubmitting.value) {
-                    submitOnTimeout();
-                }
-            } else {
-                timeRemaining.value = remaining;
-
-                const totalSeconds = Math.floor(remaining / 1000);
-                const hrs = Math.floor(totalSeconds / 3600);
-                const mins = Math.floor((totalSeconds % 3600) / 60);
-                const secs = totalSeconds % 60;
-
-                if (hrs > 0) {
-                    formattedTime.value = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                } else {
-                    formattedTime.value = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                }
-            }
-        };
-
-        updateTimer();
-        timerInterval = setInterval(updateTimer, 1000);
-    } else {
-        const timeLimit = props.quizForm.settings?.timeLimit;
-        if (timeLimit && timeLimit > 0) {
-            let startTime = localStorage.getItem(`form_start_time_${props.quizForm.id}`);
-            if (!startTime) {
-                startTime = Date.now().toString();
-                localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
-            }
-
-            const endTime = parseInt(startTime) + timeLimit * 60 * 1000;
-
-            const updateTimer = () => {
-                const now = Date.now();
-                const remaining = endTime - now;
-
-                if (remaining <= 0) {
-                    timeRemaining.value = 0;
-                    formattedTime.value = '00:00';
-                    if (timerInterval) {
-                        clearInterval(timerInterval);
-                        timerInterval = null;
-                    }
-                    if (!isSubmitted.value && !isSubmitting.value) {
-                        submitOnTimeout();
-                    }
-                } else {
-                    timeRemaining.value = remaining;
-
-                    const totalSeconds = Math.floor(remaining / 1000);
-                    const hrs = Math.floor(totalSeconds / 3600);
-                    const mins = Math.floor((totalSeconds % 3600) / 60);
-                    const secs = totalSeconds % 60;
-
-                    if (hrs > 0) {
-                        formattedTime.value = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                    } else {
-                        formattedTime.value = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                    }
-                }
-            };
-
-            updateTimer();
-            timerInterval = setInterval(updateTimer, 1000);
-        }
+    if (!props.accessRestricted && hasExamStarted.value) {
+        beginExam(props.quizForm.questions);
     }
 });
 
@@ -697,7 +816,11 @@ const isQuestionNavOpen = computed<boolean>(() =>
 );
 
 const hasCountdownTimer = computed<boolean>(
-    () => Boolean(props.quizForm.settings.timeLimit && props.quizForm.settings.timeLimit > 0) && !isSubmitted.value,
+    () =>
+        Boolean(props.quizForm.settings.timeLimit && props.quizForm.settings.timeLimit > 0) &&
+        !props.accessRestricted &&
+        hasExamStarted.value &&
+        !isSubmitted.value,
 );
 
 /** Keep the docked navigator below the countdown timer, which sits in the top-right corner. */
@@ -891,17 +1014,17 @@ const handleShiftEnterKeydown = (event: KeyboardEvent) => {
 };
 
 const progress = computed(() => {
-    if (!props.quizForm.questions.length) {
+    if (!displayQuestions.value.length) {
         return 0;
     }
-    const answeredCount = props.quizForm.questions.filter((q) => {
+    const answeredCount = displayQuestions.value.filter((q) => {
         const ans = answers.value[q.id];
         if (Array.isArray(ans)) {
             return ans.length > 0;
         }
         return ans !== undefined && ans !== '';
     }).length;
-    return Math.round((answeredCount / props.quizForm.questions.length) * 100);
+    return Math.round((answeredCount / displayQuestions.value.length) * 100);
 });
 
 const toggleCheckbox = (questionId: number, option: string) => {
@@ -926,7 +1049,7 @@ const validateForm = (): boolean => {
     validationErrors.value = {};
     let isValid = true;
 
-    props.quizForm.questions.forEach((q) => {
+    displayQuestions.value.forEach((q) => {
         if (!q.required) {
             return;
         }
@@ -1113,7 +1236,7 @@ const submitResponse = () => {
     }
 
     if (!validateForm()) {
-        const firstErrorQuestion = props.quizForm.questions.find((q) => validationErrors.value[q.id]);
+        const firstErrorQuestion = displayQuestions.value.find((q) => validationErrors.value[q.id]);
         if (firstErrorQuestion) {
             goToQuestion(firstErrorQuestion.id);
         }
@@ -1291,7 +1414,7 @@ const submitAnotherResponse = () => {
             </section>
 
             <!-- Email Collection Card -->
-            <section v-if="quizForm.settings.collectEmail && (!isPaginated || currentPage === 1)" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section v-if="hasExamStarted && quizForm.settings.collectEmail && (!isPaginated || currentPage === 1)" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <label class="block">
                     <span class="text-base font-semibold text-slate-900">Email <span class="text-red-500">*</span></span>
                     <input
@@ -1304,7 +1427,7 @@ const submitAnotherResponse = () => {
                 </label>
             </section>
 
-            <section class="mx-auto mt-5 max-w-3xl space-y-4">
+            <section v-if="hasExamStarted" class="mx-auto mt-5 max-w-3xl space-y-4">
                 <article
                     v-for="question in currentPagedQuestions"
                     :key="question.id"
@@ -1760,6 +1883,100 @@ const submitAnotherResponse = () => {
             </div>
         </aside>
     </template>
+
+    <!-- Exam start confirmation: rules, number of questions and duration -->
+    <div
+        v-if="isStartModalOpen"
+        class="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
+    >
+        <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exam-start-title"
+            class="my-4 w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        >
+            <div :class="['h-3', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+            <div class="p-6 sm:p-8">
+                <span class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                    <ScrollText class="h-3.5 w-3.5" />
+                    Konfirmasi Ujian
+                </span>
+                <h1
+                    id="exam-start-title"
+                    class="mt-3 text-2xl font-black leading-tight text-slate-900 sm:text-3xl"
+                    :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                >
+                    <RichContent :content="quizForm.title" />
+                </h1>
+                <RichContent
+                    v-if="quizForm.description"
+                    :content="quizForm.description"
+                    as="p"
+                    class="mt-2 text-sm text-slate-500"
+                />
+
+                <div class="mt-5 grid grid-cols-2 gap-3">
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                            <ListChecks class="h-4 w-4 text-indigo-600" />
+                            Jumlah Soal
+                        </div>
+                        <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examQuestionCount }} <span class="text-sm font-bold text-slate-500">soal</span></p>
+                        <p v-if="examRequiredCount > 0" class="mt-0.5 text-xs text-slate-500">{{ examRequiredCount }} soal wajib dijawab</p>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                            <Clock class="h-4 w-4 text-indigo-600" />
+                            Durasi
+                        </div>
+                        <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examDurationLabel }}</p>
+                        <p v-if="examTimeLimitMinutes" class="mt-0.5 text-xs text-slate-500">Dihitung sejak tombol mulai ditekan</p>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">Aturan Mengerjakan</h2>
+                    <ol class="mt-3 space-y-2.5">
+                        <li v-for="(rule, index) in examRules" :key="index" class="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
+                            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-black text-indigo-700">
+                                {{ index + 1 }}
+                            </span>
+                            <span>{{ rule }}</span>
+                        </li>
+                    </ol>
+                </div>
+
+                <div v-if="startExamError" class="mt-5 flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">
+                    <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{{ startExamError }}</span>
+                </div>
+
+                <div class="mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
+                    <Link
+                        v-if="$page.props.auth?.user"
+                        :href="route('dashboard')"
+                        class="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+                    >
+                        <ArrowLeft class="h-4 w-4" />
+                        Kembali
+                    </Link>
+                    <button
+                        type="button"
+                        :disabled="isStartingExam"
+                        :class="[
+                            'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-7 py-3.5 text-sm font-bold text-white shadow-md transition hover:brightness-95 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
+                            quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                        ]"
+                        @click="startExam"
+                    >
+                        <RefreshCw v-if="isStartingExam" class="h-4 w-4 animate-spin" />
+                        <Play v-else class="h-4 w-4 fill-current" />
+                        <span>{{ isStartingExam ? 'Memulai ujian...' : 'Kerjakan Sekarang' }}</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
 
     <!-- Fullscreen Media Lightbox Modal with Zoom In/Out -->
     <MediaLightboxModal

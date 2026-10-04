@@ -54,13 +54,16 @@ test('legacy absolute urls to our own storage keep working after the ip changes'
         ])],
     ]);
 
-    $this->get(route('forms.public', $quizForm->slug))
+    $sessionToken = $this->get(route('forms.public', $quizForm->slug))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('PublicQuiz')
-            ->where('quizForm.questions.0.media.0.url', '/storage/media/gambar-soal.webp')
-            ->where('quizForm.questions.0.media.1.url', 'https://upload.wikimedia.org/storage/media/other-site.webp')
-            ->where('quizForm.questions.0.media.2.url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'));
+        ->inertiaProps('session.token');
+
+    $this->withCredentials()
+        ->postJson(route('forms.responses.start', $quizForm->slug), ['session_token' => $sessionToken])
+        ->assertOk()
+        ->assertJsonPath('questions.0.media.0.url', '/storage/media/gambar-soal.webp')
+        ->assertJsonPath('questions.0.media.1.url', 'https://upload.wikimedia.org/storage/media/other-site.webp')
+        ->assertJsonPath('questions.0.media.2.url', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
 });
 
 test('saving a form stores host independent media urls', function () {

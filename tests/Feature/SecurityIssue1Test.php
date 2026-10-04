@@ -69,14 +69,23 @@ test('issue 2: answer keys are stripped from public quiz inertia payload', funct
     $response = $this->get(route('forms.public', $form->slug));
     $response->assertSuccessful();
 
+    // Before the exam starts the page carries no questions at all, only how many there are.
     $response->assertInertia(function (Assert $page) {
         $page->component('PublicQuiz')
-            ->has('quizForm.questions', 2)
-            ->where('quizForm.questions.0.id', 101)
-            ->missing('quizForm.questions.0.answer')
-            ->where('quizForm.questions.1.id', 102)
-            ->missing('quizForm.questions.1.answer');
+            ->has('quizForm.questions', 0)
+            ->where('examSummary.questionCount', 2);
     });
+
+    // The questions handed out when the exam starts do not contain the answer keys either.
+    $this->postJson(route('forms.responses.start', $form->slug), [
+        'session_token' => $response->inertiaProps('session.token'),
+    ])
+        ->assertOk()
+        ->assertJsonCount(2, 'questions')
+        ->assertJsonPath('questions.0.id', 101)
+        ->assertJsonMissingPath('questions.0.answer')
+        ->assertJsonPath('questions.1.id', 102)
+        ->assertJsonMissingPath('questions.1.answer');
 });
 
 // ---------------------------------------------------------------------------
