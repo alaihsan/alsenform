@@ -5,13 +5,15 @@ use App\Http\Middleware\GzipResponseMiddleware;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\StaticAssetCacheMiddleware;
 use App\Http\Middleware\TrustLocalProxies;
+use App\Support\StaleFrameworkCaches;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Bootstrap\LoadConfiguration;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Middleware\TrustProxies;
 
-return Application::configure(basePath: dirname(__DIR__))
+$app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
@@ -31,3 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
+
+// Caches built from older code (e.g. before "git pull") are dropped before they are loaded.
+$app->beforeBootstrapping(LoadConfiguration::class, fn (Application $app) => StaleFrameworkCaches::clear($app));
+
+return $app;
