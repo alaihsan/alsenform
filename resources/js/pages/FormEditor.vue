@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import RichContent from '@/components/RichContent.vue';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
@@ -31,9 +39,11 @@ import {
     Eye,
     FileText,
     FileUp,
+    Home,
     Image,
     Key,
     Link2,
+    LogOut,
     Maximize2,
     MoreVertical,
     Palette,
@@ -42,6 +52,7 @@ import {
     Puzzle,
     Redo2,
     School,
+    Sparkles,
     Star,
     ToggleRight,
     Trash2,
@@ -49,6 +60,7 @@ import {
     Undo2,
     UploadCloud,
     UserPlus,
+    UserRound,
     Video,
     X,
     ZoomIn,
@@ -1366,16 +1378,25 @@ const handleTitleBlur = () => {
     }
 };
 
-const navigateBackToDashboard = () => {
+/**
+ * Leave the editor only after pending changes are saved to the server.
+ */
+const leaveEditor = (leave: () => void) => {
     if (props.quizForm && (hasUnsavedChanges.value || isSaving.value)) {
-        statusMessage.value = 'Menyimpan sebelum kembali...';
-        saveDraft(false, () => {
-            router.visit(route('dashboard'));
-        });
+        statusMessage.value = 'Menyimpan sebelum keluar...';
+        saveDraft(false, leave);
     } else {
-        router.visit(route('dashboard'));
+        leave();
     }
 };
+
+const navigateBackToDashboard = () => leaveEditor(() => router.visit(route('dashboard')));
+
+const navigateToProfile = () => leaveEditor(() => router.visit(route('profile.edit')));
+
+const logout = () => leaveEditor(() => router.post(route('logout')));
+
+const currentUserAvatarUrl = computed<string>(() => currentUser.value?.avatar_url || '');
 
 // Watch form changes (updates LocalStorage in real-time)
 watch(
@@ -1444,14 +1465,31 @@ watch(
                 </div>
 
                 <div class="ml-auto flex items-center gap-2 text-slate-600 lg:gap-4">
-                    <button
-                        type="button"
-                        class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
-                        aria-label="Add-ons"
-                        @click="markChanged('Add-ons panel opened')"
-                    >
-                        <Puzzle class="h-5 w-5" />
-                    </button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger :as-child="true">
+                            <button
+                                type="button"
+                                class="hidden rounded-full p-2 transition hover:bg-slate-100 data-[state=open]:bg-indigo-50 data-[state=open]:text-indigo-700 lg:block"
+                                aria-label="Add-ons"
+                                title="Add-ons"
+                            >
+                                <Puzzle class="h-5 w-5" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="z-50 mt-1.5 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+                            <div class="flex items-start gap-3">
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                                    <Sparkles class="h-5 w-5" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-slate-900">Add-ons</p>
+                                    <p class="mt-1 text-sm leading-relaxed text-slate-600">
+                                        Hal Magic sedang dibuat, kamu akan menerima notifikasi. Ditunggu ya!
+                                    </p>
+                                </div>
+                            </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <button
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
@@ -1582,9 +1620,60 @@ watch(
                             </button>
                         </div>
                     </div>
-                    <div
-                        class="hidden h-10 w-10 rounded-full border-4 border-emerald-400 bg-gradient-to-br from-lime-200 via-emerald-300 to-sky-300 sm:block"
-                    ></div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger :as-child="true">
+                            <button
+                                type="button"
+                                class="hidden rounded-full transition hover:ring-4 hover:ring-indigo-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 data-[state=open]:ring-4 data-[state=open]:ring-indigo-100 sm:block"
+                                aria-label="Menu akun"
+                                :title="currentUser?.name"
+                            >
+                                <Avatar class="h-10 w-10 overflow-hidden rounded-full border border-slate-200">
+                                    <AvatarImage v-if="currentUserAvatarUrl" :src="currentUserAvatarUrl" :alt="currentUser?.name" />
+                                    <AvatarFallback class="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
+                                        <UserRound class="h-6 w-6" />
+                                    </AvatarFallback>
+                                </Avatar>
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="z-50 mt-1.5 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                            <div class="flex items-center gap-3 rounded-xl px-2.5 py-2">
+                                <Avatar class="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-200">
+                                    <AvatarImage v-if="currentUserAvatarUrl" :src="currentUserAvatarUrl" :alt="currentUser?.name" />
+                                    <AvatarFallback class="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
+                                        <UserRound class="h-5 w-5" />
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-900">{{ currentUser?.name }}</p>
+                                    <p v-if="currentUser?.email" class="truncate text-xs text-slate-500">{{ currentUser.email }}</p>
+                                </div>
+                            </div>
+                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+                            <DropdownMenuItem
+                                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                                @select="navigateBackToDashboard"
+                            >
+                                <Home class="h-4 w-4 text-slate-500" />
+                                <span>Home</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                                @select="navigateToProfile"
+                            >
+                                <UserRound class="h-4 w-4 text-slate-500" />
+                                <span>Profile</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+                            <DropdownMenuItem
+                                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
+                                @select="logout"
+                            >
+                                <LogOut class="h-4 w-4 text-rose-500" />
+                                <span>Logout</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 

@@ -107,3 +107,27 @@ test('media url normalization leaves unknown and unsafe urls untouched', functio
         ->and($mediaUrl->normalize(null))->toBeNull()
         ->and($mediaUrl->forPublicPath('media/a.png'))->toBe('/storage/media/a.png');
 });
+
+test('profile photos use a host independent url', function () {
+    $uploaded = User::factory()->make(['avatar' => 'avatars/guru.jpg']);
+    $external = User::factory()->make(['avatar' => 'https://example.org/photo.jpg']);
+    $withoutPhoto = User::factory()->make(['avatar' => null]);
+
+    expect($uploaded->avatar_url)->toBe('/storage/avatars/guru.jpg')
+        ->and($external->avatar_url)->toBe('https://example.org/photo.jpg')
+        ->and($withoutPhoto->avatar_url)->toBeNull();
+});
+
+test('the form editor receives the profile photo for the account menu', function () {
+    $teacher = User::factory()->create(['avatar' => 'avatars/guru.jpg']);
+    $quizForm = QuizForm::factory()->for($teacher)->create();
+
+    $this->actingAs($teacher)
+        ->get(route('forms.edit', ['quizForm' => $quizForm->slug]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('FormEditor')
+            ->where('auth.user.name', $teacher->name)
+            ->where('auth.user.avatar_url', '/storage/avatars/guru.jpg')
+        );
+});
