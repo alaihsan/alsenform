@@ -866,7 +866,7 @@ function closeDonationModal(): void {
                                 </DropdownMenuItem>
 
                                 <!-- 3. Template Galeri -->
-                                <DropdownMenuItem class="cursor-pointer p-0 focus:bg-transparent" @select="isTemplateGalleryOpen = true">
+                                <DropdownMenuItem v-if="!isStudent" class="cursor-pointer p-0 focus:bg-transparent" @select="isTemplateGalleryOpen = true">
                                     <button
                                         type="button"
                                         class="group flex w-full flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
