@@ -1,47 +1,34 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
-import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    alsenCard,
+    alsenCardDescription,
+    alsenCardTitle,
+    alsenHint,
+    alsenInput,
+    alsenLabel,
+    alsenPrimaryButton,
+    alsenSuccessText,
+} from '@/constants/alsenform-ui';
+import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { TransitionRoot } from '@headlessui/vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { CheckCircle2, Eye, EyeOff, KeyRound, LogOut, ShieldCheck } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import { KeyRound, ShieldCheck } from 'lucide-vue-next';
 
-import HeadingSmall from '@/components/HeadingSmall.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { type BreadcrumbItem } from '@/types';
-
-interface Props {
-    className?: string;
-}
-
-defineProps<Props>();
+defineProps<{
+    mustVerifyEmail?: boolean;
+    status?: string;
+}>();
 
 const page = usePage();
-const mustChangePassword = computed(() => Boolean((page.props.auth as any)?.user?.must_change_password));
-
-const breadcrumbItems = computed<BreadcrumbItem[]>(() => {
-    if (mustChangePassword.value) {
-        return [
-            {
-                title: 'Aktivasi Akun',
-                href: '/settings/password',
-            },
-        ];
-    }
-
-    return [
-        {
-            title: 'Password settings',
-            href: '/settings/password',
-        },
-    ];
-});
+const user = computed(() => (page.props.auth as any)?.user);
+const mustChangePassword = computed(() => Boolean(user.value?.must_change_password));
 
 const passwordInput = ref<HTMLInputElement>();
 const currentPasswordInput = ref<HTMLInputElement>();
+const showPasswords = ref(false);
 
 const form = useForm({
     current_password: '',
@@ -56,16 +43,12 @@ const updatePassword = () => {
         onError: (errors: any) => {
             if (errors.password) {
                 form.reset('password', 'password_confirmation');
-                if (passwordInput.value instanceof HTMLInputElement) {
-                    passwordInput.value.focus();
-                }
+                passwordInput.value?.focus();
             }
 
             if (errors.current_password) {
                 form.reset('current_password');
-                if (currentPasswordInput.value instanceof HTMLInputElement) {
-                    currentPasswordInput.value.focus();
-                }
+                currentPasswordInput.value?.focus();
             }
         },
     });
@@ -73,144 +56,189 @@ const updatePassword = () => {
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbItems">
-        <Head :title="mustChangePassword ? 'Aktivasi Akun & Ganti Password' : 'Password settings'" />
+    <Head :title="mustChangePassword ? 'Aktivasi Akun' : 'Password'" />
 
-        <!-- Onboarding View for First-time / Mandatory Password Change -->
-        <div v-if="mustChangePassword" class="mx-auto max-w-xl py-8 px-4">
-            <div class="overflow-hidden rounded-3xl border border-indigo-100 bg-white shadow-sm ring-1 ring-slate-900/5">
-                <div class="bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-6 py-6 text-white sm:px-8">
+    <!-- Mandatory password change on first login -->
+    <AlsenformLayout v-if="mustChangePassword" minimal>
+        <template #header-actions>
+            <Link
+                :href="route('logout')"
+                method="post"
+                as="button"
+                class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-rose-50 hover:text-rose-600"
+            >
+                <LogOut class="h-4 w-4" />
+                Keluar
+            </Link>
+        </template>
+
+        <main class="flex justify-center px-4 py-8 sm:py-14">
+            <section class="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div class="h-3 bg-indigo-600"></div>
+                <div class="p-6 sm:p-8">
                     <div class="flex items-center gap-3">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-                            <KeyRound class="h-6 w-6 text-white" />
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                            <KeyRound class="h-6 w-6" />
                         </div>
                         <div>
-                            <h1 class="text-xl font-bold">Selamat Datang di Alsenform!</h1>
-                            <p class="text-xs text-indigo-100">Langkah Awal: Buat Password Pribadi Baru</p>
+                            <p class="text-xs font-bold uppercase tracking-wider text-indigo-600">Langkah pertama</p>
+                            <h1 class="text-2xl font-black leading-tight text-slate-900">Buat Password Baru</h1>
                         </div>
                     </div>
-                </div>
 
-                <div class="p-6 sm:p-8 space-y-6">
-                    <div class="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
+                    <p class="mt-4 text-sm leading-relaxed text-slate-600">
+                        Selamat datang<span v-if="user?.name">, <strong class="text-slate-900">{{ user.name }}</strong></span>! Sebelum mulai mengerjakan
+                        ujian, ganti dulu password sementara dari sekolah dengan password pribadi Anda.
+                    </p>
+
+                    <div class="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                         <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                        <p class="leading-relaxed">
-                            Demi keamanan akun Anda, silakan ubah password sementara yang diberikan pihak sekolah sebelum mulai mengakses kuis dan fitur lainnya.
-                        </p>
+                        <p class="leading-relaxed">Gunakan minimal 8 karakter dan jangan beri tahu password Anda kepada teman.</p>
                     </div>
 
-                    <form @submit.prevent="updatePassword" class="space-y-5">
-                        <div class="grid gap-2">
-                            <Label for="current_password">Password Saat Ini (Password Sementara)</Label>
-                            <Input
+                    <form class="mt-6 space-y-5" @submit.prevent="updatePassword">
+                        <div class="space-y-2">
+                            <label for="current_password" :class="alsenLabel">Password saat ini (dari sekolah)</label>
+                            <input
                                 id="current_password"
                                 ref="currentPasswordInput"
                                 v-model="form.current_password"
-                                type="password"
-                                class="mt-1 block w-full rounded-xl"
+                                :type="showPasswords ? 'text' : 'password'"
+                                :class="alsenInput"
                                 autocomplete="current-password"
-                                placeholder="Masukkan password saat ini"
+                                placeholder="Masukkan password sementara"
                             />
                             <InputError :message="form.errors.current_password" />
                         </div>
 
-                        <div class="grid gap-2">
-                            <Label for="password">Password Baru</Label>
-                            <Input
+                        <div class="space-y-2">
+                            <label for="password" :class="alsenLabel">Password baru</label>
+                            <input
                                 id="password"
                                 ref="passwordInput"
                                 v-model="form.password"
-                                type="password"
-                                class="mt-1 block w-full rounded-xl"
+                                :type="showPasswords ? 'text' : 'password'"
+                                :class="alsenInput"
                                 autocomplete="new-password"
                                 placeholder="Minimal 8 karakter"
                             />
                             <InputError :message="form.errors.password" />
                         </div>
 
-                        <div class="grid gap-2">
-                            <Label for="password_confirmation">Konfirmasi Password Baru</Label>
-                            <Input
+                        <div class="space-y-2">
+                            <label for="password_confirmation" :class="alsenLabel">Ulangi password baru</label>
+                            <input
                                 id="password_confirmation"
                                 v-model="form.password_confirmation"
-                                type="password"
-                                class="mt-1 block w-full rounded-xl"
+                                :type="showPasswords ? 'text' : 'password'"
+                                :class="alsenInput"
                                 autocomplete="new-password"
-                                placeholder="Ulangi password baru Anda"
+                                placeholder="Ketik ulang password baru"
                             />
                             <InputError :message="form.errors.password_confirmation" />
                         </div>
 
-                        <Button :disabled="form.processing" class="w-full rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
-                            {{ form.processing ? 'Menyimpan Password...' : 'Simpan Password & Mulai' }}
-                        </Button>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-indigo-700"
+                            @click="showPasswords = !showPasswords"
+                        >
+                            <EyeOff v-if="showPasswords" class="h-4 w-4" />
+                            <Eye v-else class="h-4 w-4" />
+                            {{ showPasswords ? 'Sembunyikan password' : 'Tampilkan password' }}
+                        </button>
+
+                        <button type="submit" :disabled="form.processing" :class="[alsenPrimaryButton, 'w-full py-3.5']">
+                            {{ form.processing ? 'Menyimpan...' : 'Simpan Password & Mulai' }}
+                        </button>
                     </form>
                 </div>
+            </section>
+        </main>
+    </AlsenformLayout>
+
+    <!-- Regular password settings -->
+    <SettingsLayout v-else>
+        <div :class="alsenCard">
+            <div class="flex items-start gap-3">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    <KeyRound class="h-5 w-5" />
+                </div>
+                <div>
+                    <h2 :class="alsenCardTitle">Ganti Password</h2>
+                    <p :class="alsenCardDescription">Gunakan password yang panjang dan sulit ditebak agar akun tetap aman.</p>
+                </div>
             </div>
+
+            <form class="mt-6 max-w-xl space-y-5" @submit.prevent="updatePassword">
+                <div class="space-y-2">
+                    <label for="current_password" :class="alsenLabel">Password saat ini</label>
+                    <input
+                        id="current_password"
+                        ref="currentPasswordInput"
+                        v-model="form.current_password"
+                        :type="showPasswords ? 'text' : 'password'"
+                        :class="alsenInput"
+                        autocomplete="current-password"
+                        placeholder="Password saat ini"
+                    />
+                    <InputError :message="form.errors.current_password" />
+                </div>
+
+                <div class="space-y-2">
+                    <label for="password" :class="alsenLabel">Password baru</label>
+                    <input
+                        id="password"
+                        ref="passwordInput"
+                        v-model="form.password"
+                        :type="showPasswords ? 'text' : 'password'"
+                        :class="alsenInput"
+                        autocomplete="new-password"
+                        placeholder="Minimal 8 karakter"
+                    />
+                    <InputError :message="form.errors.password" />
+                </div>
+
+                <div class="space-y-2">
+                    <label for="password_confirmation" :class="alsenLabel">Ulangi password baru</label>
+                    <input
+                        id="password_confirmation"
+                        v-model="form.password_confirmation"
+                        :type="showPasswords ? 'text' : 'password'"
+                        :class="alsenInput"
+                        autocomplete="new-password"
+                        placeholder="Ketik ulang password baru"
+                    />
+                    <InputError :message="form.errors.password_confirmation" />
+                    <p :class="alsenHint">Password baru langsung berlaku untuk login berikutnya.</p>
+                </div>
+
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-indigo-700"
+                    @click="showPasswords = !showPasswords"
+                >
+                    <EyeOff v-if="showPasswords" class="h-4 w-4" />
+                    <Eye v-else class="h-4 w-4" />
+                    {{ showPasswords ? 'Sembunyikan password' : 'Tampilkan password' }}
+                </button>
+
+                <div class="flex flex-wrap items-center gap-4 pt-1">
+                    <button type="submit" :disabled="form.processing" :class="alsenPrimaryButton">
+                        {{ form.processing ? 'Menyimpan...' : 'Simpan Password' }}
+                    </button>
+
+                    <TransitionRoot
+                        :show="form.recentlySuccessful"
+                        enter="transition ease-in-out"
+                        enter-from="opacity-0"
+                        leave="transition ease-in-out"
+                        leave-to="opacity-0"
+                    >
+                        <span :class="alsenSuccessText"><CheckCircle2 class="h-4 w-4" /> Password berhasil diganti.</span>
+                    </TransitionRoot>
+                </div>
+            </form>
         </div>
-
-        <!-- Normal Settings Layout -->
-        <SettingsLayout v-else>
-            <div class="space-y-6">
-                <HeadingSmall title="Update password" description="Ensure your account is using a long, random password to stay secure" />
-
-                <form @submit.prevent="updatePassword" class="space-y-6">
-                    <div class="grid gap-2">
-                        <Label for="current_password">Current Password</Label>
-                        <Input
-                            id="current_password"
-                            ref="currentPasswordInput"
-                            v-model="form.current_password"
-                            type="password"
-                            class="mt-1 block w-full"
-                            autocomplete="current-password"
-                            placeholder="Current password"
-                        />
-                        <InputError :message="form.errors.current_password" />
-                    </div>
-
-                    <div class="grid gap-2">
-                        <Label for="password">New password</Label>
-                        <Input
-                            id="password"
-                            ref="passwordInput"
-                            v-model="form.password"
-                            type="password"
-                            class="mt-1 block w-full"
-                            autocomplete="new-password"
-                            placeholder="New password"
-                        />
-                        <InputError :message="form.errors.password" />
-                    </div>
-
-                    <div class="grid gap-2">
-                        <Label for="password_confirmation">Confirm password</Label>
-                        <Input
-                            id="password_confirmation"
-                            v-model="form.password_confirmation"
-                            type="password"
-                            class="mt-1 block w-full"
-                            autocomplete="new-password"
-                            placeholder="Confirm password"
-                        />
-                        <InputError :message="form.errors.password_confirmation" />
-                    </div>
-
-                    <div class="flex items-center gap-4">
-                        <Button :disabled="form.processing">Save password</Button>
-
-                        <TransitionRoot
-                            :show="form.recentlySuccessful"
-                            enter="transition ease-in-out"
-                            enter-from="opacity-0"
-                            leave="transition ease-in-out"
-                            leave-to="opacity-0"
-                        >
-                            <p class="text-sm text-neutral-600">Saved</p>
-                        </TransitionRoot>
-                    </div>
-                </form>
-            </div>
-        </SettingsLayout>
-    </AppLayout>
+    </SettingsLayout>
 </template>

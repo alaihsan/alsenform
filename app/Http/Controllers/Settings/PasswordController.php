@@ -34,10 +34,18 @@ class PasswordController extends Controller
             'password' => ['required', Password::defaults(), 'confirmed'],
         ]);
 
-        $request->user()->update([
+        $user = $request->user();
+        $wasRequiredToChangePassword = (bool) $user->must_change_password;
+
+        $user->update([
             'password' => Hash::make($validated['password']),
             'must_change_password' => false,
         ]);
+
+        // After the mandatory first-login change the account is ready: continue to the home page.
+        if ($wasRequiredToChangePassword) {
+            return redirect()->route('dashboard')->with('status', 'password-updated');
+        }
 
         return back()->with('status', 'password-updated');
     }
