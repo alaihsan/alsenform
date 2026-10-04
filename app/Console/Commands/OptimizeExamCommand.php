@@ -48,12 +48,27 @@ class OptimizeExamCommand extends Command
 
         // 2. Check Database & Max Connections
         try {
-            $maxConn = DB::select("SHOW VARIABLES LIKE 'max_connections'");
-            $val = ! empty($maxConn[0]->Value) ? (int) $maxConn[0]->Value : 151;
-            if ($val >= 300) {
-                $this->info("✓ MySQL max_connections: {$val} (Sangat aman untuk 200+ koneksi serentak).");
+            $connection = DB::connection();
+            $driver = $connection->getDriverName();
+
+            if ($driver === 'pgsql') {
+                // Every lan:serve worker holds at most one connection, so 100 leaves plenty of headroom.
+                $val = (int) ($connection->selectOne('SHOW max_connections')->max_connections ?? 100);
+                if ($val >= 100) {
+                    $this->info("✓ PostgreSQL max_connections: {$val} (aman untuk lan:serve dengan 24+ worker).");
+                } else {
+                    $this->warn("⚠️  PostgreSQL max_connections saat ini: {$val}. Disarankan >= 100.");
+                }
+            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                $maxConn = $connection->select("SHOW VARIABLES LIKE 'max_connections'");
+                $val = ! empty($maxConn[0]->Value) ? (int) $maxConn[0]->Value : 151;
+                if ($val >= 300) {
+                    $this->info("✓ MySQL max_connections: {$val} (Sangat aman untuk 200+ koneksi serentak).");
+                } else {
+                    $this->warn("⚠️  MySQL max_connections saat ini: {$val}. Disarankan >= 300 untuk 200 user serentak.");
+                }
             } else {
-                $this->warn("⚠️  MySQL max_connections saat ini: {$val}. Disarankan >= 300 untuk 200 user serentak.");
+                $this->warn("⚠️  Database {$driver} tidak disarankan untuk ujian serentak. Gunakan PostgreSQL (DB_CONNECTION=pgsql).");
             }
 
             // Clean stale sessions

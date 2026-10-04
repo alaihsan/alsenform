@@ -97,3 +97,19 @@ test('lan:serve announces the new student url when the server ip address changes
         ->not->toContain('http://192.168.1.20:8000')
         ->and(substr_count($output, 'ALAMAT IP SERVER BERUBAH'))->toBe(1);
 });
+
+test('lan:serve stops with a clear message when postgresql is not reachable', function () {
+    $defaultConnection = config('database.default');
+    config([
+        'database.connections.unreachable' => array_merge(config("database.connections.{$defaultConnection}"), ['host' => '127.0.0.1', 'port' => 1]),
+        'database.default' => 'unreachable',
+    ]);
+
+    try {
+        $this->artisan('lan:serve --port=59124 --no-caffeinate')
+            ->expectsOutputToContain('tidak dapat dihubungi')
+            ->assertFailed();
+    } finally {
+        config(['database.default' => $defaultConnection]);
+    }
+});

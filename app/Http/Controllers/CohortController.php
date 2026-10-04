@@ -29,9 +29,9 @@ class CohortController extends Controller
             ->with('creator:id,name,email')
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
-                    $sub->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%");
+                    $sub->whereLike('name', "%{$search}%")
+                        ->orWhereLike('code', "%{$search}%")
+                        ->orWhereLike('description', "%{$search}%");
                 });
             });
 
@@ -123,9 +123,9 @@ class CohortController extends Controller
         $membersQuery = $cohort->users()
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
-                    $sub->where('name', 'like', "%{$search}%")
-                        ->orWhere('nis', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                    $sub->whereLike('name', "%{$search}%")
+                        ->orWhereLike('nis', "%{$search}%")
+                        ->orWhereLike('email', "%{$search}%");
                 });
             })
             ->when($selectedClass !== '', function ($q) use ($selectedClass): void {

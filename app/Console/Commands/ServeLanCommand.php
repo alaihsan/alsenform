@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
 
 class ServeLanCommand extends Command
@@ -63,6 +64,10 @@ class ServeLanCommand extends Command
             $this->error('Host harus berupa alamat IPv4 yang valid, 0.0.0.0, atau localhost.');
 
             return self::INVALID;
+        }
+
+        if (! $this->databaseIsReachable()) {
+            return self::FAILURE;
         }
 
         if ($this->option('optimize')) {
@@ -228,6 +233,26 @@ class ServeLanCommand extends Command
 
         $this->output->writeln('   💡 Agar IP tidak berubah lagi: atur DHCP Reservation (IP tetap) untuk server ini di router.');
         $this->newLine();
+    }
+
+    /**
+     * Make sure the database (PostgreSQL) answers before students start the exam.
+     */
+    protected function databaseIsReachable(): bool
+    {
+        $connection = DB::connection();
+
+        try {
+            $connection->getPdo();
+
+            return true;
+        } catch (\Throwable $e) {
+            $this->error("Database {$connection->getDriverName()} tidak dapat dihubungi: {$e->getMessage()}");
+            $this->line('   Pastikan layanan PostgreSQL berjalan (Herd -> Services -> PostgreSQL, atau: brew services start postgresql@16)');
+            $this->line('   dan pengaturan DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD di berkas .env sudah benar.');
+
+            return false;
+        }
     }
 
     /**

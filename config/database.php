@@ -16,7 +16,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -37,12 +37,9 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            // WAL lets students read while answers are being written, and the busy
-            // timeout makes concurrent writes wait instead of failing with
-            // "database is locked" when a whole class submits at once.
-            'busy_timeout' => env('DB_BUSY_TIMEOUT', 10000),
-            'journal_mode' => env('DB_JOURNAL_MODE', 'wal'),
-            'synchronous' => env('DB_SYNCHRONOUS', 'normal'),
+            'busy_timeout' => null,
+            'journal_mode' => null,
+            'synchronous' => null,
         ],
 
         'mysql' => [
@@ -90,14 +87,14 @@ return [
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
+            'database' => env('DB_DATABASE', 'alsenform'),
+            'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => 'prefer',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
         'sqlsrv' => [
