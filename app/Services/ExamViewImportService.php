@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\MediaUrl;
 use DOMDocument;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +14,7 @@ class ExamViewImportService
 {
     public function __construct(
         protected DocxImportService $docxImportService = new DocxImportService,
+        protected MediaUrl $mediaUrl = new MediaUrl,
     ) {}
 
     /**
@@ -676,7 +678,7 @@ class ExamViewImportService
 
         Storage::disk('public')->put($storagePath, $imageBytes);
 
-        return asset('storage/'.$storagePath);
+        return $this->mediaUrl->forPublicPath($storagePath);
     }
 
     /**

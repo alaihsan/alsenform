@@ -1,6 +1,10 @@
 <?php
 
 use App\Console\Commands\ServeLanCommand;
+use Illuminate\Console\OutputStyle;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Process\Process;
 
 test('lan:serve command is registered and outputs description and force option', function () {
     $this->artisan('lan:serve --help')
@@ -53,4 +57,43 @@ test('lan:serve port utility methods work correctly', function () {
     expect($foundPort)->toBe($freePort);
 
     expect($command->getPortPids($freePort))->toBeArray();
+});
+
+test('lan:serve announces the new student url when the server ip address changes', function () {
+    $command = new class extends ServeLanCommand
+    {
+        protected float $networkCheckIntervalSeconds = 0.0;
+
+        /** @var list<array<string, string>> */
+        public array $networkSnapshots = [
+            ['Wi-Fi (en0)' => '192.168.1.20'],
+            ['Wi-Fi (en0)' => '192.168.1.20'],
+            ['Wi-Fi (en0)' => '10.10.5.33'],
+        ];
+
+        protected function detectNetworkInterfaces(): array
+        {
+            return array_shift($this->networkSnapshots) ?? ['Wi-Fi (en0)' => '10.10.5.33'];
+        }
+
+        public function watch(Process $process): void
+        {
+            $this->watchNetworkChanges($process, ['Wi-Fi (en0)' => '192.168.1.20'], '0.0.0.0', 8000);
+        }
+    };
+
+    $buffer = new BufferedOutput;
+    $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
+
+    $process = Mockery::mock(Process::class);
+    $process->shouldReceive('isRunning')->andReturn(true, true, true, false);
+
+    $command->watch($process);
+
+    $output = $buffer->fetch();
+
+    expect($output)->toContain('ALAMAT IP SERVER BERUBAH')
+        ->toContain('http://10.10.5.33:8000')
+        ->not->toContain('http://192.168.1.20:8000')
+        ->and(substr_count($output, 'ALAMAT IP SERVER BERUBAH'))->toBe(1);
 });

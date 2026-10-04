@@ -11,6 +11,10 @@ use Illuminate\Support\Collection;
 
 class QuizFormPayloads
 {
+    public function __construct(
+        protected MediaUrl $mediaUrl = new MediaUrl,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -38,7 +42,7 @@ class QuizFormPayloads
             'title' => $quizForm->title,
             'description' => $quizForm->description,
             'slug' => $quizForm->slug,
-            'questions' => $quizForm->questions,
+            'questions' => $this->mediaUrl->normalizeQuestions($quizForm->questions),
             'settings' => $quizForm->settings,
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
             'updateUrl' => route('forms.update', $quizForm),

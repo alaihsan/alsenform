@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\MediaUrl;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -10,6 +11,10 @@ use ZipArchive;
 
 class DocxImportService
 {
+    public function __construct(
+        protected MediaUrl $mediaUrl = new MediaUrl,
+    ) {}
+
     /**
      * Parse an uploaded Word (.docx) file into Alsenform Question structures.
      *
@@ -165,7 +170,7 @@ class DocxImportService
 
                         $media[] = [
                             'type' => 'image',
-                            'url' => asset('storage/'.$storagePath),
+                            'url' => $this->mediaUrl->forPublicPath($storagePath),
                             'name' => basename($targetPath),
                         ];
                     }

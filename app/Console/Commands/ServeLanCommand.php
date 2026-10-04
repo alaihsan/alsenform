@@ -32,6 +32,11 @@ class ServeLanCommand extends Command
     protected $description = 'Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN) dengan proteksi Anti-Sleep';
 
     /**
+     * How often (in seconds) the server checks whether its IP address changed.
+     */
+    protected float $networkCheckIntervalSeconds = 5.0;
+
+    /**
      * Execute the console command.
      */
     public function handle(): int
@@ -141,14 +146,88 @@ class ServeLanCommand extends Command
         }
 
         try {
-            $process->run(function ($type, $buffer): void {
+            $process->start(function ($type, $buffer): void {
                 $this->output->write($buffer);
             });
+
+            $this->watchNetworkChanges($process, $interfaces, $host, $port);
         } finally {
             $cleanup();
         }
 
         return $process->getExitCode() ?? self::SUCCESS;
+    }
+
+    /**
+     * Keep the server in the foreground and announce the new student URLs whenever
+     * the IP address of this machine changes (DHCP renewal, switching Wi-Fi, cable).
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function watchNetworkChanges(Process $process, array $interfaces, string $host, int $port): void
+    {
+        $knownAddresses = $this->addressList($interfaces);
+        $lastCheckedAt = microtime(true);
+
+        while ($process->isRunning()) {
+            usleep((int) (min(0.5, $this->networkCheckIntervalSeconds) * 1_000_000));
+
+            if (microtime(true) - $lastCheckedAt < $this->networkCheckIntervalSeconds) {
+                continue;
+            }
+            $lastCheckedAt = microtime(true);
+
+            $currentInterfaces = $this->detectNetworkInterfaces();
+            $currentAddresses = $this->addressList($currentInterfaces);
+
+            if ($currentAddresses !== $knownAddresses) {
+                $knownAddresses = $currentAddresses;
+                $this->announceNetworkChange($currentInterfaces, $host, $port);
+            }
+        }
+    }
+
+    /**
+     * Sorted list of IP addresses, used to detect a network change.
+     *
+     * @param  array<string, string>  $interfaces
+     * @return list<string>
+     */
+    protected function addressList(array $interfaces): array
+    {
+        $addresses = array_values(array_unique($interfaces));
+        sort($addresses);
+
+        return $addresses;
+    }
+
+    /**
+     * Tell the operator which URL students must use after the IP address changed.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function announceNetworkChange(array $interfaces, string $host, int $port): void
+    {
+        $this->newLine();
+        $this->output->writeln('<bg=yellow;fg=black;options=bold> ⚠️  ALAMAT IP SERVER BERUBAH ('.date('H:i:s').') </>');
+
+        if (! in_array($host, ['0.0.0.0', 'localhost'], true) && ! in_array($host, $interfaces, true)) {
+            $this->output->writeln("   <fg=red;options=bold>Server terikat ke {$host} yang sudah tidak tersedia.</> Jalankan ulang dengan <fg=yellow>php artisan lan:serve --host=0.0.0.0</>");
+        } else {
+            $this->output->writeln('   Server tetap berjalan. Jawaban siswa aman (tersimpan di perangkat dan di server).');
+        }
+
+        if (empty($interfaces)) {
+            $this->output->writeln('   <fg=red>Tidak ada jaringan aktif. Periksa Wi-Fi / kabel LAN server.</>');
+        } else {
+            $this->output->writeln('   Bagikan URL baru ini ke siswa (lalu login ulang, jawaban akan dipulihkan otomatis):');
+            foreach ($interfaces as $label => $ip) {
+                $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
+            }
+        }
+
+        $this->output->writeln('   💡 Agar IP tidak berubah lagi: atur DHCP Reservation (IP tetap) untuk server ini di router.');
+        $this->newLine();
     }
 
     /**

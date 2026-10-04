@@ -56,6 +56,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Tunnels and reverse proxies that run on this machine (Expose, Herd /
+    | Nginx) are always trusted so URLs and HTTPS are detected correctly.
+    | Add extra proxy IP addresses here (comma separated) when needed.
+    | LAN clients are never trusted, so they cannot spoof their IP.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

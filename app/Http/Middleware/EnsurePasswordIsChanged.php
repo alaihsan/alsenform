@@ -22,6 +22,7 @@ class EnsurePasswordIsChanged
                 'logout',
                 'forms.public',
                 'forms.responses.store',
+                'forms.responses.draft',
                 'forms.responses.lock',
                 'forms.public.unlock-requests.store',
                 'forms.public.unlock-requests.status',

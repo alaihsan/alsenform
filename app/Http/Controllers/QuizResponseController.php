@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SaveQuizDraftRequest;
 use App\Http\Requests\StoreQuizResponseRequest;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
+use App\Models\User;
+use App\Support\MediaUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +18,7 @@ use Inertia\Response;
 
 class QuizResponseController extends Controller
 {
-    public function show(Request $request, QuizForm $quizForm): Response|RedirectResponse
+    public function show(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl): Response|RedirectResponse
     {
         abort_unless($quizForm->published_at || auth()->user()?->is($quizForm->user), 404);
 
@@ -45,7 +48,9 @@ class QuizResponseController extends Controller
             }
         }
 
-        $respondentIdentifier = $request->cookie('alsen_resp_id') ?? ($user ? 'user_'.$user->id : 'anon_'.Str::random(16));
+        // Logged-in students are identified by their account only: a respondent cookie left behind
+        // on a shared lab computer must never open another student's exam session (or its draft).
+        $respondentIdentifier = $user ? 'user_'.$user->id : $this->guestRespondentIdentifier($request);
 
         // Check single-response restriction early
         if (! empty($quizForm->settings['limitOneResponse'])) {
@@ -85,23 +90,14 @@ class QuizResponseController extends Controller
             }
 
             return $q;
-        }, $quizForm->questions ?? []);
+        }, $mediaUrl->normalizeQuestions($quizForm->questions));
 
         // Server-side QuizSession management
         $timeLimitMinutes = isset($quizForm->settings['timeLimit']) && is_numeric($quizForm->settings['timeLimit']) && $quizForm->settings['timeLimit'] > 0
             ? (int) $quizForm->settings['timeLimit']
             : null;
 
-        $quizSession = QuizSession::query()
-            ->where('quiz_form_id', $quizForm->id)
-            ->where(function ($q) use ($user, $respondentIdentifier) {
-                if ($user) {
-                    $q->where('user_id', $user->id)->orWhere('respondent_identifier', $respondentIdentifier);
-                } else {
-                    $q->where('respondent_identifier', $respondentIdentifier);
-                }
-            })
-            ->first();
+        $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
 
         if (! $quizSession) {
             $now = now();
@@ -117,7 +113,14 @@ class QuizResponseController extends Controller
             ]);
         }
 
-        cookie()->queue('alsen_resp_id', $respondentIdentifier, 60 * 24 * 30);
+        if (! $user) {
+            cookie()->queue('alsen_resp_id', $respondentIdentifier, 60 * 24 * 30);
+        }
+
+        // Answers saved on the server survive an IP / address change, a browser crash or a
+        // switch to another device, where answers kept only in localStorage would be lost.
+        $hasServerDraft = ! empty($quizSession->draft_answers)
+            && ($quizSession->submitted_at === null || $quizSession->draft_saved_at?->gt($quizSession->submitted_at));
 
         return Inertia::render('PublicQuiz', [
             'quizForm' => [
@@ -136,6 +139,8 @@ class QuizResponseController extends Controller
                 'expires_at' => $quizSession->expires_at?->toISOString(),
                 'server_time' => now()->toISOString(),
                 'is_locked' => (bool) $quizSession->is_locked,
+                'draft_answers' => $hasServerDraft ? $quizSession->draft_answers : null,
+                'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
             'accessRestricted' => false,
         ]);
@@ -154,6 +159,9 @@ class QuizResponseController extends Controller
         $respondentIdentifier = $validated['respondent_identifier'] ?? ($user ? 'user_'.$user->id : null);
         $isTimeout = $request->boolean('is_timeout');
 
+        // Locate the exam session of this respondent
+        $session = $respondentIdentifier ? $this->findExamSession($quizForm, $user, $respondentIdentifier) : null;
+
         // Check single response restriction
         if (! empty($quizForm->settings['limitOneResponse'])) {
             $hasSubmitted = false;
@@ -169,6 +177,12 @@ class QuizResponseController extends Controller
             }
 
             if ($hasSubmitted) {
+                // On weak Wi-Fi the answers may have been saved while the response never
+                // reached the browser. A retry of that same attempt is a success, not an error.
+                if ($this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)) {
+                    return $this->submissionSucceeded($request, $quizForm);
+                }
+
                 if ($request->wantsJson()) {
                     return response()->json([
                         'message' => 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.',
@@ -177,21 +191,6 @@ class QuizResponseController extends Controller
 
                 return back()->withErrors(['error' => 'Anda sudah pernah mengisi kuis ini.']);
             }
-        }
-
-        // Check session lock and expiration
-        $session = null;
-        if ($respondentIdentifier) {
-            $session = QuizSession::query()
-                ->where('quiz_form_id', $quizForm->id)
-                ->where(function ($q) use ($user, $respondentIdentifier) {
-                    if ($user) {
-                        $q->where('user_id', $user->id)->orWhere('respondent_identifier', $respondentIdentifier);
-                    } else {
-                        $q->where('respondent_identifier', $respondentIdentifier);
-                    }
-                })
-                ->first();
         }
 
         if ($session) {
@@ -219,6 +218,59 @@ class QuizResponseController extends Controller
             'user_agent' => (string) $request->userAgent(),
         ]);
 
+        $session?->update([
+            'submitted_at' => now(),
+            'draft_answers' => null,
+            'draft_saved_at' => null,
+        ]);
+
+        return $this->submissionSucceeded($request, $quizForm);
+    }
+
+    /**
+     * The exam session of a student (by account) or of an anonymous respondent (by identifier).
+     */
+    protected function findExamSession(QuizForm $quizForm, ?User $user, string $respondentIdentifier): ?QuizSession
+    {
+        return QuizSession::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->when(
+                $user,
+                fn ($query) => $query->where('user_id', $user->id),
+                fn ($query) => $query->whereNull('user_id')->where('respondent_identifier', $respondentIdentifier),
+            )
+            ->first();
+    }
+
+    /**
+     * The identifier of an anonymous respondent, remembered in a cookie on this device.
+     */
+    protected function guestRespondentIdentifier(Request $request): string
+    {
+        $identifier = $request->cookie('alsen_resp_id');
+
+        return is_string($identifier) && str_starts_with($identifier, 'anon_')
+            ? $identifier
+            : 'anon_'.Str::random(16);
+    }
+
+    /**
+     * Determine if the request repeats an attempt whose answers were already stored.
+     */
+    protected function isRetryOfSubmittedAttempt(?QuizSession $session, ?string $sessionToken): bool
+    {
+        return $session !== null
+            && $session->submitted_at !== null
+            && is_string($sessionToken)
+            && $sessionToken !== ''
+            && hash_equals((string) $session->session_token, $sessionToken);
+    }
+
+    /**
+     * The response returned after the answers have been stored.
+     */
+    protected function submissionSucceeded(Request $request, QuizForm $quizForm): RedirectResponse|JsonResponse
+    {
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
@@ -227,6 +279,40 @@ class QuizResponseController extends Controller
         }
 
         return to_route('forms.public', ['quizForm' => $quizForm->slug]);
+    }
+
+    /**
+     * Store the in-progress answers of an exam session on the server.
+     */
+    public function saveDraft(SaveQuizDraftRequest $request, QuizForm $quizForm): JsonResponse
+    {
+        abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
+
+        $validated = $request->validated();
+
+        $session = QuizSession::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->where('session_token', $validated['session_token'])
+            ->first();
+
+        // The session token is only handed to its owner. A guest is still allowed so the draft
+        // keeps being saved when the login session expires in the middle of a long exam.
+        abort_if($session === null, 404);
+        abort_if($session->user_id !== null && $request->user() !== null && $session->user_id !== $request->user()->id, 403);
+
+        if (! empty($quizForm->settings['disableRespondentAutosave'])) {
+            return response()->json(['saved' => false]);
+        }
+
+        $session->update([
+            'draft_answers' => $validated['answers'],
+            'draft_saved_at' => now(),
+        ]);
+
+        return response()->json([
+            'saved' => true,
+            'saved_at' => $session->draft_saved_at?->toISOString(),
+        ]);
     }
 
     public function lockSession(Request $request, QuizForm $quizForm): JsonResponse

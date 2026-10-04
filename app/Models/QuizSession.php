@@ -26,6 +26,8 @@ class QuizSession extends Model
         'locked_at',
         'unlocked_at',
         'submitted_at',
+        'draft_answers',
+        'draft_saved_at',
     ];
 
     /**
@@ -42,6 +44,8 @@ class QuizSession extends Model
             'is_locked' => 'boolean',
             'blur_count' => 'integer',
             'blur_logs' => 'array',
+            'draft_answers' => 'array',
+            'draft_saved_at' => 'datetime',
         ];
     }
 

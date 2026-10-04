@@ -97,11 +97,12 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 });
 
 Route::get('forms/{quizForm:slug}', [QuizResponseController::class, 'show'])->name('forms.public');
-Route::post('forms/{quizForm:slug}/responses', [QuizResponseController::class, 'store'])->middleware('throttle:20,1')->name('forms.responses.store');
-Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:30,1')->name('forms.responses.lock');
-Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:5,1')->name('forms.public.unlock-requests.store');
-Route::post('forms/{quizForm:slug}/unlock', [UnlockRequestController::class, 'verify'])->middleware('throttle:5,1')->name('forms.public.unlock-verify');
-Route::get('forms/{quizForm:slug}/unlock-requests/status/{identifier}', [UnlockRequestController::class, 'status'])->middleware('throttle:60,1')->name('forms.public.unlock-requests.status');
+Route::post('forms/{quizForm:slug}/responses', [QuizResponseController::class, 'store'])->middleware('throttle:quiz-submissions')->name('forms.responses.store');
+Route::post('forms/{quizForm:slug}/draft', [QuizResponseController::class, 'saveDraft'])->middleware('throttle:quiz-activity')->name('forms.responses.draft');
+Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:quiz-activity')->name('forms.responses.lock');
+Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-requests.store');
+Route::post('forms/{quizForm:slug}/unlock', [UnlockRequestController::class, 'verify'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-verify');
+Route::get('forms/{quizForm:slug}/unlock-requests/status/{identifier}', [UnlockRequestController::class, 'status'])->middleware('throttle:quiz-activity')->name('forms.public.unlock-requests.status');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

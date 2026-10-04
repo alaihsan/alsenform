@@ -9,6 +9,7 @@ use App\Http\Requests\UploadQuizFormMediaRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Services\ImageOptimizationService;
+use App\Support\MediaUrl;
 use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -65,7 +66,7 @@ class QuizFormController extends Controller
         ]);
     }
 
-    public function update(UpdateQuizFormRequest $request, QuizForm $quizForm): RedirectResponse
+    public function update(UpdateQuizFormRequest $request, QuizForm $quizForm, MediaUrl $mediaUrl): RedirectResponse
     {
         $validated = $request->validated();
 
@@ -73,7 +74,7 @@ class QuizFormController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? '',
             'slug' => $validated['slug'],
-            'questions' => $validated['questions'],
+            'questions' => $mediaUrl->normalizeQuestions($validated['questions']),
             'settings' => $validated['settings'],
             'published_at' => $request->boolean('published') ? ($quizForm->published_at ?? now()) : null,
         ]);
@@ -145,12 +146,12 @@ class QuizFormController extends Controller
         return to_route('dashboard');
     }
 
-    public function uploadMedia(UploadQuizFormMediaRequest $request, ImageOptimizationService $imageOptimizer): JsonResponse
+    public function uploadMedia(UploadQuizFormMediaRequest $request, ImageOptimizationService $imageOptimizer, MediaUrl $mediaUrl): JsonResponse
     {
         $path = $imageOptimizer->optimizeAndStore($request->file('file'), 'media', 'public');
 
         return response()->json([
-            'url' => asset('storage/'.$path),
+            'url' => $mediaUrl->forPublicPath($path),
         ]);
     }
 
