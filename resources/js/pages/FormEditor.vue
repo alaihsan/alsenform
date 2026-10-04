@@ -2731,7 +2731,7 @@ watch(
                                     class="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
                                 >
                                     <Download class="h-4 w-4" />
-                                    Ekspor Nilai (CSV)
+                                    Unduh Laporan (Excel)
                                 </a>
                                 <button
                                     type="button"
@@ -2785,7 +2785,7 @@ watch(
                                         class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"
                                     >
                                         <Download class="h-3.5 w-3.5" />
-                                        Unduh CSV
+                                        Unduh Excel
                                     </a>
                                 </div>
                             </div>

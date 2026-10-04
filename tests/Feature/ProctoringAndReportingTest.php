@@ -74,7 +74,7 @@ test('onboarding: student can update mandatory password and clear must_change_pa
     expect($student->must_change_password)->toBeFalse();
 });
 
-test('reporting: teacher owner and collaborators can export quiz gradebook as csv', function () {
+test('reporting: teacher owner and collaborators can export quiz results as excel', function () {
     $owner = User::factory()->create(['role' => 'guru']);
     $collaborator = User::factory()->create(['role' => 'guru']);
     $stranger = User::factory()->create(['role' => 'guru']);
@@ -107,13 +107,19 @@ test('reporting: teacher owner and collaborators can export quiz gradebook as cs
         'answers' => ['1' => 'A', '2' => 'B'],
     ]);
 
-    // Owner exports CSV
+    // Owner downloads the Excel workbook
     $ownerResp = $this->actingAs($owner)->get(route('forms.responses.export', $quizForm));
     $ownerResp->assertOk();
-    $ownerResp->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-    expect($ownerResp->headers->get('Content-Disposition'))->toContain('rekap_nilai_ujian-akhir-matematika');
+    $ownerResp->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect($ownerResp->headers->get('Content-Disposition'))->toContain('hasil_jawaban_ujian-akhir-matematika')->toContain('.xlsx');
 
-    // Collaborator exports CSV
+    $zip = new ZipArchive;
+    expect($zip->open($ownerResp->baseResponse->getFile()->getPathname()))->toBeTrue();
+    expect($zip->getFromName('xl/workbook.xml'))->toContain('Rekap Nilai')->toContain('Jawaban Siswa')
+        ->and($zip->getFromName('xl/worksheets/sheet1.xml'))->toContain('Budi Santoso')->toContain('20240101')->toContain('10-IPA-1');
+    $zip->close();
+
+    // Collaborator downloads it too
     $collabResp = $this->actingAs($collaborator)->get(route('forms.responses.export', $quizForm));
     $collabResp->assertOk();
 
