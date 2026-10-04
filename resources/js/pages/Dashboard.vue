@@ -1,15 +1,12 @@
 <script setup lang="ts">
+import AccountMenu from '@/components/AccountMenu.vue';
 import FormCardPreview from '@/components/FormCardPreview.vue';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuGroup,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getInitials } from '@/composables/useInitials';
 import { useToast } from '@/composables/useToast';
 import { formTemplates } from '@/constants/dashboard';
 import type { QuizFolder, RecentForm } from '@/types/quiz';
@@ -44,7 +41,6 @@ import {
     Shield,
     Sparkles,
     Trash2,
-    User,
     Users,
     Wallet,
     X,
@@ -982,128 +978,35 @@ function closeDonationModal(): void {
                             </div>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger :as-child="true">
-                            <button
-                                type="button"
-                                class="relative flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-                                aria-label="Profile menu"
-                            >
-                                <Avatar class="h-6 w-6 overflow-hidden rounded-full border border-slate-100">
-                                    <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
-                                    <AvatarFallback
-                                        class="flex h-full w-full items-center justify-center bg-indigo-50 text-[10px] font-black text-indigo-700"
-                                    >
-                                        {{ getInitials(user?.name) }}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <span class="hidden max-w-[80px] truncate text-xs font-semibold sm:inline">{{ user?.name }}</span>
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="end"
-                            class="backdrop-blur-xs z-50 mt-1.5 w-64 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-xl"
+                    <AccountMenu>
+                        <DropdownMenuItem
+                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                            @select="openPasswordModal"
                         >
-                            <!-- Mini User Profile Card -->
-                            <div class="mb-1 flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2.5">
-                                <Avatar class="shadow-xs h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200/80">
-                                    <AvatarImage :src="user?.avatar_url || user?.avatar" :alt="user?.name" />
-                                    <AvatarFallback class="flex h-full w-full items-center justify-center bg-indigo-600 text-xs font-bold text-white">
-                                        {{ getInitials(user?.name) }}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div class="min-w-0 flex-1">
-                                    <p class="truncate text-xs font-bold leading-tight text-slate-900">{{ user?.name }}</p>
-                                    <p class="mt-0.5 truncate text-[11px] leading-tight text-slate-500">{{ user?.email }}</p>
-                                    <div class="mt-1.5 flex items-center gap-1.5">
-                                        <span
-                                            class="inline-flex items-center rounded border border-emerald-200/50 bg-emerald-100/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-800"
-                                        >
-                                            {{ user?.is_admin ? 'Admin' : user?.role === 'guru' ? 'Guru' : user?.role || 'Siswa' }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-
-                            <!-- Group 1: Akun -->
-                            <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Akun</div>
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem :as-child="true">
-                                    <Link
-                                        :href="route('profile.edit')"
-                                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                                    >
-                                        <User class="h-4 w-4 text-slate-500" />
-                                        <span>Pengaturan Profil</span>
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    @select="openPasswordModal"
-                                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                                >
-                                    <Key class="h-4 w-4 text-slate-500" />
-                                    <span>Ubah Password</span>
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-
-                            <!-- Group 2: Akademik (Admin / Guru) -->
-                            <template v-if="user?.is_admin || user?.role === 'guru'">
-                                <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-                                <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Akademik</div>
-                                <DropdownMenuGroup>
-                                    <DropdownMenuItem v-if="user?.is_admin" :as-child="true">
-                                        <Link
-                                            :href="route('users.index')"
-                                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                                        >
-                                            <Users class="h-4 w-4 text-slate-500" />
-                                            <span>Pengaturan User</span>
-                                        </Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem :as-child="true">
-                                        <Link
-                                            :href="route('cohorts.index')"
-                                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                                        >
-                                            <BookOpen class="h-4 w-4 text-slate-500" />
-                                            <span>Cohort & Kelas</span>
-                                        </Link>
-                                    </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                            </template>
-
-                            <!-- Group 3: Bantuan & Dukungan -->
-                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-                            <div class="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Bantuan & Dukungan</div>
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem :as-child="true">
-                                    <Link
-                                        :href="route('help')"
-                                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg bg-emerald-50/70 px-2.5 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/80"
-                                    >
-                                        <HelpCircle class="h-4 w-4 text-emerald-600" />
-                                        <span>Panduan Aplikasi (Help)</span>
-                                    </Link>
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-
-                            <!-- Group 4: Keluar -->
-                            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
-                            <DropdownMenuItem :as-child="true">
-                                <Link
-                                    method="post"
-                                    :href="route('logout')"
-                                    as="button"
-                                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
-                                >
-                                    <LogOut class="h-4 w-4 text-rose-500" />
-                                    <span>Keluar</span>
+                            <Key class="h-4 w-4 text-slate-500" />
+                            <span>Ubah Password</span>
+                        </DropdownMenuItem>
+                        <template v-if="user?.is_admin || user?.role === 'guru'">
+                            <DropdownMenuItem v-if="user?.is_admin" :as-child="true">
+                                <Link :href="route('users.index')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                                    <Users class="h-4 w-4 text-slate-500" />
+                                    <span>Pengaturan User</span>
                                 </Link>
                             </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                            <DropdownMenuItem :as-child="true">
+                                <Link :href="route('cohorts.index')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                                    <BookOpen class="h-4 w-4 text-slate-500" />
+                                    <span>Cohort & Kelas</span>
+                                </Link>
+                            </DropdownMenuItem>
+                        </template>
+                        <DropdownMenuItem :as-child="true">
+                            <Link :href="route('help')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                                <HelpCircle class="h-4 w-4 text-slate-500" />
+                                <span>Panduan</span>
+                            </Link>
+                        </DropdownMenuItem>
+                    </AccountMenu>
                 </div>
             </div>
         </header>

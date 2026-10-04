@@ -18,6 +18,16 @@ const props = withDefaults(
 const page = usePage<any>();
 const currentUser = computed(() => page.props.auth?.user);
 const avatarUrl = computed<string>(() => currentUser.value?.avatar_url || '');
+const roleLabel = computed<string>(() => {
+    const user = currentUser.value;
+    if (!user) {
+        return '';
+    }
+    if (user.is_admin || user.role === 'admin') {
+        return 'Admin';
+    }
+    return user.role === 'guru' ? 'Guru' : 'Siswa';
+});
 
 const goHome = () => props.leave(() => router.visit(route('dashboard')));
 const goToProfile = () => props.leave(() => router.visit(route('profile.edit')));
@@ -52,6 +62,12 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 <div class="min-w-0">
                     <p class="truncate text-sm font-bold text-slate-900">{{ currentUser?.name }}</p>
                     <p v-if="currentUser?.email" class="truncate text-xs text-slate-500">{{ currentUser.email }}</p>
+                    <span
+                        v-if="roleLabel"
+                        class="mt-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700"
+                    >
+                        {{ roleLabel }}
+                    </span>
                 </div>
             </div>
             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
@@ -69,6 +85,8 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 <UserRound class="h-4 w-4 text-slate-500" />
                 <span>Profile</span>
             </DropdownMenuItem>
+            <!-- Extra page-specific items, e.g. on the dashboard -->
+            <slot />
             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
             <DropdownMenuItem
                 class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
