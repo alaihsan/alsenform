@@ -43,7 +43,11 @@ class QuestionImportController extends Controller
     public function importExamView(Request $request, ExamViewImportService $service): JsonResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'extensions:zip', 'max:25600'], // Max 25MB for embedded quiz images
+            'file' => ['required', 'file', 'extensions:zip', 'max:65536'], // Max 64MB for embedded quiz images
+        ], [
+            'file.uploaded' => 'Berkas ZIP gagal diunggah karena melebihi batas upload server PHP. Jalankan server dengan "php artisan lan:serve" (batas 64MB) atau naikkan upload_max_filesize dan post_max_size di php.ini.',
+            'file.max' => 'Ukuran berkas ZIP maksimal 64MB.',
+            'file.extensions' => 'Berkas harus berformat .zip hasil ekspor ExamView (Blackboard).',
         ]);
 
         try {
@@ -53,6 +57,7 @@ class QuestionImportController extends Controller
                 'success' => true,
                 'total' => count($questions),
                 'questions' => $questions,
+                'warnings' => $service->warnings(),
             ]);
         } catch (\RuntimeException $e) {
             return response()->json([

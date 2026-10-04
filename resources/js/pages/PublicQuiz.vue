@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import {
     Star,
     Lock,
-    Unlock,
     Clock,
-    Key,
     RefreshCw,
     ShieldAlert,
     ArrowLeft,
@@ -78,6 +76,8 @@ const props = defineProps<{
         expires_at?: string | null;
         server_time?: string;
         is_locked?: boolean;
+        draft_answers?: Record<string, any> | null;
+        draft_saved_at?: string | null;
     };
     accessRestricted?: boolean;
     restrictionReason?: string;
@@ -90,10 +90,68 @@ const displayQuestions = ref<Question[]>([]);
 const isSubmitted = ref(false);
 const isSubmitting = ref(false);
 const submissionError = ref('');
+const submissionNotice = ref('');
+// autoRetry is false once the server rejected the answers (locked session, no access): only the student retries then.
+const pendingSubmission = ref<{ isTimeout: boolean; autoRetry: boolean } | null>(null);
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true);
+const isServerReachable = ref(true);
+
+// Network tuning for congested school Wi-Fi: a request may be slow, but it must never hang forever.
+const REQUEST_TIMEOUT_MS = 10000;
+const SUBMIT_TIMEOUT_MS = 30000;
+const MAX_SUBMIT_ATTEMPTS = 6;
+const SERVER_DRAFT_DEBOUNCE_MS = 5000;
+const SERVER_DRAFT_MIN_INTERVAL_MS = 10000;
+const SERVER_DRAFT_RETRY_INTERVAL_MS = 30000;
+const SERVER_PING_INTERVAL_MS = 5000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Exponential backoff with jitter, so a whole class reconnecting after a Wi-Fi drop does not hit the server at once.
+const retryDelay = (attempt: number) => Math.min(1000 * 2 ** (attempt - 1), 15000) + Math.random() * 1000;
+
+const isNetworkFailure = (error: any) => !error?.response;
+
+// Server time is used for draft timestamps, so drafts from different devices compare correctly.
+const serverClockOffset = props.session?.server_time ? new Date(props.session.server_time).getTime() - Date.now() : 0;
+const serverNow = () => Date.now() + serverClockOffset;
+
+let serverPingTimer: ReturnType<typeof setTimeout> | null = null;
+
+const markServerReachable = (reachable: boolean) => {
+    isServerReachable.value = reachable;
+    if (reachable) {
+        if (serverPingTimer) {
+            clearTimeout(serverPingTimer);
+            serverPingTimer = null;
+        }
+        return;
+    }
+    if (!serverPingTimer) {
+        serverPingTimer = setTimeout(pingServer, SERVER_PING_INTERVAL_MS);
+    }
+};
+
+const pingServer = async () => {
+    serverPingTimer = null;
+    try {
+        await axios.get('/up', { timeout: REQUEST_TIMEOUT_MS, params: { t: Date.now() } });
+        markServerReachable(true);
+        onConnectionRestored();
+    } catch {
+        isServerReachable.value = false;
+        serverPingTimer = setTimeout(pingServer, SERVER_PING_INTERVAL_MS);
+    }
+};
 
 const updateOnlineStatus = () => {
     isOnline.value = navigator.onLine;
+    if (isOnline.value) {
+        if (serverPingTimer) {
+            clearTimeout(serverPingTimer);
+        }
+        pingServer();
+    }
 };
 
 const activeLightboxMedia = ref<{ url: string; type: 'image' | 'video'; caption?: string } | null>(null);
@@ -110,16 +168,21 @@ const openLightbox = (media: any) => {
 const autoSaveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
 const draftAnswersKey = `alsen_draft_answers_${props.quizForm.id}`;
 const draftEmailKey = `alsen_draft_email_${props.quizForm.id}`;
+const draftSavedAtKey = `alsen_draft_saved_at_${props.quizForm.id}`;
 let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
+const hasAnswers = (value: unknown): value is Record<number, any> => !!value && typeof value === 'object' && Object.keys(value).length > 0;
+
 const restoreDraft = () => {
+    let localAnswers: Record<number, any> | null = null;
+    let localSavedAt = 0;
     try {
         const savedAnswers = localStorage.getItem(draftAnswersKey);
         if (savedAnswers) {
             const parsed = JSON.parse(savedAnswers);
-            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
-                answers.value = parsed;
-                autoSaveStatus.value = 'saved';
+            if (hasAnswers(parsed)) {
+                localAnswers = parsed;
+                localSavedAt = Number(localStorage.getItem(draftSavedAtKey) || 0);
             }
         }
         const savedEmail = localStorage.getItem(draftEmailKey);
@@ -129,12 +192,99 @@ const restoreDraft = () => {
     } catch {
         // ignore storage access error
     }
+
+    // The server copy wins when it is newer, e.g. after the server IP changed (new browser origin,
+    // empty localStorage), after a browser crash or when the student continues on another device.
+    const serverAnswers = props.session?.draft_answers;
+    const serverSavedAt = props.session?.draft_saved_at ? new Date(props.session.draft_saved_at).getTime() : 0;
+
+    if (hasAnswers(serverAnswers) && (!localAnswers || serverSavedAt > localSavedAt)) {
+        answers.value = serverAnswers;
+        autoSaveStatus.value = 'saved';
+    } else if (localAnswers) {
+        answers.value = localAnswers;
+        autoSaveStatus.value = 'saved';
+    }
+};
+
+// Server-side draft sync
+let serverDraftTimer: ReturnType<typeof setTimeout> | null = null;
+let serverDraftRetryInterval: ReturnType<typeof setInterval> | null = null;
+let isSyncingServerDraft = false;
+let hasUnsyncedDraft = false;
+let lastServerDraftSyncAt = 0;
+let isServerDraftSealed = false;
+
+const canSyncDraftToServer = () =>
+    !!props.session?.token && !isServerDraftSealed && !props.accessRestricted && !props.quizForm.settings?.disableRespondentAutosave;
+
+const syncDraftToServer = async () => {
+    serverDraftTimer = null;
+    if (!canSyncDraftToServer() || !hasUnsyncedDraft || isSubmitted.value || isSubmitting.value) {
+        return;
+    }
+    if (isSyncingServerDraft) {
+        scheduleServerDraftSync();
+        return;
+    }
+
+    isSyncingServerDraft = true;
+    hasUnsyncedDraft = false;
+    lastServerDraftSyncAt = Date.now();
+    try {
+        await axios.post(
+            `/forms/${props.quizForm.slug}/draft`,
+            {
+                session_token: props.session?.token,
+                respondent_identifier: respondentIdentifier,
+                answers: answers.value,
+            },
+            { timeout: REQUEST_TIMEOUT_MS },
+        );
+        markServerReachable(true);
+    } catch (error: any) {
+        if (error?.response?.status === 409) {
+            // This attempt was already submitted: the device copy is enough from here on.
+            isServerDraftSealed = true;
+            return;
+        }
+        hasUnsyncedDraft = true;
+        if (isNetworkFailure(error)) {
+            markServerReachable(false);
+        }
+    } finally {
+        isSyncingServerDraft = false;
+    }
+};
+
+const scheduleServerDraftSync = (delay = SERVER_DRAFT_DEBOUNCE_MS) => {
+    if (!canSyncDraftToServer()) {
+        return;
+    }
+    if (serverDraftTimer) {
+        clearTimeout(serverDraftTimer);
+    }
+    const throttleDelay = SERVER_DRAFT_MIN_INTERVAL_MS - (Date.now() - lastServerDraftSyncAt);
+    serverDraftTimer = setTimeout(syncDraftToServer, Math.max(delay, throttleDelay, 0));
+};
+
+const flushDraftWhenHidden = () => {
+    if (document.visibilityState === 'hidden' && hasUnsyncedDraft) {
+        lastServerDraftSyncAt = 0;
+        scheduleServerDraftSync(0);
+    }
 };
 
 const clearDraft = () => {
+    hasUnsyncedDraft = false;
+    if (serverDraftTimer) {
+        clearTimeout(serverDraftTimer);
+        serverDraftTimer = null;
+    }
     try {
         localStorage.removeItem(draftAnswersKey);
         localStorage.removeItem(draftEmailKey);
+        localStorage.removeItem(draftSavedAtKey);
         autoSaveStatus.value = 'idle';
     } catch {
         // ignore
@@ -146,10 +296,13 @@ watch(
     (newVal) => {
         if (isSubmitted.value) return;
         autoSaveStatus.value = 'saving';
+        hasUnsyncedDraft = true;
+        scheduleServerDraftSync();
         if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
         autoSaveTimeout = setTimeout(() => {
             try {
                 localStorage.setItem(draftAnswersKey, JSON.stringify(newVal));
+                localStorage.setItem(draftSavedAtKey, String(serverNow()));
                 autoSaveStatus.value = 'saved';
             } catch {
                 // ignore storage error
@@ -198,10 +351,17 @@ const timeRemaining = ref(0);
 const formattedTime = ref('');
 let timerInterval: any = null;
 let pollInterval: any = null;
+let isCheckingLockStatus = false;
 
 const checkLockStatus = async () => {
+    if (isCheckingLockStatus) {
+        return;
+    }
+    isCheckingLockStatus = true;
     try {
-        const response = await axios.get(`/forms/${props.quizForm.slug}/unlock-requests/status/${respondentIdentifier}`);
+        const response = await axios.get(`/forms/${props.quizForm.slug}/unlock-requests/status/${respondentIdentifier}`, {
+            timeout: REQUEST_TIMEOUT_MS,
+        });
         if (response.data.status === 'approved') {
             unlockQuiz();
         } else {
@@ -212,6 +372,8 @@ const checkLockStatus = async () => {
         }
     } catch (err) {
         console.error('Failed to check unlock status', err);
+    } finally {
+        isCheckingLockStatus = false;
     }
 };
 
@@ -222,10 +384,14 @@ const requestUnlock = async () => {
     isRequestingUnlock.value = true;
     unlockError.value = '';
     try {
-        await axios.post(`/forms/${props.quizForm.slug}/unlock-requests`, {
-            respondent_identifier: respondentIdentifier,
-            email: unlockRequestEmail.value || email.value || null,
-        });
+        await axios.post(
+            `/forms/${props.quizForm.slug}/unlock-requests`,
+            {
+                respondent_identifier: respondentIdentifier,
+                email: unlockRequestEmail.value || email.value || null,
+            },
+            { timeout: REQUEST_TIMEOUT_MS },
+        );
         hasRequestedUnlock.value = true;
         unlockRequestStatus.value = 'pending';
         showRequestSuccess.value = true;
@@ -242,10 +408,14 @@ const verifyCode = async () => {
     }
     unlockError.value = '';
     try {
-        const response = await axios.post(`/forms/${props.quizForm.slug}/unlock`, {
-            respondent_identifier: respondentIdentifier,
-            code: manualUnlockCode.value,
-        });
+        const response = await axios.post(
+            `/forms/${props.quizForm.slug}/unlock`,
+            {
+                respondent_identifier: respondentIdentifier,
+                code: manualUnlockCode.value,
+            },
+            { timeout: REQUEST_TIMEOUT_MS },
+        );
         if (response.data.success) {
             unlockQuiz();
         }
@@ -260,9 +430,15 @@ const lockQuiz = () => {
     }
     isLocked.value = true;
     localStorage.setItem(`is_locked_${props.quizForm.id}`, 'true');
-    axios.post(`/forms/${props.quizForm.slug}/lock`, {
-        respondent_identifier: respondentIdentifier,
-    }).catch(() => {});
+    axios
+        .post(
+            `/forms/${props.quizForm.slug}/lock`,
+            {
+                respondent_identifier: respondentIdentifier,
+            },
+            { timeout: REQUEST_TIMEOUT_MS },
+        )
+        .catch(() => {});
 
     checkLockStatus();
     if (!pollInterval) {
@@ -297,8 +473,14 @@ const handleVisibilityChange = () => {
 onMounted(() => {
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    document.addEventListener('visibilitychange', flushDraftWhenHidden);
+    serverDraftRetryInterval = setInterval(() => {
+        if (hasUnsyncedDraft && !serverDraftTimer) {
+            syncDraftToServer();
+        }
+    }, SERVER_DRAFT_RETRY_INTERVAL_MS);
 
-    let qs = [...props.quizForm.questions];
+    const qs = [...props.quizForm.questions];
     if (props.quizForm.settings.shuffleQuestions) {
         for (let i = qs.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -406,6 +588,16 @@ onMounted(() => {
 onUnmounted(() => {
     window.removeEventListener('online', updateOnlineStatus);
     window.removeEventListener('offline', updateOnlineStatus);
+    document.removeEventListener('visibilitychange', flushDraftWhenHidden);
+    if (serverDraftRetryInterval) {
+        clearInterval(serverDraftRetryInterval);
+    }
+    if (serverDraftTimer) {
+        clearTimeout(serverDraftTimer);
+    }
+    if (serverPingTimer) {
+        clearTimeout(serverPingTimer);
+    }
     window.removeEventListener('blur', handleBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (timerInterval) {
@@ -669,49 +861,129 @@ const selectGridAnswer = (questionId: number, rowIndex: number, colIndex: number
     }
 };
 
-const submitOnTimeout = async (retries = 3) => {
-    if (isSubmitted.value) {
+/**
+ * Map server-side validation errors (answers.{id}) onto the question cards.
+ */
+const applyValidationErrors = (errors?: Record<string, string[] | string>) => {
+    if (!errors) {
+        return;
+    }
+    const mapped: Record<number, string> = {};
+    for (const [key, messages] of Object.entries(errors)) {
+        const message = Array.isArray(messages) ? messages[0] : messages;
+        const match = key.match(/^answers\.(\d+)$/);
+        if (match) {
+            mapped[Number(match[1])] = message;
+        } else if (key === 'email') {
+            mapped[0] = message;
+        }
+    }
+    validationErrors.value = { ...validationErrors.value, ...mapped };
+};
+
+/**
+ * Reload the page in the background so the browser receives a fresh CSRF cookie (HTTP 419).
+ */
+const refreshCsrfToken = async () => {
+    try {
+        await axios.get(window.location.pathname, { timeout: REQUEST_TIMEOUT_MS, headers: { Accept: 'text/html' } });
+    } catch {
+        // the next attempt reports the problem
+    }
+};
+
+const markSubmitted = () => {
+    isSubmitted.value = true;
+    pendingSubmission.value = null;
+    submissionError.value = '';
+    clearDraft();
+    localStorage.removeItem(`is_locked_${props.quizForm.id}`);
+    localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+/**
+ * Send the answers with a timeout and automatic retries. On weak Wi-Fi the answers stay on the
+ * device (and in the server draft) and are sent again as soon as the server is reachable.
+ */
+const sendAnswers = async (isTimeout: boolean) => {
+    if (isSubmitted.value || isSubmitting.value) {
         return;
     }
     isSubmitting.value = true;
     submissionError.value = '';
+    pendingSubmission.value = { isTimeout, autoRetry: true };
+    if (serverDraftTimer) {
+        clearTimeout(serverDraftTimer);
+        serverDraftTimer = null;
+    }
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            await axios.post(
-                props.quizForm.submitUrl,
-                {
-                    email: email.value || null,
-                    answers: answers.value,
-                    respondent_identifier: respondentIdentifier,
-                    session_token: props.session?.token ?? null,
-                    is_timeout: true,
-                },
-                {
-                    headers: { Accept: 'application/json' },
+    try {
+        for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+            try {
+                await axios.post(
+                    props.quizForm.submitUrl,
+                    {
+                        email: email.value || null,
+                        answers: answers.value,
+                        respondent_identifier: respondentIdentifier,
+                        session_token: props.session?.token ?? null,
+                        is_timeout: isTimeout,
+                    },
+                    {
+                        headers: { Accept: 'application/json' },
+                        timeout: SUBMIT_TIMEOUT_MS,
+                    },
+                );
+                markServerReachable(true);
+                markSubmitted();
+                return;
+            } catch (error: any) {
+                const status: number | undefined = error?.response?.status;
+
+                if (status === 422) {
+                    pendingSubmission.value = null;
+                    applyValidationErrors(error.response.data?.errors);
+                    submissionError.value = error.response.data?.message || 'Masih ada jawaban yang belum valid. Periksa kembali soal yang ditandai.';
+                    return;
                 }
-            );
-            isSubmitted.value = true;
-            localStorage.removeItem(`is_locked_${props.quizForm.id}`);
-            localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        } catch (err: any) {
-            console.error(`Auto-submit on timeout attempt ${attempt} failed:`, err);
-            if (attempt < retries) {
-                await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
-            } else {
-                submissionError.value =
-                    'Waktu pengerjaan telah habis. Gagal mengirim jawaban otomatis karena kendala jaringan. Silakan klik tombol "Coba Kirim Ulang Jawaban" di bawah.';
-            }
-        } finally {
-            if (isSubmitted.value) {
-                isSubmitting.value = false;
+
+                if (status === 403 || status === 404) {
+                    pendingSubmission.value = { isTimeout, autoRetry: false };
+                    submissionError.value =
+                        (error.response.data?.message || 'Jawaban tidak dapat dikirim.') +
+                        ' Jawaban Anda tetap tersimpan. Hubungi pengawas, atau masuk ulang lalu buka kembali kuis ini.';
+                    return;
+                }
+
+                if (isNetworkFailure(error)) {
+                    markServerReachable(false);
+                }
+
+                if (status === 419) {
+                    await refreshCsrfToken();
+                }
+
+                if (attempt === MAX_SUBMIT_ATTEMPTS) {
+                    break;
+                }
+
+                submissionNotice.value = `Koneksi ke server lambat atau terputus. Mengirim ulang otomatis (percobaan ${attempt + 1} dari ${MAX_SUBMIT_ATTEMPTS})...`;
+                const retryAfterSeconds = Number(error?.response?.headers?.['retry-after']);
+                await wait(status === 429 && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : retryDelay(attempt));
             }
         }
+
+        submissionError.value = isTimeout
+            ? 'Waktu pengerjaan telah habis, tetapi jawaban belum terkirim karena kendala jaringan. Jawaban tetap tersimpan dan akan dikirim otomatis saat koneksi pulih, atau klik tombol "Coba Kirim Ulang Jawaban" di bawah.'
+            : 'Koneksi intranet terputus atau lambat saat mengirim jawaban. Tenang, jawaban Anda tetap tersimpan aman dan akan dikirim otomatis saat koneksi pulih, atau klik tombol "Coba Kirim Ulang Jawaban Sekarang" di bawah.';
+    } finally {
+        submissionNotice.value = '';
+        isSubmitting.value = false;
     }
-    isSubmitting.value = false;
 };
+
+const submitOnTimeout = () => sendAnswers(true);
 
 const submitResponse = () => {
     if (isSubmitting.value) {
@@ -726,40 +998,29 @@ const submitResponse = () => {
         return;
     }
 
-    isSubmitting.value = true;
-    submissionError.value = '';
-    router.post(
-        props.quizForm.submitUrl,
-        {
-            email: email.value || null,
-            answers: answers.value,
-            respondent_identifier: respondentIdentifier,
-            session_token: props.session?.token ?? null,
-            is_timeout: false,
-        },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                isSubmitted.value = true;
-                clearDraft();
-                localStorage.removeItem(`is_locked_${props.quizForm.id}`);
-                localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            },
-            onError: (errors: any) => {
-                if (errors && errors.error) {
-                    submissionError.value = errors.error;
-                } else {
-                    submissionError.value =
-                        'Koneksi intranet terputus atau lambat saat mengirim jawaban. Tenang, jawaban Anda tetap tersimpan aman di perangkat ini. Periksa koneksi Wi-Fi lalu klik tombol "Coba Kirim Ulang Jawaban Sekarang" di bawah.';
-                }
-            },
-            onFinish: () => {
-                isSubmitting.value = false;
-            },
-        },
-    );
+    sendAnswers(false);
 };
+
+const retrySubmission = () => {
+    if (pendingSubmission.value?.isTimeout) {
+        sendAnswers(true);
+        return;
+    }
+    submitResponse();
+};
+
+/**
+ * Called when the server answers again after an outage: push everything that is still pending.
+ */
+function onConnectionRestored() {
+    if (pendingSubmission.value?.autoRetry && !isSubmitted.value && !isSubmitting.value) {
+        sendAnswers(pendingSubmission.value.isTimeout);
+        return;
+    }
+    if (hasUnsyncedDraft) {
+        scheduleServerDraftSync(0);
+    }
+}
 
 const submitAnotherResponse = () => {
     answers.value = {};
@@ -806,11 +1067,12 @@ const submitAnotherResponse = () => {
     >
         <!-- Offline Intranet Warning Banner -->
         <div
-            v-if="!isOnline"
+            v-if="!isOnline || !isServerReachable"
             class="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2.5 text-center text-xs sm:text-sm font-bold text-white shadow-md transition-all"
         >
             <AlertCircle class="h-4 w-4 shrink-0" />
-            <span>Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
+            <span v-if="!isOnline">Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
+            <span v-else>Server ujian sedang tidak terjangkau. Jawaban tetap tersimpan di perangkat ini dan akan dikirim otomatis saat koneksi pulih.</span>
         </div>
 
         <!-- Access Restricted State (Cohort Restriction) -->
@@ -1099,6 +1361,7 @@ const submitAnotherResponse = () => {
                                     <video
                                         :src="media.url"
                                         controls
+                                        preload="metadata"
                                         class="max-h-[500px] w-full bg-slate-950"
                                     ></video>
                                     <div class="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
@@ -1238,14 +1501,20 @@ const submitAnotherResponse = () => {
                     <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
                 </article>
 
+                <!-- Automatic retry progress -->
+                <div v-if="submissionNotice" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                    {{ submissionNotice }}
+                </div>
+
                 <!-- Submission / Timeout Error Alert -->
                 <div v-if="submissionError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 space-y-3">
                     <p class="font-semibold">{{ submissionError }}</p>
                     <div class="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-                            @click="submitResponse"
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+                            :disabled="isSubmitting"
+                            @click="retrySubmission"
                         >
                             <RefreshCw class="h-3.5 w-3.5" />
                             <span>Coba Kirim Ulang Jawaban Sekarang</span>
@@ -1500,8 +1769,6 @@ const submitAnotherResponse = () => {
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&family=Scheherazade+New:wght@400;700&display=swap');
-
 .pattern-none {
     background-image: none;
 }

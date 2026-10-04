@@ -197,6 +197,14 @@ const importSource = ref<'examview' | 'docx'>('examview');
 const isImportModalOpen = ref(false);
 const isImportingFile = ref(false);
 const importError = ref('');
+const importWarnings = ref<string[]>([]);
+const importSummary = ref('');
+watch(isImportModalOpen, (isOpen) => {
+    if (!isOpen) {
+        importWarnings.value = [];
+        importSummary.value = '';
+    }
+});
 const page = usePage<any>();
 const currentUser = computed(() => page.props.auth?.user);
 const isCollaboratorModalOpen = ref(false);
@@ -1141,6 +1149,8 @@ const handleImportExamViewFile = async (event: Event) => {
 
     isImportingFile.value = true;
     importError.value = '';
+    importWarnings.value = [];
+    importSummary.value = '';
 
     const formData = new FormData();
     formData.append('file', file);
@@ -1177,9 +1187,17 @@ const handleImportExamViewFile = async (event: Event) => {
                 activeQuestionId.value = question.id;
             });
 
-            isImportModalOpen.value = false;
             activeTab.value = 'questions';
             markChanged(`${importedQuestions.length} soal ExamView berhasil diimpor`);
+
+            // Keep the dialog open when some questions need attention (missing image, answer key, ...).
+            const warnings: string[] = Array.isArray(response.data.warnings) ? response.data.warnings : [];
+            if (warnings.length > 0) {
+                importWarnings.value = warnings;
+                importSummary.value = `${importedQuestions.length} soal berhasil diimpor. Periksa catatan berikut:`;
+            } else {
+                isImportModalOpen.value = false;
+            }
         } else {
             importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas ExamView.';
         }
@@ -1679,6 +1697,11 @@ watch(
                                             <!-- Short Answer Kunci Jawaban -->
                                             <div v-if="question.type === 'Short answer'" class="space-y-2">
                                                 <label class="text-xs font-bold text-slate-600">Tuliskan jawaban yang benar:</label>
+                                                <p class="text-[11px] leading-relaxed text-slate-500">
+                                                    Beberapa jawaban benar dipisah dengan <code class="font-mono">|</code> (contoh:
+                                                    <code class="font-mono">Jakarta | DKI Jakarta</code>). Rentang angka ditulis
+                                                    <code class="font-mono">9.5..10.5</code>.
+                                                </p>
                                                 <input
                                                     v-model="question.answer"
                                                     type="text"
@@ -1695,6 +1718,9 @@ watch(
                                             >
                                                 💡 Pertanyaan bertipe <strong>Paragraf</strong> akan dinilai secara manual oleh Anda setelah responden
                                                 mengirimkan jawaban. Tidak ada kunci jawaban otomatis.
+                                                <span v-if="question.answer" class="mt-2 block whitespace-pre-line text-slate-700">
+                                                    <strong>Contoh jawaban / rubrik:</strong> {{ question.answer }}
+                                                </span>
                                             </div>
 
                                             <!-- Multiple choice / Checkboxes / Drop-down Kunci Jawaban -->
@@ -3654,7 +3680,10 @@ watch(
                                 Buka bank soal (<code class="font-mono text-indigo-700">.bnk</code>) di aplikasi
                                 <strong>ExamView Test Generator</strong>.
                             </li>
-                            <li>Pilih menu <strong>File &gt; Export &gt; Blackboard 6.0 - 7.0...</strong></li>
+                            <li>
+                                Pilih menu <strong>File &gt; Export &gt; Blackboard 7.1 - 9.0</strong> (atau
+                                <strong>Blackboard 6.0 - 7.0</strong>).
+                            </li>
                             <li>Beri nama dan simpan berkas sebagai <strong>.zip</strong>.</li>
                             <li>Unggah berkas <strong>.zip</strong> hasil ekspor tersebut di bawah ini.</li>
                         </ol>
@@ -3670,7 +3699,7 @@ watch(
                                 <Archive class="h-6 w-6" />
                             </div>
                             <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas ZIP</span>
-                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .zip Blackboard 6.0-7.0 (maks. 25MB)</span>
+                            <span class="mt-1 text-[11px] text-slate-500">Mendukung .zip Blackboard 6.0 - 7.0 dan 7.1 - 9.0 (maks. 64MB)</span>
                         </div>
 
                         <div
@@ -3687,6 +3716,13 @@ watch(
                         >
                             <span class="font-extrabold">Gagal:</span>
                             <span>{{ importError }}</span>
+                        </div>
+
+                        <div v-if="importWarnings.length" class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
+                            <span class="block font-extrabold">{{ importSummary }}</span>
+                            <ul class="max-h-48 list-inside list-disc space-y-1 overflow-y-auto font-medium">
+                                <li v-for="(warning, warningIndex) in importWarnings" :key="`import-warning-${warningIndex}`">{{ warning }}</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -4107,8 +4143,6 @@ watch(
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Fira+Code&family=Inter:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather&family=Montserrat:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Outfit:wght@400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&family=Scheherazade+New:wght@400;700&display=swap');
-
 .pattern-none {
     background-image: none;
 }

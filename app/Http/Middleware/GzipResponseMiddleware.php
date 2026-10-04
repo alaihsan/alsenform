@@ -72,7 +72,9 @@ class GzipResponseMiddleware
 
         $response->setContent($compressed);
         $response->headers->set('Content-Encoding', 'gzip');
-        $response->headers->set('Vary', 'Accept-Encoding');
+        // Append instead of replace: Inertia relies on "Vary: X-Inertia" so the
+        // browser back button never shows a cached JSON page instead of HTML.
+        $response->setVary('Accept-Encoding', false);
         $response->headers->set('Content-Length', (string) strlen($compressed));
 
         return $response;

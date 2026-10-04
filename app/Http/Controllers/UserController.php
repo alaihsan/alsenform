@@ -31,10 +31,10 @@ class UserController extends Controller
         $query = User::query()
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
-                    $sub->where('name', 'like', "%{$search}%")
-                        ->orWhere('nis', 'like', "%{$search}%")
-                        ->orWhere('nip', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                    $sub->whereLike('name', "%{$search}%")
+                        ->orWhereLike('nis', "%{$search}%")
+                        ->orWhereLike('nip', "%{$search}%")
+                        ->orWhereLike('email', "%{$search}%");
                 });
             })
             ->when($selectedRole !== 'all' && in_array($selectedRole, ['admin', 'guru', 'siswa'], true), function ($q) use ($selectedRole): void {
@@ -55,7 +55,7 @@ class UserController extends Controller
             });
 
         $users = $query
-            ->orderByRaw("CASE WHEN role = 'admin' OR is_admin = 1 THEN 1 WHEN role = 'guru' THEN 2 ELSE 3 END")
+            ->orderByRaw("CASE WHEN role = 'admin' OR is_admin = true THEN 1 WHEN role = 'guru' THEN 2 ELSE 3 END")
             ->orderByRaw('kelas IS NULL, kelas ASC')
             ->orderBy('name', 'asc')
             ->paginate(25)

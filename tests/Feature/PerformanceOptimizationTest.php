@@ -5,12 +5,24 @@ use App\Services\ImageOptimizationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 test('exam:optimize command runs successfully', function () {
-    $this->artisan('exam:optimize')
-        ->assertSuccessful()
-        ->expectsOutputToContain('OPTIMASI ALSENFORM UNTUK UJIAN SERENTAK');
+    try {
+        $this->artisan('exam:optimize')
+            ->assertSuccessful()
+            ->expectsOutputToContain('OPTIMASI ALSENFORM UNTUK UJIAN SERENTAK')
+            ->expectsOutputToContain('PostgreSQL max_connections');
+    } finally {
+        // The command writes real framework caches. Never leave the testing
+        // configuration (in-memory database, array sessions) cached on disk,
+        // otherwise the live intranet server would boot with it.
+        Artisan::call('optimize:clear');
+    }
+
+    expect(file_exists(base_path('bootstrap/cache/config.php')))->toBeFalse()
+        ->and(file_exists(base_path('bootstrap/cache/routes-v7.php')))->toBeFalse();
 });
 
 test('lan:serve command includes workers and optimize options', function () {
@@ -85,4 +97,20 @@ test('gzip response middleware compresses large text and json responses when gzi
     expect($processedResponse->headers->get('Content-Encoding'))->toBe('gzip');
     expect($processedResponse->headers->get('Vary'))->toBe('Accept-Encoding');
     expect(strlen($processedResponse->getContent()))->toBeLessThan(strlen($largeContent));
+});
+
+test('gzip response middleware keeps the inertia vary header', function () {
+    $middleware = new GzipResponseMiddleware;
+
+    $request = Request::create('/dashboard', 'GET');
+    $request->headers->set('Accept-Encoding', 'gzip');
+
+    $response = new Response(str_repeat('{"component":"Dashboard"}', 100), 200, [
+        'Content-Type' => 'application/json',
+        'Vary' => 'X-Inertia',
+    ]);
+
+    $processedResponse = $middleware->handle($request, fn () => $response);
+
+    expect($processedResponse->getVary())->toBe(['X-Inertia', 'Accept-Encoding']);
 });

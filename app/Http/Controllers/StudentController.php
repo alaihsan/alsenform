@@ -30,9 +30,9 @@ class StudentController extends Controller
             ->students()
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
-                    $sub->where('name', 'like', "%{$search}%")
-                        ->orWhere('nis', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                    $sub->whereLike('name', "%{$search}%")
+                        ->orWhereLike('nis', "%{$search}%")
+                        ->orWhereLike('email', "%{$search}%");
                 });
             })
             ->when($selectedClass !== '', function ($q) use ($selectedClass): void {
