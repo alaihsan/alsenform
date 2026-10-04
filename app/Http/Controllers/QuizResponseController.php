@@ -9,6 +9,7 @@ use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Support\MediaUrl;
+use App\Support\QuizScoring;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -256,7 +257,7 @@ class QuizResponseController extends Controller
         }
 
         // Calculate score on the server
-        $score = $this->calculateScore($quizForm->questions ?? [], $validated['answers'] ?? []);
+        $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $validated['answers'] ?? []);
 
         QuizResponse::query()->create([
             'quiz_form_id' => $quizForm->id,
@@ -473,139 +474,5 @@ class QuizResponseController extends Controller
         }
 
         return response()->json(['locked' => true]);
-    }
-
-    /**
-     * Compute total points earned based on answer keys stored in questions.
-     */
-    protected function calculateScore(array $questions, array $userAnswers): int
-    {
-        $totalScore = 0;
-
-        foreach ($questions as $q) {
-            $qid = $q['id'] ?? null;
-            if (! $qid || ! array_key_exists($qid, $userAnswers)) {
-                continue;
-            }
-
-            $correctAnswer = $q['answer'] ?? null;
-            $userAnswer = $userAnswers[$qid];
-            $points = isset($q['points']) ? (int) $q['points'] : 1;
-
-            // No answer key (or an essay, which the teacher grades manually): nothing to score.
-            if ($correctAnswer === null || $correctAnswer === '' || $correctAnswer === [] || ($q['type'] ?? '') === 'Paragraph') {
-                continue;
-            }
-
-            $type = $q['type'] ?? '';
-
-            if ($type === 'Multiple choice' || $type === 'Dropdown') {
-                $isCorrect = false;
-                if (is_numeric($correctAnswer) && isset($q['options'][(int) $correctAnswer])) {
-                    $expectedOption = $q['options'][(int) $correctAnswer];
-                    $isCorrect = ($userAnswer === $expectedOption || (string) $userAnswer === (string) $correctAnswer);
-                } else {
-                    $isCorrect = ((string) $userAnswer === (string) $correctAnswer);
-                }
-                if ($isCorrect) {
-                    $totalScore += $points;
-                }
-            } elseif ($type === 'Checkboxes') {
-                $userAnsArray = is_array($userAnswer) ? $userAnswer : [];
-                $expectedOptions = [];
-                if (is_array($correctAnswer)) {
-                    foreach ($correctAnswer as $ans) {
-                        if (is_numeric($ans) && isset($q['options'][(int) $ans])) {
-                            $expectedOptions[] = $q['options'][(int) $ans];
-                        } else {
-                            $expectedOptions[] = (string) $ans;
-                        }
-                    }
-                }
-                sort($userAnsArray);
-                sort($expectedOptions);
-                if ($userAnsArray == $expectedOptions) {
-                    $totalScore += $points;
-                }
-            } elseif ($type === 'Short answer') {
-                if (is_scalar($userAnswer) && $this->isShortAnswerCorrect((string) $userAnswer, (string) $correctAnswer)) {
-                    $totalScore += $points;
-                }
-            } elseif ($type === 'Multiple-choice grid') {
-                if (is_array($correctAnswer) && is_array($userAnswer)) {
-                    $allMatch = true;
-                    foreach ($correctAnswer as $rIdx => $cIdx) {
-                        if (! isset($userAnswer[$rIdx]) || (string) $userAnswer[$rIdx] !== (string) $cIdx) {
-                            $allMatch = false;
-                            break;
-                        }
-                    }
-                    if ($allMatch) {
-                        $totalScore += $points;
-                    }
-                }
-            } else {
-                if ((string) $userAnswer === (string) $correctAnswer) {
-                    $totalScore += $points;
-                }
-            }
-        }
-
-        return $totalScore;
-    }
-
-    /**
-     * Check a short answer against its key.
-     *
-     * The key may list several accepted answers separated by "|" (e.g. "Jakarta | DKI Jakarta").
-     * Numbers are compared by value ("3,5" equals "3.50") and "min..max" accepts a numeric range.
-     */
-    protected function isShortAnswerCorrect(string $userAnswer, string $answerKey): bool
-    {
-        $normalize = fn (string $value): string => (string) preg_replace('/\s+/u', ' ', trim(mb_strtolower($value)));
-        $number = function (string $value): ?float {
-            $value = str_replace([' ', ','], ['', '.'], trim($value));
-
-            return is_numeric($value) ? (float) $value : null;
-        };
-
-        $given = $normalize($userAnswer);
-        if ($given === '') {
-            return false;
-        }
-
-        $givenNumber = $number($given);
-
-        foreach (explode('|', $answerKey) as $accepted) {
-            $accepted = $normalize($accepted);
-            if ($accepted === '') {
-                continue;
-            }
-
-            if (preg_match('/^(-?[\d.,]+)\s*\.\.\s*(-?[\d.,]+)$/', $accepted, $range) && $givenNumber !== null) {
-                $minimum = $number($range[1]);
-                $maximum = $number($range[2]);
-                if ($minimum !== null && $maximum !== null && $givenNumber >= min($minimum, $maximum) && $givenNumber <= max($minimum, $maximum)) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            $acceptedNumber = $number($accepted);
-            if ($givenNumber !== null && $acceptedNumber !== null) {
-                if (abs($givenNumber - $acceptedNumber) < 1e-9) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if ($given === $accepted) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
