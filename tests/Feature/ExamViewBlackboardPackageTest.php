@@ -488,3 +488,21 @@ test('a Windows-1252 export without encoding declaration keeps its special chara
         ->and($data['questions'][0]['options'])->toBe(['Ya', 'Tidak'])
         ->and($data['questions'][0]['answer'])->toBe(0);
 });
+
+test('svg images are never stored, even when renamed to a raster extension', function () {
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(document.cookie)</script></svg>';
+
+    $data = importPackage(blackboardPackage([
+        'imsmanifest.xml' => bb9Manifest('<resource bb:file="res00001.dat" identifier="res00001" type="assessment/x-bb-qti-test" xml:base="res00001"/>'),
+        'res00001.dat' => qtiTest(qtiItem('Multiple Choice', '1.0',
+            qtiQuestionBlock('Gambar &lt;img src="@X@EmbeddedFile.location@X@grafik.svg"&gt; dan &lt;img src="@X@EmbeddedFile.location@X@menyamar.gif"&gt;')
+            .qtiChoices(['a' => 'A', 'b' => 'B']),
+            qtiCorrect('<varequal case="No" respident="response">a</varequal>'))),
+        'res00001/grafik.svg' => $svg,
+        'res00001/menyamar.gif' => $svg,
+    ]));
+
+    expect($data['questions'][0]['media'])->toBe([])
+        ->and(Storage::disk('public')->allFiles('media/examview'))->toBe([])
+        ->and(collect($data['warnings'])->filter(fn ($warning) => str_contains($warning, 'SVG'))->count())->toBe(2);
+});

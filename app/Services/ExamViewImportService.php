@@ -39,6 +39,22 @@ class ExamViewImportService
     protected const FIRST_QUESTION_ID = 1000;
 
     /**
+     * Image types that are stored, by detected MIME type.
+     *
+     * @var array<string, string>
+     */
+    protected const RASTER_IMAGE_EXTENSIONS = [
+        'image/png' => 'png',
+        'image/jpeg' => 'jpg',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'image/bmp' => 'bmp',
+        'image/x-ms-bmp' => 'bmp',
+        'image/x-bmp' => 'bmp',
+        'image/tiff' => 'tif',
+    ];
+
+    /**
      * @var list<string>
      */
     protected array $warnings = [];
@@ -1369,8 +1385,17 @@ class ExamViewImportService
             return null;
         }
 
-        if (! str_starts_with($mime, 'image/')) {
-            $this->warn('berkas "'.$name.'" bukan gambar yang valid.');
+        if ($mime === 'image/svg+xml' || $extension === 'svg') {
+            // SVG can carry scripts that would run on the application origin: never store it.
+            $this->warn('gambar "'.$name.'" berformat SVG tidak didukung demi keamanan. Ubah gambar menjadi PNG/JPG lalu ekspor ulang.');
+
+            return null;
+        }
+
+        // The stored extension comes from the detected content, never from the name inside the ZIP.
+        $storedExtension = self::RASTER_IMAGE_EXTENSIONS[$mime] ?? null;
+        if ($storedExtension === null) {
+            $this->warn('berkas "'.$name.'" bukan gambar yang didukung (PNG, JPG, GIF, WebP, BMP atau TIFF).');
 
             return null;
         }
@@ -1379,7 +1404,7 @@ class ExamViewImportService
             $this->warn('gambar "'.$name.'" berformat TIFF dan mungkin tidak tampil di Chrome/Android.');
         }
 
-        $path = $this->imageOptimizer->optimizeAndStoreBytes($bytes, $extension !== '' ? $extension : 'png', 'media/examview', 'public');
+        $path = $this->imageOptimizer->optimizeAndStoreBytes($bytes, $storedExtension, 'media/examview', 'public');
 
         return $this->storedImages[$hash] = $this->mediaUrl->forPublicPath($path);
     }
@@ -1652,7 +1677,8 @@ class ExamViewImportService
                 continue;
             }
 
-            $tempPath = tempnam(sys_get_temp_dir(), 'ev_docx_').'.docx';
+            $placeholderPath = tempnam(sys_get_temp_dir(), 'ev_docx_');
+            $tempPath = $placeholderPath.'.docx';
             file_put_contents($tempPath, $docxBytes);
 
             try {
@@ -1660,6 +1686,7 @@ class ExamViewImportService
                 $allQuestions = array_merge($allQuestions, $questions);
             } finally {
                 @unlink($tempPath);
+                @unlink($placeholderPath);
             }
         }
 

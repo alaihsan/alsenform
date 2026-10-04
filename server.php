@@ -95,7 +95,8 @@ if ($uri !== '/' && $filePath !== false && is_file($filePath) && $isPublicFile($
     $contentEncoding = null;
 
     if ($isCompressible) {
-        foreach (['br' => '.br', 'gzip' => '.gz'] as $encoding => $suffix) {
+        // Only build output has trusted pre-compressed siblings written by `npm run build`.
+        foreach (str_starts_with($uri, '/build/') ? ['br' => '.br', 'gzip' => '.gz'] : [] as $encoding => $suffix) {
             $variant = $filePath.$suffix;
             if ($acceptsEncoding($encoding) && is_file($variant) && filemtime($variant) >= $modifiedAt) {
                 $servedPath = $variant;
@@ -116,7 +117,13 @@ if ($uri !== '/' && $filePath !== false && is_file($filePath) && $isPublicFile($
     $etag = sprintf('"%x-%x%s"', $modifiedAt, $size, $contentEncoding ? '-'.$contentEncoding : '');
 
     header("Content-Type: {$contentType}");
+    header('X-Content-Type-Options: nosniff');
     header('Last-Modified: '.gmdate('D, d M Y H:i:s', $modifiedAt).' GMT');
+
+    // Uploaded files (question media, avatars) must never run scripts when opened directly.
+    if (str_starts_with($uri, '/storage/')) {
+        header("Content-Security-Policy: default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+    }
     header("ETag: {$etag}");
 
     // Cache immutable build assets for 1 year, others for 7 days
@@ -161,7 +168,7 @@ if ($uri !== '/' && $filePath !== false && is_file($filePath) && $isPublicFile($
     $ifRange = $_SERVER['HTTP_IF_RANGE'] ?? null;
     $rangeIsValidForThisFile = $ifRange === null
         || trim($ifRange) === $etag
-        || (($ifRangeTime = strtotime($ifRange)) !== false && $ifRangeTime >= $modifiedAt);
+        || strtotime($ifRange) === $modifiedAt;
 
     if ($range !== null && $rangeIsValidForThisFile && $size > 0 && preg_match('/^bytes=(\d*)-(\d*)$/', trim($range), $matches) && ($matches[1] !== '' || $matches[2] !== '')) {
         if ($matches[1] === '') {

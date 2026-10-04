@@ -55,7 +55,7 @@ class UserController extends Controller
             });
 
         $users = $query
-            ->orderByRaw("CASE WHEN role = 'admin' OR is_admin = ? THEN 1 WHEN role = 'guru' THEN 2 ELSE 3 END", [true])
+            ->orderByRaw("CASE WHEN role = 'admin' OR is_admin = true THEN 1 WHEN role = 'guru' THEN 2 ELSE 3 END")
             ->orderByRaw('kelas IS NULL, kelas ASC')
             ->orderBy('name', 'asc')
             ->paginate(25)

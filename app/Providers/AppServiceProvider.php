@@ -33,9 +33,10 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Rate limits for the public quiz endpoints.
      *
-     * Limits are applied per student (account or respondent identifier) instead of per
-     * IP address: behind an Expose tunnel or a NAT router a whole class shares one IP,
-     * and an IP based limit would block students who did nothing wrong. A generous
+     * Limits are applied per student instead of per IP address: behind an Expose tunnel or
+     * a NAT router a whole class shares one IP, and an IP based limit would block students
+     * who did nothing wrong. Guests are identified by the encrypted respondent cookie the
+     * server issues (it cannot be forged or rotated per request like a form field), and a
      * per-IP ceiling still protects the server against a single misbehaving device.
      */
     protected function configureQuizRateLimiting(): void
@@ -45,9 +46,7 @@ class AppServiceProvider extends ServiceProvider
                 return 'user:'.$request->user()->getAuthIdentifier();
             }
 
-            $identifier = $request->input('respondent_identifier')
-                ?: $request->route('identifier')
-                ?: $request->cookie('alsen_resp_id');
+            $identifier = $request->cookie('alsen_resp_id');
 
             return is_string($identifier) && $identifier !== ''
                 ? 'respondent:'.$identifier
@@ -66,7 +65,7 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('quiz-unlock', fn (Request $request): array => [
             Limit::perMinute(5)->by($respondentKey($request)),
-            Limit::perMinute(1000)->by('ip:'.$request->ip()),
+            Limit::perMinute(300)->by('ip:'.$request->ip()),
         ]);
     }
 }

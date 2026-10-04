@@ -91,7 +91,8 @@ const isSubmitted = ref(false);
 const isSubmitting = ref(false);
 const submissionError = ref('');
 const submissionNotice = ref('');
-const pendingSubmission = ref<{ isTimeout: boolean } | null>(null);
+// autoRetry is false once the server rejected the answers (locked session, no access): only the student retries then.
+const pendingSubmission = ref<{ isTimeout: boolean; autoRetry: boolean } | null>(null);
 const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true);
 const isServerReachable = ref(true);
 
@@ -212,8 +213,10 @@ let serverDraftRetryInterval: ReturnType<typeof setInterval> | null = null;
 let isSyncingServerDraft = false;
 let hasUnsyncedDraft = false;
 let lastServerDraftSyncAt = 0;
+let isServerDraftSealed = false;
 
-const canSyncDraftToServer = () => !!props.session?.token && !props.accessRestricted && !props.quizForm.settings?.disableRespondentAutosave;
+const canSyncDraftToServer = () =>
+    !!props.session?.token && !isServerDraftSealed && !props.accessRestricted && !props.quizForm.settings?.disableRespondentAutosave;
 
 const syncDraftToServer = async () => {
     serverDraftTimer = null;
@@ -240,6 +243,11 @@ const syncDraftToServer = async () => {
         );
         markServerReachable(true);
     } catch (error: any) {
+        if (error?.response?.status === 409) {
+            // This attempt was already submitted: the device copy is enough from here on.
+            isServerDraftSealed = true;
+            return;
+        }
         hasUnsyncedDraft = true;
         if (isNetworkFailure(error)) {
             markServerReachable(false);
@@ -904,7 +912,7 @@ const sendAnswers = async (isTimeout: boolean) => {
     }
     isSubmitting.value = true;
     submissionError.value = '';
-    pendingSubmission.value = { isTimeout };
+    pendingSubmission.value = { isTimeout, autoRetry: true };
     if (serverDraftTimer) {
         clearTimeout(serverDraftTimer);
         serverDraftTimer = null;
@@ -941,6 +949,7 @@ const sendAnswers = async (isTimeout: boolean) => {
                 }
 
                 if (status === 403 || status === 404) {
+                    pendingSubmission.value = { isTimeout, autoRetry: false };
                     submissionError.value =
                         (error.response.data?.message || 'Jawaban tidak dapat dikirim.') +
                         ' Jawaban Anda tetap tersimpan. Hubungi pengawas, atau masuk ulang lalu buka kembali kuis ini.';
@@ -1004,7 +1013,7 @@ const retrySubmission = () => {
  * Called when the server answers again after an outage: push everything that is still pending.
  */
 function onConnectionRestored() {
-    if (pendingSubmission.value && !isSubmitted.value && !isSubmitting.value) {
+    if (pendingSubmission.value?.autoRetry && !isSubmitted.value && !isSubmitting.value) {
         sendAnswers(pendingSubmission.value.isTimeout);
         return;
     }

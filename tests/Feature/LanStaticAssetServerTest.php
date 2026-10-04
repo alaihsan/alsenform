@@ -5,10 +5,21 @@ use Symfony\Component\Process\Process;
 
 beforeEach(function () {
     $this->assetDirectory = public_path('__lan-test');
+    $this->buildDirectory = public_path('build/__lan-test');
+    $this->storageDirectory = storage_path('app/public/__lan-test');
     File::ensureDirectoryExists($this->assetDirectory);
+    File::ensureDirectoryExists($this->buildDirectory);
+    File::ensureDirectoryExists($this->storageDirectory);
+
+    // server.php serves uploads through the public/storage link created by `php artisan storage:link`.
+    $this->createdStorageLink = ! file_exists(public_path('storage'));
+    if ($this->createdStorageLink) {
+        symlink(storage_path('app/public'), public_path('storage'));
+    }
 
     $this->script = str_repeat("console.log('Alsenform intranet');\n", 200);
     File::put($this->assetDirectory.'/app.js', $this->script);
+    File::put($this->buildDirectory.'/app.js', $this->script);
     File::put($this->assetDirectory.'/video.mp4', random_bytes(4096));
 
     $socket = stream_socket_server('tcp://127.0.0.1:0');
@@ -18,15 +29,30 @@ beforeEach(function () {
     $this->server = new Process([PHP_BINARY, '-S', '127.0.0.1:'.$this->port, base_path('server.php')], base_path());
     $this->server->start();
 
+    $ready = false;
     $deadline = microtime(true) + 5;
-    while (microtime(true) < $deadline && ! @fsockopen('127.0.0.1', $this->port)) {
-        usleep(50_000);
+    while (! $ready && microtime(true) < $deadline) {
+        $connection = @fsockopen('127.0.0.1', $this->port);
+        if (is_resource($connection)) {
+            fclose($connection);
+            $ready = true;
+        } else {
+            usleep(50_000);
+        }
     }
+
+    expect($ready)->toBeTrue('The PHP LAN server did not start within 5 seconds: '.$this->server->getErrorOutput());
 });
 
 afterEach(function () {
     $this->server->stop(0);
     File::deleteDirectory($this->assetDirectory);
+    File::deleteDirectory($this->buildDirectory);
+    File::deleteDirectory($this->storageDirectory);
+
+    if ($this->createdStorageLink) {
+        @unlink(public_path('storage'));
+    }
 });
 
 /**
@@ -57,14 +83,35 @@ function lanRequest(int $port, string $path, array $headers = []): array
 }
 
 test('pre-compressed build assets are served when the browser accepts gzip', function () {
-    File::put($this->assetDirectory.'/app.js.gz', gzencode($this->script, 9));
+    $precompressed = gzencode($this->script, 9);
+    File::put($this->buildDirectory.'/app.js.gz', $precompressed);
 
-    $response = lanRequest($this->port, '/__lan-test/app.js', ['Accept-Encoding' => 'gzip, deflate']);
+    $response = lanRequest($this->port, '/build/__lan-test/app.js', ['Accept-Encoding' => 'gzip, deflate']);
 
     expect($response['status'])->toBe(200)
         ->and($response['headers']['content-encoding'])->toBe('gzip')
         ->and($response['headers']['vary'])->toBe('Accept-Encoding')
+        ->and($response['body'])->toBe($precompressed)
         ->and(gzdecode($response['body']))->toBe($this->script);
+});
+
+test('compressed siblings outside the build folder are never served in place of the file', function () {
+    File::put($this->assetDirectory.'/app.js.gz', gzencode('alert("stale or planted content");', 9));
+
+    $response = lanRequest($this->port, '/__lan-test/app.js', ['Accept-Encoding' => 'gzip']);
+
+    expect(gzdecode($response['body']))->toBe($this->script);
+});
+
+test('uploaded files are served with headers that stop scripts from running', function () {
+    File::put($this->storageDirectory.'/gambar.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+
+    $response = lanRequest($this->port, '/storage/__lan-test/gambar.svg');
+
+    expect($response['status'])->toBe(200)
+        ->and($response['headers']['x-content-type-options'])->toBe('nosniff')
+        ->and($response['headers']['content-security-policy'])->toContain('sandbox')
+        ->and($response['headers']['content-security-policy'])->toContain("default-src 'none'");
 });
 
 test('text assets are compressed on the fly and stay plain for clients without gzip', function () {
@@ -95,6 +142,13 @@ test('videos support byte ranges so they play on iOS safari', function () {
 
     $partial = lanRequest($this->port, '/__lan-test/video.mp4', ['Range' => 'bytes=100-1123']);
     $outOfRange = lanRequest($this->port, '/__lan-test/video.mp4', ['Range' => 'bytes=999999-']);
+
+    $sameVersion = lanRequest($this->port, '/__lan-test/video.mp4', ['Range' => 'bytes=0-9', 'If-Range' => $partial['headers']['last-modified']]);
+    $laterDate = lanRequest($this->port, '/__lan-test/video.mp4', ['Range' => 'bytes=0-9', 'If-Range' => gmdate('D, d M Y H:i:s', time() + 3600).' GMT']);
+
+    expect($sameVersion['status'])->toBe(206)
+        ->and($laterDate['status'])->toBe(200)
+        ->and($laterDate['body'])->toBe($video);
 
     expect($partial['status'])->toBe(206)
         ->and($partial['headers']['content-range'])->toBe('bytes 100-1123/4096')

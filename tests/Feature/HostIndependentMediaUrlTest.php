@@ -85,6 +85,18 @@ test('saving a form stores host independent media urls', function () {
     expect($quizForm->refresh()->questions[0]['media'][0]['url'])->toBe('/storage/media/examview/diagram.png');
 });
 
+test('external images keep their url even when a local file has the same path', function () {
+    Storage::fake('public');
+    Storage::disk('public')->put('media/diagram.png', 'local-image-bytes');
+    $mediaUrl = new MediaUrl;
+
+    expect($mediaUrl->normalize('https://example.org/storage/media/diagram.png'))->toBe('https://example.org/storage/media/diagram.png')
+        ->and($mediaUrl->normalize('http://8.8.8.8/storage/media/diagram.png'))->toBe('http://8.8.8.8/storage/media/diagram.png')
+        ->and($mediaUrl->normalize('http://172.16.5.10:8000/storage/media/diagram.png'))->toBe('/storage/media/diagram.png')
+        ->and($mediaUrl->normalize('http://macmini-lab.local:8000/storage/media/diagram.png'))->toBe('/storage/media/diagram.png')
+        ->and($mediaUrl->normalize('https://ujian-sekolah.sharedwithexpose.com/storage/media/diagram.png'))->toBe('/storage/media/diagram.png');
+});
+
 test('media url normalization leaves unknown and unsafe urls untouched', function () {
     Storage::fake('public');
     $mediaUrl = new MediaUrl;

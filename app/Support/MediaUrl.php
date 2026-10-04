@@ -23,6 +23,16 @@ class MediaUrl
     }
 
     /**
+     * Host suffixes used by this application on a school network or through a tunnel.
+     *
+     * @var list<string>
+     */
+    protected const LOCAL_HOST_SUFFIXES = [
+        '.localhost', '.local', '.test', '.lan', '.home', '.internal', '.intranet', '.localdomain', '.home.arpa',
+        '.sharedwithexpose.com', '.expose.dev', '.expose.sh',
+    ];
+
+    /**
      * Turn an absolute URL that points at this application's public storage
      * into a root-relative one. External URLs are returned untouched.
      */
@@ -37,7 +47,7 @@ class MediaUrl
             return $url;
         }
 
-        if (! in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+        if (! in_array(strtolower($parts['scheme']), ['http', 'https'], true) || ! $this->isApplicationHost($parts['host'])) {
             return $url;
         }
 
@@ -52,6 +62,36 @@ class MediaUrl
         }
 
         return $path.(isset($parts['query']) ? '?'.$parts['query'] : '');
+    }
+
+    /**
+     * Determine if a host is one this application was (or is) reached through:
+     * a LAN / loopback IP, a local host name, an Expose tunnel or the configured URL.
+     */
+    protected function isApplicationHost(string $host): bool
+    {
+        $host = strtolower(trim($host, '[]'));
+
+        if ($host === 'localhost' || ! str_contains($host, '.') && ! str_contains($host, ':')) {
+            return true;
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+        }
+
+        foreach (self::LOCAL_HOST_SUFFIXES as $suffix) {
+            if (str_ends_with($host, $suffix)) {
+                return true;
+            }
+        }
+
+        $knownHosts = [strtolower((string) parse_url((string) config('app.url'), PHP_URL_HOST))];
+        if (app()->bound('request')) {
+            $knownHosts[] = strtolower(request()->getHost());
+        }
+
+        return in_array($host, array_filter($knownHosts), true);
     }
 
     /**

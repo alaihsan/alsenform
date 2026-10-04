@@ -29,13 +29,12 @@ class TrustLocalProxies extends TrustProxies
      */
     protected function setTrustedProxyIpAddresses(Request $request): void
     {
-        $configured = $this->configuredProxies();
-
-        if (in_array('*', $configured, true) || in_array('**', $configured, true)) {
-            $request->setTrustedProxies([(string) $request->server->get('REMOTE_ADDR')], $this->getTrustedHeaderNames());
-
-            return;
-        }
+        // Wildcards ("*" / "**") are ignored on purpose: students connect to this server
+        // directly over the LAN, so trusting every peer would let them spoof their IP.
+        $configured = array_values(array_filter(
+            $this->configuredProxies(),
+            fn (string $proxy): bool => ! in_array($proxy, ['*', '**'], true),
+        ));
 
         $trusted = [...self::LOOPBACK_PROXIES, ...$configured];
         $remoteAddress = (string) $request->server->get('REMOTE_ADDR');

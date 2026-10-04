@@ -217,18 +217,23 @@ class ServeLanCommand extends Command
         $this->newLine();
         $this->output->writeln('<bg=yellow;fg=black;options=bold> ⚠️  ALAMAT IP SERVER BERUBAH ('.date('H:i:s').') </>');
 
-        if (! in_array($host, ['0.0.0.0', 'localhost'], true) && ! in_array($host, $interfaces, true)) {
-            $this->output->writeln("   <fg=red;options=bold>Server terikat ke {$host} yang sudah tidak tersedia.</> Jalankan ulang dengan <fg=yellow>php artisan lan:serve --host=0.0.0.0</>");
-        } else {
-            $this->output->writeln('   Server tetap berjalan. Jawaban siswa aman (tersimpan di perangkat dan di server).');
-        }
-
         if (empty($interfaces)) {
             $this->output->writeln('   <fg=red>Tidak ada jaringan aktif. Periksa Wi-Fi / kabel LAN server.</>');
-        } else {
+        } elseif ($host === '0.0.0.0') {
+            $this->output->writeln('   Server tetap berjalan. Jawaban siswa aman (tersimpan di perangkat dan di server).');
             $this->output->writeln('   Bagikan URL baru ini ke siswa (lalu login ulang, jawaban akan dipulihkan otomatis):');
             foreach ($interfaces as $label => $ip) {
                 $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
+            }
+        } elseif (in_array($host, $interfaces, true)) {
+            // Bound to one address with --host: only that address keeps serving the exam.
+            $this->output->writeln("   Server hanya melayani <fg=cyan;options=bold>http://{$host}:{$port}</> (alamat --host) dan alamat itu masih aktif.");
+            $this->output->writeln('   Alamat lain baru bisa dipakai setelah server dijalankan ulang dengan <fg=yellow>php artisan lan:serve --host=0.0.0.0</>');
+        } else {
+            $this->output->writeln("   <fg=red;options=bold>Server terikat ke {$host} yang sudah tidak tersedia, siswa tidak dapat terhubung.</>");
+            $this->output->writeln('   Jalankan ulang dengan <fg=yellow>php artisan lan:serve --host=0.0.0.0</>, setelah itu siswa dapat memakai:');
+            foreach ($interfaces as $label => $ip) {
+                $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label}, setelah server dijalankan ulang)</>");
             }
         }
 
@@ -253,18 +258,27 @@ class ServeLanCommand extends Command
     }
 
     /**
+     * Metadata of the background (daemon) server.
+     */
+    protected function infoFilePath(): string
+    {
+        return storage_path('framework/lan_server.json');
+    }
+
+    /**
      * Make sure the database (PostgreSQL) answers before students start the exam.
      */
     protected function databaseIsReachable(): bool
     {
-        $connection = DB::connection();
+        $name = (string) config('database.default');
 
         try {
-            $connection->getPdo();
+            DB::connection()->getPdo();
 
             return true;
         } catch (\Throwable $e) {
-            $this->error("Database {$connection->getDriverName()} tidak dapat dihubungi: {$e->getMessage()}");
+            $driver = (string) (config("database.connections.{$name}.driver") ?? $name);
+            $this->error("Database {$driver} tidak dapat dihubungi: {$e->getMessage()}");
             $this->line('   Pastikan layanan PostgreSQL berjalan (Herd -> Services -> PostgreSQL, atau: brew services start postgresql@16)');
             $this->line('   dan pengaturan DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD di berkas .env sudah benar.');
 
@@ -280,7 +294,7 @@ class ServeLanCommand extends Command
     protected function handleDaemon(int $port, string $host, int $workers, array $interfaces, ?string $hostname): int
     {
         $logPath = storage_path('logs/lan_server.log');
-        $infoFile = storage_path('framework/lan_server.json');
+        $infoFile = $this->infoFilePath();
 
         if (file_exists($infoFile)) {
             $existingServer = json_decode((string) file_get_contents($infoFile), true);
@@ -340,6 +354,7 @@ class ServeLanCommand extends Command
             'workers' => $workers,
             'started_at' => time(),
             'caffeinate' => $useCaffeinate,
+            'addresses' => $this->addressList($interfaces),
         ];
         // Allow child processes to bind to port
         usleep(800 * 1000);
@@ -366,7 +381,7 @@ class ServeLanCommand extends Command
      */
     protected function handleStop(): int
     {
-        $infoFile = storage_path('framework/lan_server.json');
+        $infoFile = $this->infoFilePath();
         $port = (int) $this->option('port');
 
         if (! file_exists($infoFile)) {
@@ -412,7 +427,7 @@ class ServeLanCommand extends Command
      */
     protected function handleStatus(): int
     {
-        $infoFile = storage_path('framework/lan_server.json');
+        $infoFile = $this->infoFilePath();
 
         if (! file_exists($infoFile)) {
             $port = (int) $this->option('port');
@@ -458,7 +473,15 @@ class ServeLanCommand extends Command
         $this->newLine();
 
         $interfaces = $this->detectNetworkInterfaces();
-        $this->output->writeln('   🌐 <options=bold>Akses URL Siswa:</>');
+        $startedAddresses = $data['addresses'] ?? null;
+        if (is_array($startedAddresses) && $startedAddresses !== $this->addressList($interfaces)) {
+            // Daemon mode has no terminal to print to: the change is reported here instead.
+            $this->announceNetworkChange($interfaces, (string) ($data['host'] ?? '0.0.0.0'), $port);
+            $data['addresses'] = $this->addressList($interfaces);
+            @file_put_contents($infoFile, json_encode($data, JSON_PRETTY_PRINT));
+        }
+
+        $this->output->writeln('   🌐 <options=bold>Akses URL Siswa (alamat saat ini):</>');
         foreach ($interfaces as $label => $ip) {
             $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
         }
@@ -746,6 +769,7 @@ class ServeLanCommand extends Command
 
         $this->output->writeln(' <fg=white;options=bold>🕹️ Perintah Manajemen Server:</>');
         $this->output->writeln('   • Cek status server : <fg=yellow>php artisan lan:status</> atau <fg=yellow>php artisan lan:serve --status</>');
+        $this->output->writeln('   • Jika IP berubah   : mode latar belakang tidak dapat memberi tahu otomatis; jalankan <fg=yellow>php artisan lan:status</> untuk melihat URL terbaru');
         $this->output->writeln('   • Hentikan server   : <fg=red>php artisan lan:stop</> atau <fg=red>php artisan lan:serve --stop</>');
         $this->output->writeln('   • Pantau log live   : <fg=cyan>tail -f storage/logs/lan_server.log</>');
         $this->newLine();

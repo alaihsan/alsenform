@@ -88,3 +88,16 @@ test('additional proxies can be trusted through configuration', function () {
             'secure' => true,
         ]);
 });
+
+test('a wildcard trusted proxy setting never trusts lan clients', function () {
+    config(['app.trusted_proxies' => '*']);
+
+    $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.45'])
+        ->withHeaders(exposeHeaders())
+        ->getJson('/_proxy-probe')
+        ->assertOk()
+        ->assertJson([
+            'ip' => '192.0.2.45',
+            'secure' => false,
+        ]);
+});

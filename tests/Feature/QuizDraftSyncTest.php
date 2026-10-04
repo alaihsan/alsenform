@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Requests\SaveQuizDraftRequest;
 use App\Models\QuizForm;
 use App\Models\QuizSession;
 use App\Models\User;
@@ -136,4 +137,43 @@ test('on a shared lab computer another student never inherits the previous exam 
         ->assertInertia(fn (Assert $page) => $page
             ->where('session.token', fn (string $token) => $token !== $firstToken)
             ->where('session.draft_answers', null));
+});
+
+test('a late draft request after submission is rejected and never restored', function () {
+    $this->actingAs($this->student);
+    $token = openExam($this->quizForm);
+
+    $this->postJson(route('forms.responses.store', $this->quizForm->slug), [
+        'session_token' => $token,
+        'answers' => [1 => 'Option 2'],
+    ])->assertOk();
+
+    $this->postJson(route('forms.responses.draft', $this->quizForm->slug), [
+        'session_token' => $token,
+        'answers' => [1 => 'Option 1'],
+    ])->assertStatus(409)->assertJson(['saved' => false, 'submitted' => true]);
+
+    expect(QuizSession::firstWhere('session_token', $token)->draft_answers)->toBeNull();
+});
+
+test('drafts only accept answers to questions of the quiz and of a bounded size', function () {
+    $this->actingAs($this->student);
+    $token = openExam($this->quizForm);
+
+    $this->postJson(route('forms.responses.draft', $this->quizForm->slug), [
+        'session_token' => $token,
+        'answers' => [999 => 'Bukan soal kuis ini'],
+    ])->assertUnprocessable()->assertJsonValidationErrors('answers');
+
+    $this->postJson(route('forms.responses.draft', $this->quizForm->slug), [
+        'session_token' => $token,
+        'answers' => [1 => str_repeat('a', SaveQuizDraftRequest::MAX_PAYLOAD_BYTES + 1)],
+    ])->assertUnprocessable()->assertJsonValidationErrors('answers');
+
+    $this->postJson(route('forms.responses.draft', $this->quizForm->slug), [
+        'session_token' => $token,
+        'answers' => [1 => [[[['terlalu dalam']]]]],
+    ])->assertUnprocessable()->assertJsonValidationErrors('answers');
+
+    expect(QuizSession::firstWhere('session_token', $token)->draft_answers)->toBeNull();
 });

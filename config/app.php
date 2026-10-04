@@ -62,7 +62,8 @@ return [
     | Tunnels and reverse proxies that run on this machine (Expose, Herd /
     | Nginx) are always trusted so URLs and HTTPS are detected correctly.
     | Add extra proxy IP addresses here (comma separated) when needed.
-    | LAN clients are never trusted, so they cannot spoof their IP.
+    | LAN clients are never trusted, so they cannot spoof their IP; for
+    | that reason the wildcards "*" and "**" are not supported.
     |
     */
 

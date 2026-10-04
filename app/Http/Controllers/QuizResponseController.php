@@ -119,8 +119,7 @@ class QuizResponseController extends Controller
 
         // Answers saved on the server survive an IP / address change, a browser crash or a
         // switch to another device, where answers kept only in localStorage would be lost.
-        $hasServerDraft = ! empty($quizSession->draft_answers)
-            && ($quizSession->submitted_at === null || $quizSession->draft_saved_at?->gt($quizSession->submitted_at));
+        $hasServerDraft = ! empty($quizSession->draft_answers) && $quizSession->submitted_at === null;
 
         return Inertia::render('PublicQuiz', [
             'quizForm' => [
@@ -299,6 +298,11 @@ class QuizResponseController extends Controller
         // keeps being saved when the login session expires in the middle of a long exam.
         abort_if($session === null, 404);
         abort_if($session->user_id !== null && $request->user() !== null && $session->user_id !== $request->user()->id, 403);
+
+        // The attempt is sealed once submitted: a late draft request must not resurrect old answers.
+        if ($session->submitted_at !== null) {
+            return response()->json(['saved' => false, 'submitted' => true], 409);
+        }
 
         if (! empty($quizForm->settings['disableRespondentAutosave'])) {
             return response()->json(['saved' => false]);

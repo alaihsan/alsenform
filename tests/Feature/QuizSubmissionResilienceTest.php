@@ -31,7 +31,10 @@ test('a whole class behind one ip address (expose / nat) can submit at the same 
     $quizForm = publishedQuiz();
 
     foreach (range(1, 30) as $student) {
+        // Every browser carries the encrypted respondent cookie issued when the quiz page was opened.
         $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.1'])
+            ->withCredentials()
+            ->withCookie('alsen_resp_id', "anon_student_{$student}")
             ->postJson(route('forms.responses.store', $quizForm->slug), [
                 'respondent_identifier' => "resp_student_{$student}",
                 'answers' => [1 => 'Option 1'],
@@ -94,4 +97,24 @@ test('a second attempt without the original session token is still rejected', fu
     ])->assertForbidden();
 
     expect(QuizResponse::where('quiz_form_id', $quizForm->id)->count())->toBe(1);
+});
+
+test('guests cannot escape the unlock request limit by changing the respondent identifier', function () {
+    $quizForm = publishedQuiz();
+
+    foreach (range(1, 5) as $attempt) {
+        $this->withCredentials()
+            ->withServerVariables(['REMOTE_ADDR' => '10.0.0.'.$attempt])
+            ->withCookie('alsen_resp_id', 'anon_same_browser')
+            ->postJson(route('forms.public.unlock-requests.store', $quizForm->slug), [
+                'respondent_identifier' => "resp_rotated_{$attempt}",
+            ])->assertOk();
+    }
+
+    $this->withCredentials()
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.6'])
+        ->withCookie('alsen_resp_id', 'anon_same_browser')
+        ->postJson(route('forms.public.unlock-requests.store', $quizForm->slug), [
+            'respondent_identifier' => 'resp_rotated_6',
+        ])->assertTooManyRequests();
 });
