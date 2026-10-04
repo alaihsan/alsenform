@@ -1,7 +1,9 @@
 <?php
 
 use App\Console\Commands\ServeLanCommand;
+use App\Support\PendingMigrations;
 use Illuminate\Console\OutputStyle;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Symfony\Component\Process\Process;
@@ -205,4 +207,41 @@ test('lan:serve explains a database connection that is not configured', function
     } finally {
         config(['database.default' => $defaultConnection]);
     }
+});
+
+test('pending migrations after an update are detected', function () {
+    expect(app(PendingMigrations::class)->names())->toBe([]);
+
+    DB::table('migrations')->where('migration', '2026_10_04_140547_make_started_at_nullable_on_quiz_sessions_table')->delete();
+
+    expect(app(PendingMigrations::class)->names())->toBe(['2026_10_04_140547_make_started_at_nullable_on_quiz_sessions_table']);
+});
+
+test('lan:serve brings the database and caches up to date before serving', function () {
+    $command = new class extends ServeLanCommand
+    {
+        /** @var list<string> */
+        public array $calls = [];
+
+        public function call($command, array $arguments = []): int
+        {
+            $this->calls[] = $command;
+
+            return 0;
+        }
+
+        public function sync(): void
+        {
+            $this->syncWithCurrentCode();
+        }
+    };
+    $command->setLaravel(app());
+    $command->setOutput(new OutputStyle(new ArrayInput([]), new BufferedOutput));
+
+    $command->sync();
+    expect($command->calls)->toBe([]);
+
+    DB::table('migrations')->where('migration', '2026_10_04_140547_make_started_at_nullable_on_quiz_sessions_table')->delete();
+    $command->sync();
+    expect($command->calls)->toBe(['migrate']);
 });

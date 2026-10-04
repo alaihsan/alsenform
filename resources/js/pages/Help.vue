@@ -1,39 +1,26 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     ArrowLeft,
     BookOpen,
-    CheckCircle2,
     ClipboardList,
+    Clock,
     FileSpreadsheet,
-    GraduationCap,
-    HelpCircle,
     KeyRound,
     Layers,
+    LayoutGrid,
+    Lock,
+    Play,
     Search,
     Shield,
     Sparkles,
     UploadCloud,
+    UserRound,
     Users,
+    Wifi,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-
-import AppLayout from '@/layouts/AppLayout.vue';
-import { type BreadcrumbItem } from '@/types';
-
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Dashboard',
-        href: '/dashboard',
-    },
-    {
-        title: 'Pusat Bantuan & Panduan',
-        href: '/help',
-    },
-];
-
-const searchQuery = ref('');
-const activeSection = ref<string>('getting-started');
 
 interface HelpTopic {
     id: string;
@@ -44,7 +31,154 @@ interface HelpTopic {
     summary: string;
 }
 
-const topics: HelpTopic[] = [
+/** A guide written as a short list of steps or facts (used for the student guides). */
+interface HelpArticle extends HelpTopic {
+    intro: string;
+    points: { title: string; text: string }[];
+    tip?: string;
+}
+
+const page = usePage<any>();
+const user = computed(() => page.props.auth?.user);
+const isStudent = computed(() => {
+    const u = user.value;
+    if (!u) return false;
+    return u.role === 'siswa' || u.role === 'murid' || (!u.is_admin && u.role !== 'guru' && !!u.nis);
+});
+
+const studentArticles: HelpArticle[] = [
+    {
+        id: 'student-login',
+        title: '1. Masuk & Password Pertama',
+        icon: KeyRound,
+        badge: 'Akun',
+        badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        summary: 'Masuk dengan NIS dan membuat password pribadi saat pertama kali login.',
+        intro: 'Akun Anda dibuat oleh sekolah. Gunakan NIS/NISN sebagai nama pengguna.',
+        points: [
+            { title: 'Masuk', text: 'Ketik NIS/NISN dan password sementara yang diberikan sekolah, lalu tekan Masuk.' },
+            {
+                title: 'Buat password baru',
+                text: 'Saat pertama kali masuk, Anda wajib mengganti password sementara dengan password pribadi (minimal 8 karakter). Setelah disimpan, Anda langsung masuk ke halaman Home.',
+            },
+            { title: 'Lupa password', text: 'Minta guru atau admin sekolah untuk mereset password. Setelah direset, Anda akan diminta membuat password baru lagi.' },
+        ],
+        tip: 'Jangan beri tahu password Anda kepada teman, dan selalu Logout setelah memakai komputer lab bersama.',
+    },
+    {
+        id: 'student-start-exam',
+        title: '2. Memulai Ujian',
+        icon: Play,
+        badge: 'Ujian',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        summary: 'Membuka kuis dari halaman Home dan membaca aturan sebelum mulai.',
+        intro: 'Semua kuis untuk kelas Anda tampil di halaman Home pada bagian Daftar Soal & Kuis.',
+        points: [
+            { title: 'Pilih kuis', text: 'Tekan tombol Kerjakan pada kartu kuis yang berstatus Belum Dikerjakan.' },
+            {
+                title: 'Baca konfirmasi ujian',
+                text: 'Sebelum mulai, muncul jendela berisi nama ujian, jumlah soal, durasi, dan aturan mengerjakan. Baca dengan teliti.',
+            },
+            {
+                title: 'Tekan Kerjakan Sekarang',
+                text: 'Soal baru tampil dan waktu baru mulai berjalan setelah tombol ini ditekan. Tekan Kembali bila belum siap.',
+            },
+        ],
+        tip: 'Jika halaman tidak sengaja tertutup, buka kuis yang sama lagi: ujian berlanjut dan jawaban Anda tetap ada.',
+    },
+    {
+        id: 'student-answering',
+        title: '3. Menjawab & Panel Nomor Soal',
+        icon: LayoutGrid,
+        badge: 'Ujian',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        summary: 'Berpindah soal dengan panel nomor, arti warna, dan memperbesar gambar.',
+        intro: 'Panel Nomor Soal selalu terlihat di samping soal saat Anda menggulir halaman.',
+        points: [
+            { title: 'Pindah soal', text: 'Klik nomor pada panel untuk langsung menuju soal tersebut.' },
+            {
+                title: 'Arti warna',
+                text: 'Hijau berarti sudah dijawab, abu-abu belum dijawab, titik merah menandai soal wajib, dan bingkai biru menunjukkan soal yang sedang Anda baca.',
+            },
+            {
+                title: 'Atur panel',
+                text: 'Tombol panah kiri-kanan memindahkan panel ke sisi lain, dan tombol ciutkan menyembunyikannya. Di HP, panel dibuka lewat tombol Nomor Soal di pojok bawah.',
+            },
+            { title: 'Gambar soal', text: 'Klik gambar untuk melihatnya di layar penuh dan memperbesarnya.' },
+        ],
+    },
+    {
+        id: 'student-connection',
+        title: '4. Simpan Otomatis & Koneksi Terputus',
+        icon: Wifi,
+        badge: 'Jaringan',
+        badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+        summary: 'Jawaban tersimpan otomatis walau Wi-Fi sekolah lemah atau terputus.',
+        intro: 'Setiap jawaban otomatis disimpan di perangkat Anda dan di server ujian.',
+        points: [
+            {
+                title: 'Wi-Fi terputus',
+                text: 'Muncul pita kuning di atas halaman. Tetap lanjutkan mengerjakan: jawaban aman di perangkat dan dikirim otomatis begitu koneksi pulih.',
+            },
+            {
+                title: 'Perangkat mati atau rusak',
+                text: 'Masuk lagi dengan akun Anda di komputer lain dan buka kuis yang sama. Jawaban yang sudah tersimpan di server akan dipulihkan.',
+            },
+            { title: 'Jangan menutup paksa', text: 'Jangan menghapus data browser selama ujian berlangsung.' },
+        ],
+    },
+    {
+        id: 'student-submit',
+        title: '5. Waktu & Mengirim Jawaban',
+        icon: Clock,
+        badge: 'Ujian',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        summary: 'Sisa waktu, mengirim jawaban, dan apa yang terjadi saat waktu habis.',
+        intro: 'Sisa waktu tampil di pojok kanan atas dan menghitung mundur sejak Anda menekan Kerjakan Sekarang.',
+        points: [
+            {
+                title: 'Kirim jawaban',
+                text: 'Tekan Kirim Jawaban di bawah soal terakhir, periksa ringkasan, lalu tekan Ya, Kirim Jawaban Sekarang.',
+            },
+            {
+                title: 'Soal wajib belum dijawab',
+                text: 'Jawaban belum bisa dikirim. Tekan Menuju Soal Belum Terjawab untuk langsung ke soal tersebut.',
+            },
+            { title: 'Waktu habis', text: 'Jawaban yang sudah diisi terkirim otomatis, Anda tidak perlu menekan apa pun.' },
+        ],
+        tip: 'Pada sebagian kuis jawaban hanya bisa dikirim satu kali, jadi periksa kembali sebelum mengirim.',
+    },
+    {
+        id: 'student-locked',
+        title: '6. Ujian Terkunci',
+        icon: Lock,
+        badge: 'Anti-Curang',
+        badgeColor: 'bg-red-50 text-red-700 border-red-200',
+        summary: 'Mengapa ujian bisa terkunci dan cara membukanya kembali.',
+        intro: 'Pada ujian dengan pengaman anti-curang, berpindah tab, membuka aplikasi lain, atau meminimalkan browser membuat ujian terkunci.',
+        points: [
+            { title: 'Minta buka kunci', text: 'Tekan Minta Kode Buka Kunci. Setelah guru menyetujui, halaman terbuka sendiri.' },
+            { title: 'Kode dari pengawas', text: 'Pengawas ruangan juga dapat memberikan kode 6 angka untuk Anda ketik pada kolom yang tersedia, lalu tekan Verifikasi.' },
+            { title: 'Jawaban tetap aman', text: 'Selama terkunci, jawaban yang sudah diisi tidak hilang dan waktu ujian tetap berjalan.' },
+        ],
+    },
+    {
+        id: 'student-profile',
+        title: '7. Profil & Ganti Password',
+        icon: UserRound,
+        badge: 'Akun',
+        badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        summary: 'Mengganti foto profil dan password lewat menu akun.',
+        intro: 'Buka menu akun (foto atau ikon profil di pojok kanan atas), lalu pilih Profile.',
+        points: [
+            { title: 'Foto profil', text: 'Tekan Pilih Foto Baru (JPG, PNG, atau WebP, maksimal 2 MB), lalu Simpan Profil.' },
+            { title: 'Ganti password', text: 'Pilih menu Password pada halaman Pengaturan Akun.' },
+            { title: 'Data sekolah', text: 'NIS dan kelas dikelola sekolah. Hubungi wali kelas atau admin bila ada data yang salah.' },
+        ],
+    },
+];
+
+const teacherTopics: HelpTopic[] = [
     {
         id: 'getting-started',
         title: '1. Memulai & Alur Kerja Kuis',
@@ -63,7 +197,7 @@ const topics: HelpTopic[] = [
     },
     {
         id: 'arabic-quran',
-        title: '3. Bahasa Arab & Al-Qur\'an (Mushaf Madinah)',
+        title: "3. Bahasa Arab & Al-Qur'an (Mushaf Madinah)",
         icon: BookOpen,
         badge: 'Fitur Utama',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -83,7 +217,7 @@ const topics: HelpTopic[] = [
         icon: UploadCloud,
         badge: 'Import',
         badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-        summary: 'Panduan ekspor Blackboard 6.0-8.0 dari ExamView dan impor ke Alsenform lengkap dengan gambar soal.',
+        summary: 'Panduan ekspor Blackboard 6.0-9.0 dari ExamView dan impor ke Alsenform lengkap dengan gambar soal.',
     },
     {
         id: 'proctoring-anti-cheat',
@@ -119,112 +253,155 @@ const topics: HelpTopic[] = [
     },
 ];
 
+const topics = computed<HelpTopic[]>(() => (isStudent.value ? studentArticles : teacherTopics));
+
+const searchQuery = ref('');
+const activeSection = ref<string>(isStudent.value ? 'student-login' : 'getting-started');
+
 const filteredTopics = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
     if (!q) {
-        return topics;
+        return topics.value;
     }
-    return topics.filter(
-        (t) =>
-            t.title.toLowerCase().includes(q) ||
-            t.summary.toLowerCase().includes(q)
-    );
+    return topics.value.filter((topic) => {
+        const article = topic as Partial<HelpArticle>;
+        const text = [topic.title, topic.summary, article.intro ?? '', ...(article.points ?? []).map((point) => `${point.title} ${point.text}`)];
+        return text.join(' ').toLowerCase().includes(q);
+    });
 });
+
+/** While searching, every matching topic is shown; otherwise only the selected one. */
+const isTopicVisible = (id: string): boolean =>
+    searchQuery.value.trim() ? filteredTopics.value.some((topic) => topic.id === id) : activeSection.value === id;
+
+const selectTopic = (id: string) => {
+    activeSection.value = id;
+    searchQuery.value = '';
+    if (window.innerWidth < 1024) {
+        document.getElementById('help-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
 </script>
 
 <template>
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Pusat Panduan & Bantuan Alsenform" />
+    <Head title="Pusat Bantuan" />
 
-        <div class="min-h-screen bg-slate-50/60 pb-16">
-            <!-- HERO HEADER -->
-            <div class="border-b border-slate-200/80 bg-white">
-                <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div class="space-y-1">
-                            <div class="flex items-center gap-2">
-                                <Link
-                                    :href="route('dashboard')"
-                                    class="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800"
-                                >
-                                    <ArrowLeft class="h-3.5 w-3.5" /> Kembali ke Dasbor
-                                </Link>
-                                <span class="text-slate-300">•</span>
-                                <span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
-                                    Dokumentasi Resmi
-                                </span>
-                            </div>
-                            <h1 class="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                                Pusat Panduan & Bantuan Alsenform
-                            </h1>
-                            <p class="text-sm text-slate-500">
-                                Pelajari seluruh alur kerja pembuatan ujian, penulisan soal Arab & rumus matematika, pengawasan CBT, hingga rekap nilai siswa.
-                            </p>
-                        </div>
+    <AlsenformLayout>
+        <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+            <Link
+                :href="route('dashboard')"
+                class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-indigo-700"
+            >
+                <ArrowLeft class="h-4 w-4" />
+                Kembali ke Beranda
+            </Link>
 
-                        <!-- Live Search Input -->
-                        <div class="w-full md:w-80">
-                            <label class="relative block">
-                                <Search class="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                                <input
-                                    v-model="searchQuery"
-                                    type="search"
-                                    placeholder="Cari topik panduan..."
-                                    class="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50/80 pl-10 pr-4 text-sm font-medium text-slate-800 shadow-xs outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-                                />
-                            </label>
-                        </div>
-                    </div>
+            <div class="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Pusat Bantuan</h1>
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{
+                            isStudent
+                                ? 'Panduan singkat masuk, mengerjakan ujian, dan mengirim jawaban di Alsenform.'
+                                : 'Panduan membuat ujian, menulis soal Arab & rumus, pengawasan CBT, hingga rekap nilai siswa.'
+                        }}
+                    </p>
                 </div>
+
+                <label class="relative block w-full md:w-80">
+                    <Search class="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
+                    <input
+                        v-model="searchQuery"
+                        type="search"
+                        placeholder="Cari panduan..."
+                        class="w-full rounded-2xl border border-slate-300 bg-white py-3 pl-11 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                    />
+                </label>
             </div>
 
-            <!-- MAIN CONTAINER -->
-            <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-                <div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-                    <!-- SIDEBAR NAVIGATION (4 Cols) -->
-                    <aside class="space-y-2 lg:col-span-4">
-                        <div class="sticky top-20 space-y-1 rounded-2xl border border-slate-200/90 bg-white p-2.5 shadow-sm">
-                            <p class="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                Daftar Topik Panduan
-                            </p>
-                            <nav class="space-y-1">
-                                <button
-                                    v-for="topic in filteredTopics"
-                                    :key="topic.id"
-                                    type="button"
-                                    @click="activeSection = topic.id"
-                                    :class="[
-                                        'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition',
-                                        activeSection === topic.id
-                                            ? 'bg-indigo-50 text-indigo-700 font-bold shadow-xs'
-                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                                    ]"
-                                >
-                                    <component
-                                        :is="topic.icon"
-                                        :class="['h-4 w-4 shrink-0', activeSection === topic.id ? 'text-indigo-600' : 'text-slate-400']"
-                                    />
-                                    <span class="truncate flex-1">{{ topic.title }}</span>
-                                    <span
-                                        :class="[
-                                            'rounded-full border px-1.5 py-0.5 text-[9px] font-bold shrink-0',
-                                            topic.badgeColor,
-                                        ]"
-                                    >
-                                        {{ topic.badge }}
-                                    </span>
-                                </button>
-                            </nav>
-                        </div>
-                    </aside>
+            <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+                <aside>
+                    <nav class="space-y-1.5 lg:sticky lg:top-20" aria-label="Daftar topik bantuan">
+                        <button
+                            v-for="topic in filteredTopics"
+                            :key="topic.id"
+                            type="button"
+                            :class="[
+                                'flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition',
+                                activeSection === topic.id && !searchQuery.trim()
+                                    ? 'border-indigo-200 bg-white text-indigo-700 shadow-sm'
+                                    : 'border-transparent text-slate-600 hover:bg-white/70 hover:text-slate-900',
+                            ]"
+                            :aria-current="activeSection === topic.id ? 'true' : undefined"
+                            @click="selectTopic(topic.id)"
+                        >
+                            <span
+                                :class="[
+                                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                                    activeSection === topic.id && !searchQuery.trim() ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 shadow-sm',
+                                ]"
+                            >
+                                <component :is="topic.icon" class="h-4 w-4" />
+                            </span>
+                            <span class="min-w-0 flex-1 text-sm font-bold leading-snug">{{ topic.title }}</span>
+                        </button>
+                        <p v-if="filteredTopics.length === 0" class="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                            Tidak ada panduan yang cocok dengan "{{ searchQuery }}".
+                        </p>
+                    </nav>
+                </aside>
 
-                    <!-- CONTENT PANELS (8 Cols) -->
-                    <main class="space-y-8 lg:col-span-8">
+                <section id="help-content" class="min-w-0 scroll-mt-20 space-y-6">
+                    <!-- Panduan siswa -->
+                    <template v-if="isStudent">
+                        <article
+                            v-for="article in studentArticles"
+                            v-show="isTopicVisible(article.id)"
+                            :id="article.id"
+                            :key="article.id"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                        >
+                            <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+                                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                                    <component :is="article.icon" class="h-5 w-5" />
+                                </div>
+                                <div class="min-w-0">
+                                    <h2 class="text-xl font-bold text-slate-900">{{ article.title }}</h2>
+                                    <p class="text-sm text-slate-500">{{ article.summary }}</p>
+                                </div>
+                            </div>
+
+                            <p class="mt-5 text-sm leading-relaxed text-slate-700">{{ article.intro }}</p>
+
+                            <ol class="mt-4 space-y-3">
+                                <li
+                                    v-for="(point, index) in article.points"
+                                    :key="point.title"
+                                    class="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                                >
+                                    <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-black text-indigo-700">
+                                        {{ index + 1 }}
+                                    </span>
+                                    <span>
+                                        <span class="block text-sm font-bold text-slate-900">{{ point.title }}</span>
+                                        <span class="mt-0.5 block text-sm leading-relaxed text-slate-600">{{ point.text }}</span>
+                                    </span>
+                                </li>
+                            </ol>
+
+                            <div v-if="article.tip" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                <strong>Tips:</strong> {{ article.tip }}
+                            </div>
+                        </article>
+                    </template>
+
+                    <!-- Panduan guru & admin -->
+                    <template v-else>
                         <!-- 1. MEMULAI & ALUR KERJA KUIS -->
                         <section
-                            v-show="activeSection === 'getting-started' || searchQuery.trim()"
+                            v-show="isTopicVisible('getting-started')"
                             id="getting-started"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -289,9 +466,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 2. EDITOR SOAL & TIPE PERTANYAAN -->
                         <section
-                            v-show="activeSection === 'question-editor' || searchQuery.trim()"
+                            v-show="isTopicVisible('question-editor')"
                             id="question-editor"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
@@ -344,9 +521,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 3. BAHASA ARAB & MUSHAF MADINAH -->
                         <section
-                            v-show="activeSection === 'arabic-quran' || searchQuery.trim()"
+                            v-show="isTopicVisible('arabic-quran')"
                             id="arabic-quran"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -434,9 +611,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 4. RUMUS MATEMATIKA (KATEX) -->
                         <section
-                            v-show="activeSection === 'math-katex' || searchQuery.trim()"
+                            v-show="isTopicVisible('math-katex')"
                             id="math-katex"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
@@ -501,9 +678,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 5. IMPORT SOAL EXAMVIEW (ZIP) -->
                         <section
-                            v-show="activeSection === 'examview-import' || searchQuery.trim()"
+                            v-show="isTopicVisible('examview-import')"
                             id="examview-import"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600">
@@ -529,9 +706,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 6. PENGAWASAN CBT & ANTI-CURANG -->
                         <section
-                            v-show="activeSection === 'proctoring-anti-cheat' || searchQuery.trim()"
+                            v-show="isTopicVisible('proctoring-anti-cheat')"
                             id="proctoring-anti-cheat"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-600">
@@ -563,9 +740,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 7. MANAJEMEN SISWA & KELAS -->
                         <section
-                            v-show="activeSection === 'students-cohort' || searchQuery.trim()"
+                            v-show="isTopicVisible('students-cohort')"
                             id="students-cohort"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
@@ -591,9 +768,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 8. REKAP NILAI & ANALISIS -->
                         <section
-                            v-show="activeSection === 'results-gradebook' || searchQuery.trim()"
+                            v-show="isTopicVisible('results-gradebook')"
                             id="results-gradebook"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
@@ -624,9 +801,9 @@ const filteredTopics = computed(() => {
 
                         <!-- 9. PENGATURAN PROFIL & AKUN -->
                         <section
-                            v-show="activeSection === 'profile-settings' || searchQuery.trim()"
+                            v-show="isTopicVisible('profile-settings')"
                             id="profile-settings"
-                            class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
@@ -651,9 +828,9 @@ const filteredTopics = computed(() => {
                                 </ul>
                             </div>
                         </section>
-                    </main>
-                </div>
+                    </template>
+                </section>
             </div>
-        </div>
-    </AppLayout>
+        </main>
+    </AlsenformLayout>
 </template>

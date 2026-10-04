@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\PendingMigrations;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
@@ -89,7 +90,16 @@ class OptimizeExamCommand extends Command
             $this->warn('⚠️  GD/WebP belum lengkap. Gambar mungkin tidak terkompresi maksimal.');
         }
 
-        // 4. Run Laravel Optimizations
+        // 4. Apply database migrations that came with the latest code
+        $pendingMigrations = app(PendingMigrations::class)->names();
+        if ($pendingMigrations !== []) {
+            $this->info('⚙️  Menerapkan '.count($pendingMigrations).' migrasi database baru...');
+            $this->call('migrate', ['--force' => true]);
+        } else {
+            $this->info('✓ Struktur database sudah sesuai versi aplikasi.');
+        }
+
+        // 5. Run Laravel Optimizations
         $this->info('⚙️  Mengompilasi cache konfigurasi, routing, dan view...');
         $this->callSilent('config:cache');
         $this->callSilent('route:cache');
@@ -97,7 +107,7 @@ class OptimizeExamCommand extends Command
         $this->callSilent('event:cache');
         $this->info('✓ Seluruh cache framework Laravel berhasil diperbarui ke memory.');
 
-        // 5. Ensure Vite assets are built
+        // 6. Ensure Vite assets are built
         if (! file_exists(public_path('build/manifest.json'))) {
             $this->info('⚙️  Membangun aset produksi Vite...');
             $process = new Process(['npm', 'run', 'build'], base_path());
