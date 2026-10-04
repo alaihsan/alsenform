@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\MediaUrl;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -205,6 +206,9 @@ class User extends Authenticatable
 
     /**
      * Get the public URL for the user's avatar.
+     *
+     * Uploaded avatars use a root-relative URL so they keep working when the
+     * server IP changes or the app is opened through an Expose tunnel.
      */
     public function getAvatarUrlAttribute(): ?string
     {
@@ -216,7 +220,7 @@ class User extends Authenticatable
             return $this->avatar;
         }
 
-        return asset('storage/'.$this->avatar);
+        return app(MediaUrl::class)->forPublicPath($this->avatar);
     }
 
     /**
