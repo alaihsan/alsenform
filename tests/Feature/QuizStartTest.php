@@ -4,7 +4,9 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -151,4 +153,22 @@ test('a plain survey without a time limit opens directly', function () {
             ->where('session.started_at', fn (?string $startedAt) => $startedAt !== null)
             ->where('examSummary.timeLimitMinutes', null)
         );
+});
+
+test('an exam still opens when the database was not migrated after an update', function () {
+    // Simulate a server where "php artisan migrate" was skipped: started_at is still required.
+    Schema::table('quiz_sessions', function (Blueprint $table) {
+        $table->timestamp('started_at')->nullable(false)->change();
+    });
+
+    $this->actingAs($this->student)
+        ->get(route('forms.public', $this->quizForm->slug))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('quizForm.questions', 3)
+            ->where('session.started_at', fn (?string $startedAt) => $startedAt !== null)
+            ->where('session.expires_at', fn (?string $expiresAt) => $expiresAt !== null)
+        );
+
+    expect(QuizSession::sole()->started_at)->not->toBeNull();
 });

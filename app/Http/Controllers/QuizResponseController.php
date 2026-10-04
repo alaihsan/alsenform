@@ -9,9 +9,12 @@ use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Models\User;
 use App\Support\MediaUrl;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -92,16 +95,7 @@ class QuizResponseController extends Controller
         $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
 
         if (! $quizSession) {
-            $now = now();
-            $quizSession = QuizSession::create([
-                'quiz_form_id' => $quizForm->id,
-                'user_id' => $user?->id,
-                'respondent_identifier' => $respondentIdentifier,
-                'started_at' => $requiresStartConfirmation ? null : $now,
-                'expires_at' => $requiresStartConfirmation || ! $timeLimitMinutes ? null : (clone $now)->addMinutes($timeLimitMinutes),
-                'is_locked' => false,
-                'session_token' => Str::random(40),
-            ]);
+            $quizSession = $this->openExamSession($quizForm, $user, $respondentIdentifier, $requiresStartConfirmation, $timeLimitMinutes);
         }
 
         // Until the exam has started the questions stay on the server, so they cannot be read
@@ -288,6 +282,48 @@ class QuizResponseController extends Controller
     /**
      * The exam session of a student (by account) or of an anonymous respondent (by identifier).
      */
+    /**
+     * Open a new exam session. An exam is created "not started" (no started_at) until the
+     * student confirms the rules. If the database was not migrated after an update (started_at
+     * still required), the exam starts right away as it used to, instead of failing with a 500.
+     */
+    protected function openExamSession(QuizForm $quizForm, ?User $user, string $respondentIdentifier, bool $deferStart, ?int $timeLimitMinutes): QuizSession
+    {
+        $attributes = [
+            'quiz_form_id' => $quizForm->id,
+            'user_id' => $user?->id,
+            'respondent_identifier' => $respondentIdentifier,
+            'is_locked' => false,
+            'session_token' => Str::random(40),
+        ];
+
+        $startNow = function () use ($attributes, $timeLimitMinutes): QuizSession {
+            $now = now();
+
+            return QuizSession::create($attributes + [
+                'started_at' => $now,
+                'expires_at' => $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null,
+            ]);
+        };
+
+        if (! $deferStart) {
+            return $startNow();
+        }
+
+        try {
+            // The transaction (a savepoint when nested) keeps the connection usable if the insert is rejected.
+            return DB::transaction(fn () => QuizSession::create($attributes + ['started_at' => null, 'expires_at' => null]));
+        } catch (QueryException $exception) {
+            if (! str_contains($exception->getMessage(), 'started_at')) {
+                throw $exception;
+            }
+
+            Log::warning('Database belum dimigrasi: jalankan "php artisan migrate --force". Sampai itu, timer ujian mulai saat halaman dibuka.');
+
+            return $startNow();
+        }
+    }
+
     /**
      * The questions as sent to respondents: answer keys removed, media URLs host independent.
      *

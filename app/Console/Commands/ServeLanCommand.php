@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\PendingMigrations;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
@@ -69,6 +70,8 @@ class ServeLanCommand extends Command
         if (! $this->databaseIsReachable()) {
             return self::FAILURE;
         }
+
+        $this->syncWithCurrentCode();
 
         if ($this->option('optimize')) {
             $this->call('exam:optimize');
@@ -263,6 +266,29 @@ class ServeLanCommand extends Command
     protected function infoFilePath(): string
     {
         return storage_path('framework/lan_server.json');
+    }
+
+    /**
+     * After "git pull" the database and Laravel's caches may still match the old code, which
+     * breaks pages that use a new column or route (HTTP 500). Bring both up to date first.
+     */
+    protected function syncWithCurrentCode(): void
+    {
+        $pendingMigrations = app(PendingMigrations::class)->names();
+        if ($pendingMigrations !== []) {
+            $this->info('⚙️  Menerapkan '.count($pendingMigrations).' migrasi database baru...');
+            $this->call('migrate', ['--force' => true]);
+        }
+
+        if ($this->laravel->routesAreCached()) {
+            $this->callSilent('route:cache');
+            $this->info('✓ Cache routing diperbarui sesuai kode terbaru.');
+        }
+
+        if ($this->laravel->configurationIsCached()) {
+            $this->callSilent('config:cache');
+            $this->info('✓ Cache konfigurasi diperbarui sesuai kode terbaru.');
+        }
     }
 
     /**
