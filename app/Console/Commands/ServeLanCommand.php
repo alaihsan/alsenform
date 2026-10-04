@@ -111,6 +111,7 @@ class ServeLanCommand extends Command
         $serverScript = base_path('server.php');
         $command = [
             PHP_BINARY,
+            ...$this->phpRuntimeOptions(),
             '-S',
             "{$host}:{$port}",
             $serverScript,
@@ -236,6 +237,22 @@ class ServeLanCommand extends Command
     }
 
     /**
+     * PHP settings of the LAN server: large enough for ExamView ZIP packages (64MB), question
+     * videos (40MB) and image processing, whatever the php.ini of the machine says.
+     *
+     * @return list<string>
+     */
+    protected function phpRuntimeOptions(): array
+    {
+        return [
+            '-d', 'upload_max_filesize=64M',
+            '-d', 'post_max_size=80M',
+            '-d', 'memory_limit=512M',
+            '-d', 'max_file_uploads=50',
+        ];
+    }
+
+    /**
      * Make sure the database (PostgreSQL) answers before students start the exam.
      */
     protected function databaseIsReachable(): bool
@@ -287,10 +304,12 @@ class ServeLanCommand extends Command
         $serverScript = escapeshellarg(base_path('server.php'));
         $useCaffeinate = ! $this->option('no-caffeinate') && file_exists('/usr/bin/caffeinate');
 
+        $runtimeOptions = implode(' ', array_map('escapeshellarg', $this->phpRuntimeOptions()));
+
         if ($useCaffeinate) {
-            $execCmd = "/usr/bin/caffeinate -dimsu {$phpBinary} -S {$host}:{$port} {$serverScript}";
+            $execCmd = "/usr/bin/caffeinate -dimsu {$phpBinary} {$runtimeOptions} -S {$host}:{$port} {$serverScript}";
         } else {
-            $execCmd = "{$phpBinary} -S {$host}:{$port} {$serverScript}";
+            $execCmd = "{$phpBinary} {$runtimeOptions} -S {$host}:{$port} {$serverScript}";
         }
 
         $applicationUrl = $this->applicationUrl($interfaces, $host, $port);

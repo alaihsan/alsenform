@@ -358,7 +358,8 @@ class QuizResponseController extends Controller
             $userAnswer = $userAnswers[$qid];
             $points = isset($q['points']) ? (int) $q['points'] : 1;
 
-            if ($correctAnswer === null || $correctAnswer === '') {
+            // No answer key (or an essay, which the teacher grades manually): nothing to score.
+            if ($correctAnswer === null || $correctAnswer === '' || $correctAnswer === [] || ($q['type'] ?? '') === 'Paragraph') {
                 continue;
             }
 
@@ -393,7 +394,7 @@ class QuizResponseController extends Controller
                     $totalScore += $points;
                 }
             } elseif ($type === 'Short answer') {
-                if (trim(mb_strtolower((string) $userAnswer)) === trim(mb_strtolower((string) $correctAnswer))) {
+                if (is_scalar($userAnswer) && $this->isShortAnswerCorrect((string) $userAnswer, (string) $correctAnswer)) {
                     $totalScore += $points;
                 }
             } elseif ($type === 'Multiple-choice grid') {
@@ -417,5 +418,60 @@ class QuizResponseController extends Controller
         }
 
         return $totalScore;
+    }
+
+    /**
+     * Check a short answer against its key.
+     *
+     * The key may list several accepted answers separated by "|" (e.g. "Jakarta | DKI Jakarta").
+     * Numbers are compared by value ("3,5" equals "3.50") and "min..max" accepts a numeric range.
+     */
+    protected function isShortAnswerCorrect(string $userAnswer, string $answerKey): bool
+    {
+        $normalize = fn (string $value): string => (string) preg_replace('/\s+/u', ' ', trim(mb_strtolower($value)));
+        $number = function (string $value): ?float {
+            $value = str_replace([' ', ','], ['', '.'], trim($value));
+
+            return is_numeric($value) ? (float) $value : null;
+        };
+
+        $given = $normalize($userAnswer);
+        if ($given === '') {
+            return false;
+        }
+
+        $givenNumber = $number($given);
+
+        foreach (explode('|', $answerKey) as $accepted) {
+            $accepted = $normalize($accepted);
+            if ($accepted === '') {
+                continue;
+            }
+
+            if (preg_match('/^(-?[\d.,]+)\s*\.\.\s*(-?[\d.,]+)$/', $accepted, $range) && $givenNumber !== null) {
+                $minimum = $number($range[1]);
+                $maximum = $number($range[2]);
+                if ($minimum !== null && $maximum !== null && $givenNumber >= min($minimum, $maximum) && $givenNumber <= max($minimum, $maximum)) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            $acceptedNumber = $number($accepted);
+            if ($givenNumber !== null && $acceptedNumber !== null) {
+                if (abs($givenNumber - $acceptedNumber) < 1e-9) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ($given === $accepted) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

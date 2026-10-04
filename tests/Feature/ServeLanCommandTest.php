@@ -113,3 +113,16 @@ test('lan:serve stops with a clear message when postgresql is not reachable', fu
         config(['database.default' => $defaultConnection]);
     }
 });
+
+test('lan:serve raises the php upload limits for examview zip packages and videos', function () {
+    $command = new class extends ServeLanCommand
+    {
+        public function options(): array
+        {
+            return $this->phpRuntimeOptions();
+        }
+    };
+
+    expect($command->options())->toContain('upload_max_filesize=64M')
+        ->toContain('post_max_size=80M');
+});

@@ -107,6 +107,7 @@ class ImageOptimizationService
                 'image/jpeg', 'image/jpg' => @imagecreatefromjpeg($path),
                 'image/png' => @imagecreatefrompng($path),
                 'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : null,
+                'image/bmp', 'image/x-ms-bmp', 'image/x-bmp' => function_exists('imagecreatefrombmp') ? @imagecreatefrombmp($path) : null,
                 default => null,
             };
 
