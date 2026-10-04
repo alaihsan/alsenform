@@ -11,13 +11,14 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
-    ChevronDown,
-    ChevronUp,
     Send,
     LayoutGrid,
     AlertCircle,
     Maximize2,
     ZoomIn,
+    ArrowLeftRight,
+    PanelLeftClose,
+    PanelRightClose,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import axios from 'axios';
@@ -669,11 +670,129 @@ const unansweredRequiredQuestions = computed<Question[]>(() => {
     return displayQuestions.value.filter((q) => q.required && !isQuestionAnswered(q));
 });
 
-const isQuestionMapOpen = ref(true);
+/*
+ * Floating question navigator. On wide screens it is docked beside the questions (left by default,
+ * movable to the right) and stays in view while scrolling; on small screens it opens as a drawer
+ * from a floating button. Side and open state are remembered on this device.
+ */
+const QUESTION_NAV_PREFERENCE_KEY = 'alsen_question_nav';
+const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 
-const isCurrentPageQuestion = (questionId: number): boolean => {
-    return currentPagedQuestions.value.some((q) => q.id === questionId);
+type QuestionNavSide = 'left' | 'right';
+
+const questionNavSide = ref<QuestionNavSide>('left');
+const isQuestionNavPinnedOpen = ref(true);
+const isQuestionDrawerOpen = ref(false);
+const isDesktopViewport = ref(true);
+const activeQuestionId = ref<number | null>(null);
+let desktopMediaQuery: MediaQueryList | null = null;
+let questionCardObserver: IntersectionObserver | null = null;
+
+const isQuestionNavAvailable = computed<boolean>(
+    () => !props.accessRestricted && !isSubmitted.value && displayQuestions.value.length > 0,
+);
+
+const isQuestionNavOpen = computed<boolean>(() =>
+    isDesktopViewport.value ? isQuestionNavPinnedOpen.value : isQuestionDrawerOpen.value,
+);
+
+const hasCountdownTimer = computed<boolean>(
+    () => Boolean(props.quizForm.settings.timeLimit && props.quizForm.settings.timeLimit > 0) && !isSubmitted.value,
+);
+
+/** Keep the docked navigator below the countdown timer, which sits in the top-right corner. */
+const questionNavTopClass = computed<string>(() =>
+    hasCountdownTimer.value && questionNavSide.value === 'right' ? 'lg:top-28' : 'lg:top-16',
+);
+
+const loadQuestionNavPreference = () => {
+    try {
+        const saved = JSON.parse(localStorage.getItem(QUESTION_NAV_PREFERENCE_KEY) || '{}');
+        if (saved.side === 'left' || saved.side === 'right') {
+            questionNavSide.value = saved.side;
+        }
+        if (typeof saved.open === 'boolean') {
+            isQuestionNavPinnedOpen.value = saved.open;
+        }
+    } catch {
+        // Storage can be unavailable (private mode, blocked site data); defaults are fine.
+    }
 };
+
+const saveQuestionNavPreference = () => {
+    try {
+        localStorage.setItem(
+            QUESTION_NAV_PREFERENCE_KEY,
+            JSON.stringify({ side: questionNavSide.value, open: isQuestionNavPinnedOpen.value }),
+        );
+    } catch {
+        // Not critical: the navigator simply starts with its defaults next time.
+    }
+};
+
+const setQuestionNavOpen = (open: boolean) => {
+    if (isDesktopViewport.value) {
+        isQuestionNavPinnedOpen.value = open;
+        saveQuestionNavPreference();
+        return;
+    }
+    isQuestionDrawerOpen.value = open;
+};
+
+const toggleQuestionNavSide = () => {
+    questionNavSide.value = questionNavSide.value === 'left' ? 'right' : 'left';
+    saveQuestionNavPreference();
+};
+
+const onViewportChange = (event: MediaQueryListEvent) => {
+    isDesktopViewport.value = event.matches;
+    isQuestionDrawerOpen.value = false;
+};
+
+const onQuestionNavKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && isQuestionDrawerOpen.value) {
+        isQuestionDrawerOpen.value = false;
+    }
+};
+
+/** Highlight the question the student is currently reading. */
+const observeQuestionCards = () => {
+    questionCardObserver?.disconnect();
+    if (typeof IntersectionObserver === 'undefined') {
+        return;
+    }
+
+    questionCardObserver = new IntersectionObserver(
+        (entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    activeQuestionId.value = Number((entry.target as HTMLElement).dataset.questionId);
+                }
+            }
+        },
+        { rootMargin: '-30% 0px -65% 0px' },
+    );
+
+    document.querySelectorAll<HTMLElement>('[data-question-id]').forEach((card) => questionCardObserver?.observe(card));
+};
+
+watch([currentPagedQuestions, isSubmitted], observeQuestionCards, { flush: 'post' });
+
+onMounted(() => {
+    loadQuestionNavPreference();
+    if (typeof window.matchMedia === 'function') {
+        desktopMediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
+        isDesktopViewport.value = desktopMediaQuery.matches;
+        desktopMediaQuery.addEventListener('change', onViewportChange);
+    }
+    window.addEventListener('keydown', onQuestionNavKeydown);
+});
+
+onUnmounted(() => {
+    desktopMediaQuery?.removeEventListener('change', onViewportChange);
+    window.removeEventListener('keydown', onQuestionNavKeydown);
+    questionCardObserver?.disconnect();
+});
 
 const getQuestionNumber = (questionId: number): number => {
     const idx = displayQuestions.value.findIndex((q) => q.id === questionId);
@@ -707,6 +826,9 @@ const goToQuestion = (questionId: number) => {
     if (isPaginated.value) {
         currentPage.value = Math.floor(idx / perPage.value) + 1;
     }
+
+    activeQuestionId.value = questionId;
+    isQuestionDrawerOpen.value = false;
 
     nextTick(() => {
         const el = document.getElementById(`question-card-${questionId}`);
@@ -1039,7 +1161,7 @@ const submitAnotherResponse = () => {
 
     <!-- Floating Countdown Timer -->
     <div
-        v-if="quizForm.settings.timeLimit && quizForm.settings.timeLimit > 0 && !isSubmitted"
+        v-if="hasCountdownTimer"
         class="fixed right-4 top-16 z-40 flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3 shadow-lg backdrop-blur-md transition-all sm:right-8 sm:top-8"
         :class="{ 'animate-pulse border-red-200 bg-red-50/80 text-red-600': timeRemaining < 60000 }"
     >
@@ -1063,6 +1185,8 @@ const submitAnotherResponse = () => {
             'min-h-screen px-4 py-8 text-slate-900 transition-all duration-300 sm:px-6',
             quizForm.settings.backgroundColorClass ?? 'bg-violet-50',
             quizForm.settings.backgroundPatternClass ?? 'pattern-none',
+            isQuestionNavAvailable ? 'pb-24 lg:pb-8' : '',
+            isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
     >
         <!-- Offline Intranet Warning Banner -->
@@ -1180,80 +1304,12 @@ const submitAnotherResponse = () => {
                 </label>
             </section>
 
-            <!-- Question Number Navigation Map (Peta Nomor Soal) -->
-            <section class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm">
-                <div class="flex items-center justify-between gap-3">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <LayoutGrid class="h-4 w-4 text-indigo-600 shrink-0" />
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Daftar Nomor Soal</span>
-                        <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
-                            {{ totalAnsweredCount }} / {{ totalQuestionsCount }} Terjawab
-                        </span>
-                        <span v-if="isPaginated" class="text-xs text-slate-400 font-medium hidden sm:inline">
-                            • Halaman {{ currentPage }} dari {{ totalPages }}
-                        </span>
-                    </div>
-                    <button
-                        type="button"
-                        class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition"
-                        @click="isQuestionMapOpen = !isQuestionMapOpen"
-                    >
-                        <span>{{ isQuestionMapOpen ? 'Sembunyikan' : 'Buka Peta Soal' }}</span>
-                        <ChevronUp v-if="isQuestionMapOpen" class="h-3.5 w-3.5" />
-                        <ChevronDown v-else class="h-3.5 w-3.5" />
-                    </button>
-                </div>
-
-                <!-- Number Grid -->
-                <div v-show="isQuestionMapOpen" class="mt-3 pt-3 border-t border-slate-100">
-                    <div class="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
-                        <button
-                            v-for="(q, idx) in displayQuestions"
-                            :key="q.id"
-                            type="button"
-                            :class="[
-                                'relative flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition-all shadow-sm',
-                                isCurrentPageQuestion(q.id) ? 'ring-2 ring-indigo-600 ring-offset-2 scale-105' : '',
-                                isQuestionAnswered(q)
-                                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
-                            ]"
-                            :title="`Soal ${idx + 1}: ${isQuestionAnswered(q) ? 'Sudah Dijawab' : (q.required ? 'Belum Dijawab (Wajib)' : 'Belum Dijawab')}`"
-                            @click="goToQuestion(q.id)"
-                        >
-                            <span>{{ idx + 1 }}</span>
-                            <!-- Dot indicator for unanswered required question -->
-                            <span
-                                v-if="q.required && !isQuestionAnswered(q)"
-                                class="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
-                            ></span>
-                        </button>
-                    </div>
-
-                    <div class="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="h-3 w-3 rounded-md bg-emerald-500"></span>
-                            <span>Sudah Dijawab</span>
-                        </span>
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="h-3 w-3 rounded-md bg-slate-200"></span>
-                            <span>Belum Dijawab</span>
-                        </span>
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="relative h-3 w-3 rounded-md bg-slate-200">
-                                <span class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500"></span>
-                            </span>
-                            <span>Wajib Diisi</span>
-                        </span>
-                    </div>
-                </div>
-            </section>
-
             <section class="mx-auto mt-5 max-w-3xl space-y-4">
                 <article
                     v-for="question in currentPagedQuestions"
                     :key="question.id"
                     :id="`question-card-${question.id}`"
+                    :data-question-id="question.id"
                     :class="[
                         'rounded-3xl border p-6 bg-white shadow-sm transition-all duration-300',
                         validationErrors[question.id] ? 'border-red-400 bg-red-50/5 ring-2 ring-red-100' : 'border-slate-200'
@@ -1580,6 +1636,138 @@ const submitAnotherResponse = () => {
         </template>
     </main>
 
+    <!-- Floating question navigator (Daftar Nomor Soal) -->
+    <template v-if="isQuestionNavAvailable">
+        <button
+            v-show="!isQuestionNavOpen"
+            type="button"
+            :class="[
+                'fixed bottom-4 z-40 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-3 text-xs font-bold text-slate-700 shadow-lg backdrop-blur transition hover:border-indigo-300 hover:text-indigo-700 lg:bottom-auto',
+                questionNavTopClass,
+                questionNavSide === 'left' ? 'left-4' : 'right-4',
+            ]"
+            :aria-expanded="false"
+            aria-controls="question-navigator"
+            title="Tampilkan daftar nomor soal"
+            @click="setQuestionNavOpen(true)"
+        >
+            <LayoutGrid class="h-4 w-4 text-indigo-600" />
+            <span>Nomor Soal</span>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 tabular-nums text-slate-600">{{ totalAnsweredCount }}/{{ totalQuestionsCount }}</span>
+        </button>
+
+        <div
+            v-if="isQuestionDrawerOpen && !isDesktopViewport"
+            class="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-[1px]"
+            @click="setQuestionNavOpen(false)"
+        ></div>
+
+        <aside
+            v-show="isQuestionNavOpen"
+            id="question-navigator"
+            aria-label="Daftar nomor soal"
+            :class="[
+                'fixed inset-y-0 z-[60] flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl lg:inset-y-auto lg:z-30 lg:max-h-[calc(100vh-8rem)] lg:w-64 lg:max-w-none lg:rounded-3xl lg:border lg:border-slate-200 lg:shadow-lg',
+                questionNavTopClass,
+                questionNavSide === 'left' ? 'left-0 rounded-r-3xl lg:left-4' : 'right-0 rounded-l-3xl lg:right-4',
+            ]"
+        >
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                <div class="flex min-w-0 items-center gap-2">
+                    <LayoutGrid class="h-4 w-4 shrink-0 text-indigo-600" />
+                    <span class="truncate text-xs font-bold uppercase tracking-wider text-slate-700">Nomor Soal</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button
+                        type="button"
+                        class="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700"
+                        :title="questionNavSide === 'left' ? 'Pindah ke kanan' : 'Pindah ke kiri'"
+                        :aria-label="questionNavSide === 'left' ? 'Pindah ke kanan' : 'Pindah ke kiri'"
+                        @click="toggleQuestionNavSide"
+                    >
+                        <ArrowLeftRight class="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700"
+                        title="Sembunyikan"
+                        aria-label="Sembunyikan daftar nomor soal"
+                        @click="setQuestionNavOpen(false)"
+                    >
+                        <PanelLeftClose v-if="questionNavSide === 'left'" class="h-4 w-4" />
+                        <PanelRightClose v-else class="h-4 w-4" />
+                    </button>
+                </div>
+            </div>
+
+            <div class="px-4 pt-3">
+                <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
+                    <span>{{ totalAnsweredCount }} dari {{ totalQuestionsCount }} terjawab</span>
+                    <span v-if="isPaginated" class="text-slate-400">Hal. {{ currentPage }}/{{ totalPages }}</span>
+                </div>
+                <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :class="totalAnsweredCount === totalQuestionsCount ? 'bg-emerald-500' : 'bg-indigo-600'"
+                        :style="{ width: `${(totalAnsweredCount / totalQuestionsCount) * 100}%` }"
+                    ></div>
+                </div>
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                <div class="grid grid-cols-5 gap-1.5 p-1">
+                    <button
+                        v-for="(q, idx) in displayQuestions"
+                        :key="q.id"
+                        type="button"
+                        :class="[
+                            'relative flex aspect-square w-full items-center justify-center rounded-xl text-xs font-bold tabular-nums transition',
+                            isQuestionAnswered(q)
+                                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                            activeQuestionId === q.id ? 'ring-2 ring-indigo-600' : '',
+                        ]"
+                        :title="`Soal ${idx + 1}: ${isQuestionAnswered(q) ? 'Sudah Dijawab' : (q.required ? 'Belum Dijawab (Wajib)' : 'Belum Dijawab')}`"
+                        :aria-current="activeQuestionId === q.id ? 'step' : undefined"
+                        @click="goToQuestion(q.id)"
+                    >
+                        <span>{{ idx + 1 }}</span>
+                        <span
+                            v-if="q.required && !isQuestionAnswered(q)"
+                            class="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"
+                        ></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-x-3 gap-y-1.5 border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500">
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="h-3 w-3 rounded-md bg-emerald-500"></span>
+                    <span>Dijawab</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="h-3 w-3 rounded-md bg-slate-200"></span>
+                    <span>Belum</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                    <span>Wajib</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="h-3 w-3 rounded-md ring-2 ring-inset ring-indigo-600"></span>
+                    <span>Sedang dibaca</span>
+                </span>
+            </div>
+        </aside>
+    </template>
+
+    <!-- Fullscreen Media Lightbox Modal with Zoom In/Out -->
+    <MediaLightboxModal
+        :show="!!activeLightboxMedia"
+        :media="activeLightboxMedia"
+        @close="activeLightboxMedia = null"
+    />
+
     <!-- Modal Konfirmasi Kirim Jawaban -->
     <div
         v-if="showSubmitConfirmModal"
@@ -1758,13 +1946,6 @@ const submitAnotherResponse = () => {
                 </div>
             </div>
         </section>
-
-        <!-- Fullscreen Media Lightbox Modal with Zoom In/Out -->
-        <MediaLightboxModal
-            :show="!!activeLightboxMedia"
-            :media="activeLightboxMedia"
-            @close="activeLightboxMedia = null"
-        />
     </div>
 </template>
 
