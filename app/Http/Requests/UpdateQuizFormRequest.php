@@ -78,6 +78,7 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'settings.questionsPerPage' => ['nullable'],
             'published' => ['nullable', 'boolean'],
+            'base_version' => ['nullable', 'string', 'max:64'],
             'cohort_ids' => ['nullable', 'array'],
             'cohort_ids.*' => ['integer', 'exists:cohorts,id'],
         ];

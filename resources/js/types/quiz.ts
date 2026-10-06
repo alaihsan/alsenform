@@ -37,6 +37,8 @@ export type QuizFormPayload = {
     slug: string;
     questions: Question[];
     isPublished?: boolean;
+    /** Fingerprint of the saved content; sent back with each save to detect outdated copies. */
+    version?: string;
     settings: {
         collectEmail: boolean;
         showProgress: boolean;

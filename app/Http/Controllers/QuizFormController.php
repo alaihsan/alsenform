@@ -14,6 +14,7 @@ use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -70,20 +71,37 @@ class QuizFormController extends Controller
     {
         $validated = $request->validated();
 
-        $quizForm->update([
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? '',
-            'slug' => $validated['slug'],
-            'questions' => $mediaUrl->normalizeQuestions($validated['questions']),
-            'settings' => $validated['settings'],
-            'published_at' => $request->boolean('published') ? ($quizForm->published_at ?? now()) : null,
-        ]);
+        $savedForm = DB::transaction(function () use ($request, $validated, $quizForm, $mediaUrl): ?QuizForm {
+            $current = QuizForm::query()->whereKey($quizForm->getKey())->lockForUpdate()->firstOrFail();
 
-        if ($request->has('cohort_ids')) {
-            $quizForm->cohorts()->sync($request->input('cohort_ids', []));
+            // An editor showing an older copy (another tab or device) must not overwrite newer questions.
+            if (isset($validated['base_version']) && $validated['base_version'] !== $current->contentVersion()) {
+                return null;
+            }
+
+            $current->update([
+                'title' => $validated['title'],
+                'description' => $validated['description'] ?? '',
+                'slug' => $validated['slug'],
+                'questions' => $mediaUrl->normalizeQuestions($validated['questions']),
+                'settings' => $validated['settings'],
+                'published_at' => $request->boolean('published') ? ($current->published_at ?? now()) : null,
+            ]);
+
+            if ($request->has('cohort_ids')) {
+                $current->cohorts()->sync($request->input('cohort_ids', []));
+            }
+
+            return $current;
+        });
+
+        if ($savedForm === null) {
+            return back()->withErrors([
+                'conflict' => 'Ujian ini sudah diubah dari tab, perangkat, atau akun lain setelah halaman ini dibuka. Perubahan di halaman ini belum disimpan agar soal terbaru tidak tertimpa. Muat ulang halaman untuk melihat versi terbaru.',
+            ]);
         }
 
-        return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
+        return to_route('forms.edit', ['quizForm' => $savedForm->slug]);
     }
 
     public function duplicate(QuizForm $quizForm, DuplicateQuizForm $duplicateQuizForm): RedirectResponse

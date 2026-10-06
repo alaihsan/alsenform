@@ -44,6 +44,7 @@ class QuizFormPayloads
             'slug' => $quizForm->slug,
             'questions' => $this->mediaUrl->normalizeQuestions($quizForm->questions),
             'settings' => $quizForm->settings,
+            'version' => $quizForm->contentVersion(),
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
