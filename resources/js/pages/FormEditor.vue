@@ -22,6 +22,7 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
 import {
+    AlertTriangle,
     AlignCenter,
     AlignLeft,
     AlignRight,
@@ -33,6 +34,7 @@ import {
     Eye,
     FileText,
     FileUp,
+    History,
     Image,
     Key,
     Link2,
@@ -208,6 +210,27 @@ watch(isImportModalOpen, (isOpen) => {
         importSummary.value = '';
     }
 });
+watch(importSource, () => {
+    importError.value = '';
+    importWarnings.value = [];
+    importSummary.value = '';
+});
+/** Values accepted after "Tipe:" in the Word import (see DocxImportService::TYPE_ALIASES). */
+const docxImportTypes = [
+    'Pilihan Ganda',
+    'Kotak Centang',
+    'Drop-down',
+    'Benar Salah',
+    'Isian Singkat',
+    'Uraian',
+    'Menjodohkan',
+    'Kisi Pilihan Ganda',
+    'Kisi Kotak Centang',
+    'Skala Linear',
+    'Rating',
+    'Tanggal',
+    'Waktu',
+];
 const page = usePage<any>();
 const currentUser = computed(() => page.props.auth?.user);
 const isCollaboratorModalOpen = ref(false);
@@ -498,9 +521,77 @@ const handleGenerateSlug = () => {
 
 const hasUnsavedChanges = ref(false);
 
-const saveDraft = (publishAfterSave = false, onComplete?: () => void) => {
-    if (!props.quizForm) {
+/**
+ * Edits not yet on the server are also kept in this browser, so a crash or a closed tab does not
+ * lose them. The copy remembers the server version it started from: it is put back automatically
+ * only while the server still has that version, so an old copy on this device can never replace
+ * questions made later on another device or tab.
+ */
+type LocalDraft = {
+    format: 2;
+    title: string;
+    description: string;
+    questions: Question[];
+    settings: typeof form.settings;
+    isPublished: boolean;
+    baseVersion: string | null;
+    savedAt: number;
+};
+
+const localDraftKey = props.quizForm ? `quiz_draft_${props.quizForm.id}` : null;
+// The server version the questions on screen descend from; sent with every save.
+const baseVersion = ref<string | null>(props.quizForm?.version ?? null);
+const saveConflict = ref('');
+const recoverableDraft = ref<{ draft: Partial<LocalDraft>; questionCount: number; savedAt: number | null } | null>(null);
+let editCount = 0;
+let isSaveInFlight = false;
+let queuedSave: { publishAfterSave: boolean; onComplete: (() => void)[]; onSaved: (() => void)[] } | null = null;
+
+const writeLocalDraft = () => {
+    if (!localDraftKey) {
+        return;
+    }
+    const draft: LocalDraft = {
+        format: 2,
+        title: form.title,
+        description: form.description,
+        questions: form.questions,
+        settings: form.settings,
+        isPublished: isPublished.value,
+        baseVersion: baseVersion.value,
+        savedAt: Date.now(),
+    };
+    try {
+        localStorage.setItem(localDraftKey, JSON.stringify(draft));
+    } catch {
+        // Storage full or blocked: the server copy is still saved.
+    }
+};
+
+const clearLocalDraft = () => {
+    if (!localDraftKey) {
+        return;
+    }
+    try {
+        localStorage.removeItem(localDraftKey);
+    } catch {
+        // Storage blocked.
+    }
+};
+
+const saveDraft = (publishAfterSave = false, onComplete?: () => void, onSaved?: () => void) => {
+    if (!props.quizForm || saveConflict.value) {
         onComplete?.();
+        return;
+    }
+
+    // One save at a time, so each save carries the version returned by the previous one.
+    if (isSaveInFlight) {
+        queuedSave = {
+            publishAfterSave: (queuedSave?.publishAfterSave ?? false) || publishAfterSave,
+            onComplete: [...(queuedSave?.onComplete ?? []), ...(onComplete ? [onComplete] : [])],
+            onSaved: [...(queuedSave?.onSaved ?? []), ...(onSaved ? [onSaved] : [])],
+        };
         return;
     }
 
@@ -509,7 +600,9 @@ const saveDraft = (publishAfterSave = false, onComplete?: () => void) => {
         publicSlug.value = 'untitled-form';
     }
     isSaving.value = true;
+    isSaveInFlight = true;
     slugWarning.value = '';
+    const savedEditCount = editCount;
 
     router.patch(
         props.quizForm.updateUrl,
@@ -521,29 +614,33 @@ const saveDraft = (publishAfterSave = false, onComplete?: () => void) => {
             settings: form.settings,
             published: isPublished.value,
             cohort_ids: selectedCohortIds.value,
+            base_version: baseVersion.value,
         },
         {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => {
-                hasUnsavedChanges.value = false;
+            onSuccess: (page) => {
+                baseVersion.value = (page.props as { quizForm?: QuizFormPayload }).quizForm?.version ?? baseVersion.value;
+                if (editCount === savedEditCount) {
+                    hasUnsavedChanges.value = false;
+                    clearLocalDraft();
+                } else {
+                    // Edits made while saving are still pending; keep them, now based on the new version.
+                    writeLocalDraft();
+                }
                 publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
                 markChanged('Semua perubahan disimpan');
                 showPublish.value = publishAfterSave;
-                // Update local storage in sync
-                localStorage.setItem(
-                    `quiz_draft_${props.quizForm.id}`,
-                    JSON.stringify({
-                        title: form.title,
-                        description: form.description,
-                        questions: form.questions,
-                        settings: form.settings,
-                        isPublished: isPublished.value,
-                    }),
-                );
+                onSaved?.();
                 onComplete?.();
             },
             onError: (errors) => {
+                if (errors.conflict) {
+                    saveConflict.value = errors.conflict;
+                    markChanged('Perubahan belum disimpan');
+                    onComplete?.();
+                    return;
+                }
                 slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
                 markChanged('Gagal menyimpan perubahan');
                 showPublish.value = true;
@@ -551,69 +648,73 @@ const saveDraft = (publishAfterSave = false, onComplete?: () => void) => {
             },
             onFinish: () => {
                 isSaving.value = false;
+                isSaveInFlight = false;
+                const next = queuedSave;
+                queuedSave = null;
+                if (next) {
+                    saveDraft(
+                        next.publishAfterSave,
+                        () => next.onComplete.forEach((callback) => callback()),
+                        () => next.onSaved.forEach((callback) => callback()),
+                    );
+                }
             },
         },
     );
 };
 
 const saveDraftAndCopy = () => {
-    if (!props.quizForm) {
+    saveDraft(false, undefined, () => {
+        markChanged('Draft saved');
+        copyShareUrl();
+    });
+};
+
+const applyDraft = (draft: Partial<LocalDraft>) => {
+    form.title = draft.title ?? form.title;
+    form.description = draft.description ?? form.description;
+    form.questions = Array.isArray(draft.questions) ? draft.questions : form.questions;
+    form.settings = draft.settings ?? form.settings;
+    if (draft.isPublished !== undefined) {
+        isPublished.value = draft.isPublished;
+    }
+    form.questions.forEach((question: Question) => normalizeCorrectAnswer(question));
+};
+
+// A copy offered for recovery is parked under its own key, so autosaves cannot overwrite it.
+const recoveryDraftKey = localDraftKey ? `${localDraftKey}_recovery` : null;
+
+const clearRecoveryDraft = () => {
+    recoverableDraft.value = null;
+    if (!recoveryDraftKey) {
         return;
     }
-
-    normalizePublicSlug();
-    if (!publicSlug.value) {
-        publicSlug.value = 'untitled-form';
+    try {
+        localStorage.removeItem(recoveryDraftKey);
+    } catch {
+        // Storage blocked.
     }
-    isSaving.value = true;
-    slugWarning.value = '';
+};
 
-    router.patch(
-        props.quizForm.updateUrl,
-        {
-            title: form.title,
-            description: form.description,
-            slug: publicSlug.value,
-            questions: form.questions,
-            settings: form.settings,
-            published: isPublished.value,
-            cohort_ids: selectedCohortIds.value,
-        },
-        {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                publicUrl.value = `${appOrigin.value}/forms/${publicSlug.value}`;
-                markChanged('Draft saved');
+/**
+ * Put back the copy kept on this device. It is saved over the server version like any edit.
+ */
+const restoreRecoverableDraft = () => {
+    const draft = recoverableDraft.value?.draft;
+    if (!draft) {
+        return;
+    }
+    applyDraft(draft);
+    clearRecoveryDraft();
+    triggerToast('Salinan dari perangkat ini dipulihkan dan sedang disimpan');
+};
 
-                // Copy to clipboard
-                copyShareUrl();
+const dismissRecoverableDraft = () => {
+    clearRecoveryDraft();
+};
 
-                // Close modal
-                showPublish.value = false;
-
-                // Sync local storage
-                localStorage.setItem(
-                    `quiz_draft_${props.quizForm.id}`,
-                    JSON.stringify({
-                        title: form.title,
-                        description: form.description,
-                        questions: form.questions,
-                        settings: form.settings,
-                        isPublished: isPublished.value,
-                    }),
-                );
-            },
-            onError: (errors) => {
-                slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
-                markChanged('Link needs attention');
-                showPublish.value = true;
-            },
-            onFinish: () => {
-                isSaving.value = false;
-            },
-        },
-    );
+const reloadLatestVersion = () => {
+    window.location.reload();
 };
 
 const addQuestion = (type: QuestionType = 'Multiple choice') => {
@@ -1066,8 +1167,8 @@ const handleDrop = (question: Question, event: DragEvent) => {
 
 const downloadImportTemplate = () => {
     const link = document.createElement('a');
-    link.href = '/templates/template_import_soal.docx';
-    link.download = 'template_import_soal.docx';
+    link.href = route('questions.import.template');
+    link.download = 'template_import_soal_alsenform.docx';
     link.click();
     markChanged('DOCX template downloaded');
 };
@@ -1082,6 +1183,8 @@ const handleImportDocxFile = async (event: Event) => {
 
     isImportingFile.value = true;
     importError.value = '';
+    importWarnings.value = [];
+    importSummary.value = '';
 
     const formData = new FormData();
     formData.append('file', file);
@@ -1128,9 +1231,17 @@ const handleImportDocxFile = async (event: Event) => {
                 activeQuestionId.value = question.id;
             });
 
-            isImportModalOpen.value = false;
             activeTab.value = 'questions';
             markChanged(`${importedQuestions.length} pertanyaan berhasil diimpor`);
+
+            // Keep the dialog open when some questions were not read exactly as written (unknown type, key, ...).
+            const warnings: string[] = Array.isArray(response.data.warnings) ? response.data.warnings : [];
+            if (warnings.length > 0) {
+                importWarnings.value = warnings;
+                importSummary.value = `${importedQuestions.length} soal berhasil diimpor. Periksa catatan berikut:`;
+            } else {
+                isImportModalOpen.value = false;
+            }
         } else {
             importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas.';
         }
@@ -1312,45 +1423,77 @@ const canRedo = computed(() => historyIndex.value < history.value.length - 1);
 const setStatus = (status: boolean) => {
     isPublished.value = status;
     showStatusMenu.value = false;
-    // Save to LocalStorage immediately
-    if (props.quizForm) {
-        localStorage.setItem(
-            `quiz_draft_${props.quizForm.id}`,
-            JSON.stringify({
-                title: form.title,
-                description: form.description,
-                questions: form.questions,
-                settings: form.settings,
-                isPublished: status,
-            }),
-        );
-    }
+    hasUnsavedChanges.value = true;
+    editCount++;
+    writeLocalDraft();
     // Save to server immediately
     saveDraft(false);
     triggerToast(status ? 'Quiz berhasil dipublikasikan' : 'Quiz diubah menjadi Draft');
 };
 
-// Check and restore LocalStorage draft on load
-onMounted(() => {
-    if (props.quizForm) {
-        const localData = localStorage.getItem(`quiz_draft_${props.quizForm.id}`);
-        if (localData) {
-            try {
-                const parsed = JSON.parse(localData);
-                form.title = parsed.title;
-                form.description = parsed.description;
-                form.questions = parsed.questions;
-                form.settings = parsed.settings;
-                if (parsed.isPublished !== undefined) {
-                    isPublished.value = parsed.isPublished;
-                }
-            } catch (e) {
-                console.error(e);
-            }
+const comparableContent = (content: Partial<LocalDraft>) =>
+    JSON.stringify([content.title, content.description, content.questions, content.settings, content.isPublished]);
+
+const readStoredDraft = (key: string | null): Partial<LocalDraft> | null => {
+    if (!key) {
+        return null;
+    }
+    try {
+        const draft = JSON.parse(localStorage.getItem(key) ?? 'null');
+
+        return draft && Array.isArray(draft.questions) ? draft : null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Edits left unsaved on this device (crash, closed tab) come back automatically while the server
+ * still has the version they were made on. Any other copy is only offered, never applied by itself.
+ */
+const checkLocalDraft = () => {
+    if (!localDraftKey || !recoveryDraftKey) {
+        return;
+    }
+
+    const serverContent = comparableContent({
+        title: form.title,
+        description: form.description,
+        questions: form.questions,
+        settings: form.settings,
+        isPublished: isPublished.value,
+    });
+    const draft = readStoredDraft(localDraftKey);
+    clearLocalDraft();
+
+    if (draft && comparableContent(draft) !== serverContent) {
+        if (draft.format === 2 && draft.baseVersion && draft.baseVersion === baseVersion.value) {
+            applyDraft(draft);
+            triggerToast('Perubahan yang belum tersimpan dipulihkan');
+
+            return;
+        }
+
+        try {
+            localStorage.setItem(recoveryDraftKey, JSON.stringify(draft));
+        } catch {
+            // Storage blocked: the copy is still offered on this page.
         }
     }
+
+    const recovery = readStoredDraft(recoveryDraftKey);
+    if (!recovery || comparableContent(recovery) === serverContent) {
+        clearRecoveryDraft();
+
+        return;
+    }
+    recoverableDraft.value = { draft: recovery, questionCount: recovery.questions?.length ?? 0, savedAt: recovery.savedAt ?? null };
+};
+
+onMounted(() => {
     // Convert legacy correct answers to indices for all loaded questions
     form.questions.forEach((q: Question) => normalizeCorrectAnswer(q));
+    checkLocalDraft();
 
     // Record initial state in undo stack
     recordHistory();
@@ -1383,26 +1526,14 @@ const leaveEditor = (leave: () => void) => {
 
 const navigateBackToDashboard = () => leaveEditor(() => router.visit(route('dashboard')));
 
-// Watch form changes (updates LocalStorage in real-time)
+// Watch form changes: keep unsaved edits in this browser until the server has them.
 watch(
     () => [form.title, form.description, form.questions, form.settings],
     () => {
         hasUnsavedChanges.value = true;
-        statusMessage.value = 'Menyimpan perubahan...';
-
-        // Save to LocalStorage immediately (real-time)
-        if (props.quizForm) {
-            localStorage.setItem(
-                `quiz_draft_${props.quizForm.id}`,
-                JSON.stringify({
-                    title: form.title,
-                    description: form.description,
-                    questions: form.questions,
-                    settings: form.settings,
-                    isPublished: isPublished.value,
-                }),
-            );
-        }
+        editCount++;
+        statusMessage.value = saveConflict.value ? 'Perubahan belum disimpan' : 'Menyimpan perubahan...';
+        writeLocalDraft();
 
         autoSave();
         debouncedRecordHistory();
@@ -1632,6 +1763,54 @@ watch(
             <input ref="examviewFileInput" type="file" accept=".zip" class="hidden" @change="handleImportExamViewFile" />
             <div class="space-y-4">
                 <p class="text-sm font-medium text-slate-500">{{ statusMessage }}</p>
+
+                <div
+                    v-if="saveConflict"
+                    role="alert"
+                    class="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 sm:flex-row sm:items-center"
+                >
+                    <AlertTriangle class="h-5 w-5 shrink-0 text-rose-600" />
+                    <p class="flex-1 font-medium">{{ saveConflict }}</p>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-rose-700"
+                        @click="reloadLatestVersion"
+                    >
+                        Muat Versi Terbaru
+                    </button>
+                </div>
+
+                <div
+                    v-if="recoverableDraft"
+                    role="alert"
+                    class="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center"
+                >
+                    <History class="h-5 w-5 shrink-0 text-amber-600" />
+                    <p class="flex-1">
+                        <span class="block font-bold">Perangkat ini menyimpan salinan lain dari ujian ini.</span>
+                        Salinan: {{ recoverableDraft.questionCount }} soal<span v-if="recoverableDraft.questionCount === form.questions.length">
+                            dengan isi berbeda</span
+                        ><span v-if="recoverableDraft.savedAt"> (disimpan {{ new Date(recoverableDraft.savedAt).toLocaleString('id-ID') }})</span>.
+                        Versi tersimpan yang tampil sekarang: {{ form.questions.length }} soal. Pulihkan salinan hanya jika soal di versi tersimpan
+                        hilang atau tidak lengkap.
+                    </p>
+                    <div class="flex shrink-0 gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
+                            @click="dismissRecoverableDraft"
+                        >
+                            Abaikan
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-amber-700"
+                            @click="restoreRecoverableDraft"
+                        >
+                            Pulihkan Salinan
+                        </button>
+                    </div>
+                </div>
 
                 <template v-if="activeTab === 'questions'">
                     <section class="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md">
@@ -3660,7 +3839,7 @@ watch(
         </div>
 
         <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <section class="w-full max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-2xl">
+            <section class="max-h-[92vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
                 <div class="flex items-center justify-between">
                     <h2 class="text-xl font-extrabold text-slate-900">Import Bank Soal</h2>
                     <button type="button" class="text-lg font-bold text-slate-400 transition hover:text-slate-600" @click="isImportModalOpen = false">
@@ -3753,8 +3932,8 @@ watch(
                 <!-- Word (.docx) Import Tab -->
                 <div v-else class="space-y-4">
                     <p class="text-sm leading-relaxed text-slate-500">
-                        Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di
-                        bawah ini.
+                        Unggah dokumen Word (.docx) berisi soal Anda. Templat di bawah memuat aturan penulisan dan contoh setiap tipe soal yang bisa
+                        langsung dicoba impor.
                     </p>
 
                     <!-- Clean style template download section -->
@@ -3765,7 +3944,7 @@ watch(
                             </div>
                             <div>
                                 <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
-                                <span class="block text-[11px] font-medium text-slate-500">Format: Soal, Opsi, Kunci</span>
+                                <span class="block text-[11px] font-medium text-slate-500">Aturan + contoh semua tipe soal</span>
                             </div>
                         </div>
                         <button
@@ -3778,6 +3957,44 @@ watch(
                         </button>
                     </div>
 
+                    <details class="group rounded-2xl border border-slate-200 bg-slate-50/60 text-xs text-slate-600">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-bold text-slate-800">
+                            Ringkasan aturan penulisan
+                            <ChevronDown class="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+                        </summary>
+                        <div class="space-y-3 border-t border-slate-200 px-4 pb-4 pt-3">
+                            <pre
+                                class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700"
+                            >
+1. Teks soal
+Tipe: Kotak Centang
+Poin: 10
+A. Pilihan pertama
+B. Pilihan kedua
+C. Pilihan ketiga
+Jawaban: A, C</pre
+                            >
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Setiap soal diakhiri baris <strong>Jawaban:</strong> (soal tanpa kunci: <code>Jawaban: -</code>).</li>
+                                <li>
+                                    <strong>Tipe:</strong> boleh tidak ditulis untuk Pilihan Ganda dan Isian Singkat. <strong>Poin:</strong>,
+                                    <strong>Wajib:</strong> dan <strong>Skala:</strong> opsional.
+                                </li>
+                                <li>Benar/Salah beberapa pernyataan, Menjodohkan dan Kisi ditulis dalam tabel Word.</li>
+                                <li>Hanya teks di bawah baris <strong>MULAI SOAL</strong> yang diimpor; baris diawali <code>//</code> diabaikan.</li>
+                            </ul>
+                            <div class="flex flex-wrap gap-1.5">
+                                <span
+                                    v-for="docxType in docxImportTypes"
+                                    :key="docxType"
+                                    class="rounded-full border border-indigo-100 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-700"
+                                >
+                                    {{ docxType }}
+                                </span>
+                            </div>
+                        </div>
+                    </details>
+
                     <!-- Import / Upload Box -->
                     <div class="space-y-3">
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Unggah Berkas DOCX</label>
@@ -3789,7 +4006,7 @@ watch(
                                 <UploadCloud class="h-6 w-6" />
                             </div>
                             <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
-                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .docx (maks. 5MB)</span>
+                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .docx (maks. 10MB)</span>
                         </div>
 
                         <div
@@ -3806,6 +4023,16 @@ watch(
                         >
                             <span class="font-extrabold">Gagal:</span>
                             <span>{{ importError }}</span>
+                        </div>
+
+                        <div
+                            v-if="importWarnings.length"
+                            class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900"
+                        >
+                            <span class="block font-extrabold">{{ importSummary }}</span>
+                            <ul class="max-h-48 list-inside list-disc space-y-1 overflow-y-auto font-medium">
+                                <li v-for="(warning, warningIndex) in importWarnings" :key="`docx-import-warning-${warningIndex}`">{{ warning }}</li>
+                            </ul>
                         </div>
                     </div>
                 </div>

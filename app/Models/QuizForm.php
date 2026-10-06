@@ -97,6 +97,23 @@ class QuizForm extends Model
         return $this->hasCollaborator($user);
     }
 
+    /**
+     * Fingerprint of the content the editor saves. The editor sends back the version it started
+     * from, so a save made from an outdated copy (another tab or device) cannot overwrite newer
+     * questions. Compare versions of models loaded from the database only.
+     */
+    public function contentVersion(): string
+    {
+        return sha1((string) json_encode([
+            $this->title,
+            $this->description,
+            $this->slug,
+            $this->questions,
+            $this->settings,
+            $this->published_at !== null,
+        ]));
+    }
+
     public function isRestrictedToCohorts(): bool
     {
         return $this->cohorts()->exists();
