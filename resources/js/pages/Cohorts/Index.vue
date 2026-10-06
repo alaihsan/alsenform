@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import {
     Users,
     UserPlus,
@@ -10,7 +10,6 @@ import {
     Pencil,
     Trash2,
     Check,
-    ArrowLeft,
     Sparkles,
     Shield,
     ShieldCheck,
@@ -25,7 +24,9 @@ import {
     ChevronRight,
     ClipboardList,
 } from 'lucide-vue-next';
+import { useFlashMessages } from '@/composables/useFlashMessages';
 import { useToast } from '@/composables/useToast';
+import SettingsLayout from '@/layouts/settings/Layout.vue';
 
 interface CohortItem {
     id: number;
@@ -73,19 +74,9 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const page = usePage();
-const currentUser = computed(() => (page.props.auth as any)?.user);
 
-const { toastMessage, showToast } = useToast(3000);
-
-// Flash message listener
-watch(
-    () => (page.props as any).flash?.success,
-    (msg) => {
-        if (msg) showToast(msg);
-    },
-    { immediate: true }
-);
+const { toastMessage, toastType, showToast } = useToast(3000);
+useFlashMessages(showToast);
 
 // Search & Filter
 const searchInput = ref(props.filters.search || '');
@@ -126,7 +117,6 @@ function submitCreateCohort(): void {
     createForm.post(route('cohorts.store'), {
         onSuccess: () => {
             isCreateModalOpen.value = false;
-            showToast(`Cohort '${createForm.name}' berhasil dibuat!`);
         },
     });
 }
@@ -154,7 +144,6 @@ function submitEditCohort(): void {
     editForm.put(route('cohorts.update', editingCohortId.value), {
         onSuccess: () => {
             isEditModalOpen.value = false;
-            showToast('Data Cohort berhasil diperbarui!');
         },
     });
 }
@@ -177,7 +166,6 @@ function confirmDelete(): void {
             isDeleting.value = false;
             isDeleteModalOpen.value = false;
             cohortToDelete.value = null;
-            showToast('Cohort berhasil dihapus.');
         },
     });
 }
@@ -201,7 +189,7 @@ function syncFromClasses(): void {
 <template>
     <Head title="Kelompok Belajar (Cohort) - AlsenForm" />
 
-    <div class="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white pb-16">
+    <SettingsLayout wide>
         <!-- Toast Notification -->
         <Transition
             enter-active-class="transform ease-out duration-300 transition"
@@ -215,70 +203,46 @@ function syncFromClasses(): void {
                 v-if="toastMessage"
                 class="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
             >
-                <div class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <Check class="h-4 w-4 stroke-[3]" />
+                <div class="flex h-7 w-7 items-center justify-center rounded-full" :class="toastType === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'">
+                    <X v-if="toastType === 'error'" class="h-4 w-4 stroke-[3]" />
+                    <Check v-else class="h-4 w-4 stroke-[3]" />
                 </div>
                 <span>{{ toastMessage }}</span>
             </div>
         </Transition>
 
-        <!-- Navbar Header -->
-        <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
-            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-                <div class="flex items-center gap-3">
-                    <Link
-                        :href="route('dashboard')"
-                        class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
-                        title="Kembali ke Dashboard"
-                    >
-                        <ArrowLeft class="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
-                                Kelompok Belajar (Cohort)
-                            </h1>
-                        </div>
-                        <p class="text-xs text-slate-500 hidden sm:block">
-                            Kelola kelompok siswa/rombel untuk memudahkan penugasan kuis secara massal
-                        </p>
-                    </div>
+        <!-- Page heading -->
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Cohort & Kelas</h2>
                 </div>
-
-                <div class="flex items-center gap-2 sm:gap-3">
-                    <Link
-                        v-if="currentUser?.is_admin"
-                        :href="route('users.index')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 shadow-sm"
-                    >
-                        <Users class="h-4 w-4 text-emerald-600" />
-                        <span class="hidden sm:inline">Pengaturan User</span>
-                        <span class="sm:hidden">User</span>
-                    </Link>
-                    <button
-                        type="button"
-                        @click="syncFromClasses"
-                        :disabled="isSyncing || availableClasses.length === 0"
-                        class="inline-flex items-center gap-2 rounded-xl border border-indigo-600/30 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-600/50 shadow-sm disabled:opacity-50"
-                        title="Buat cohort otomatis dari data kelas siswa di database"
-                    >
-                        <RefreshCw class="h-4 w-4 text-indigo-600" :class="{ 'animate-spin': isSyncing }" />
-                        <span class="hidden sm:inline">Sinkronkan dari Kelas</span>
-                        <span class="sm:hidden">Sinkron</span>
-                    </button>
-                    <button
-                        type="button"
-                        @click="openCreateModal"
-                        class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        <Plus class="h-4 w-4" />
-                        <span>Buat Cohort</span>
-                    </button>
-                </div>
+                <p class="mt-1 text-sm text-slate-500">Kelompokkan murid per rombel atau kelas untuk membagikan kuis sekaligus.</p>
             </div>
-        </header>
+        <div class="flex flex-wrap items-center gap-2">
+            <button
+                type="button"
+                @click="syncFromClasses"
+                :disabled="isSyncing || availableClasses.length === 0"
+                class="inline-flex items-center gap-2 rounded-xl border border-indigo-600/30 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-600/50 shadow-sm disabled:opacity-50"
+                title="Buat cohort otomatis dari data kelas siswa di database"
+            >
+                <RefreshCw class="h-4 w-4 text-indigo-600" :class="{ 'animate-spin': isSyncing }" />
+                <span class="hidden sm:inline">Sinkronkan dari Kelas</span>
+                <span class="sm:hidden">Sinkron</span>
+            </button>
+            <button
+                type="button"
+                @click="openCreateModal"
+                class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+                <Plus class="h-4 w-4" />
+                <span>Buat Cohort</span>
+            </button>
+        </div>
+        </div>
 
-        <main class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <div>
             <!-- Stat Cards -->
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 mb-6">
                 <!-- Total Cohort -->
@@ -458,7 +422,7 @@ function syncFromClasses(): void {
                     />
                 </div>
             </div>
-        </main>
+        </div>
 
         <!-- ============================================== -->
         <!-- MODAL: Buat Cohort Baru                        -->
@@ -676,5 +640,5 @@ function syncFromClasses(): void {
                 </div>
             </div>
         </div>
-    </div>
+    </SettingsLayout>
 </template>

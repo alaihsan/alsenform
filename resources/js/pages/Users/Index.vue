@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { useFlashMessages } from '@/composables/useFlashMessages';
 import { useToast } from '@/composables/useToast';
+import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
     AlertCircle,
-    ArrowLeft,
-    BookOpen,
     Check,
     CheckCircle2,
     ClipboardPaste,
@@ -30,7 +30,7 @@ import {
     Users,
     X,
 } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
 interface UserItem {
     id: number;
@@ -83,16 +83,8 @@ const props = defineProps<Props>();
 const page = usePage();
 const currentUser = computed(() => (page.props.auth as any)?.user);
 
-const { toastMessage, showToast } = useToast(3000);
-
-// Flash message listener
-watch(
-    () => (page.props as any).flash?.success,
-    (msg) => {
-        if (msg) showToast(msg);
-    },
-    { immediate: true },
-);
+const { toastMessage, toastType, showToast } = useToast(3000);
+useFlashMessages(showToast);
 
 // Filters & Search
 const searchInput = ref(props.filters.search || '');
@@ -182,7 +174,6 @@ function submitAddUser(): void {
     addForm.post(route('users.store'), {
         onSuccess: () => {
             isAddModalOpen.value = false;
-            showToast(`Akun ${addForm.name} berhasil ditambahkan!`);
         },
     });
 }
@@ -216,7 +207,6 @@ function submitEditUser(): void {
     editForm.put(route('users.update', editingUserId.value), {
         onSuccess: () => {
             isEditModalOpen.value = false;
-            showToast('Data pengguna berhasil diperbarui!');
         },
     });
 }
@@ -243,7 +233,6 @@ function submitChangeRole(): void {
             onFinish: () => {
                 isChangingRole.value = false;
                 isRoleModalOpen.value = false;
-                showToast(`Peran ${targetRoleUser.value?.name} berhasil diubah ke ${selectedNewRole.value.toUpperCase()}!`);
                 targetRoleUser.value = null;
             },
         },
@@ -268,7 +257,6 @@ function confirmDelete(): void {
             isDeleting.value = false;
             isDeleteModalOpen.value = false;
             userToDelete.value = null;
-            showToast('Pengguna berhasil dihapus.');
         },
     });
 }
@@ -318,7 +306,6 @@ function submitCustomPassword(): void {
             onFinish: () => {
                 isUpdatingPassword.value = false;
                 isPasswordModalOpen.value = false;
-                showToast(`Password pengguna '${userToManagePassword.value?.name}' berhasil diperbarui!`);
                 userToManagePassword.value = null;
             },
         },
@@ -335,7 +322,6 @@ function directResetToNisDefault(): void {
             onFinish: () => {
                 isUpdatingPassword.value = false;
                 isPasswordModalOpen.value = false;
-                showToast(`Password murid berhasil direset ke password default 6 digit NIS.`);
                 userToManagePassword.value = null;
             },
         },
@@ -457,7 +443,7 @@ async function executeImport(): Promise<void> {
 <template>
     <Head title="Pengaturan User - AlsenForm" />
 
-    <div class="min-h-screen bg-slate-50 pb-16 text-slate-900 selection:bg-emerald-500 selection:text-white">
+    <SettingsLayout wide>
         <!-- Toast Notification -->
         <Transition
             enter-active-class="transform ease-out duration-300 transition"
@@ -471,64 +457,44 @@ async function executeImport(): Promise<void> {
                 v-if="toastMessage"
                 class="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
             >
-                <div class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <Check class="h-4 w-4 stroke-[3]" />
+                <div class="flex h-7 w-7 items-center justify-center rounded-full" :class="toastType === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'">
+                    <X v-if="toastType === 'error'" class="h-4 w-4 stroke-[3]" />
+                    <Check v-else class="h-4 w-4 stroke-[3]" />
                 </div>
                 <span>{{ toastMessage }}</span>
             </div>
         </Transition>
 
-        <!-- Navbar Header -->
-        <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
-            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-                <div class="flex items-center gap-3">
-                    <Link
-                        :href="route('dashboard')"
-                        class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                        title="Kembali ke Dashboard"
-                    >
-                        <ArrowLeft class="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">Pengaturan User</h1>
-                            <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800"> Superadmin </span>
-                        </div>
-                        <p class="hidden text-xs text-slate-500 sm:block">Kelola peran Admin, Guru, dan Murid, ubah password, dan impor data murid</p>
-                    </div>
+        <!-- Page heading -->
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Pengguna</h2>
                 </div>
-
-                <div class="flex items-center gap-2 sm:gap-3">
-                    <Link
-                        :href="route('cohorts.index')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-indigo-600/30 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:border-indigo-600/50 hover:bg-indigo-100"
-                        title="Kelola Kelompok Belajar (Cohort)"
-                    >
-                        <BookOpen class="h-4 w-4 text-indigo-600" />
-                        <span>Cohort</span>
-                    </Link>
-                    <button
-                        type="button"
-                        @click="openImportModal"
-                        class="inline-flex items-center gap-2 rounded-xl border border-emerald-600/30 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:border-emerald-600/50 hover:bg-emerald-100"
-                    >
-                        <UploadCloud class="h-4 w-4 text-emerald-600" />
-                        <span class="hidden sm:inline">Impor Murid</span>
-                        <span class="sm:hidden">Impor</span>
-                    </button>
-                    <button
-                        type="button"
-                        @click="openAddModal"
-                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-                    >
-                        <UserPlus class="h-4 w-4" />
-                        <span>Tambah Pengguna</span>
-                    </button>
-                </div>
+                <p class="mt-1 text-sm text-slate-500">Kelola akun admin, guru, dan murid: peran, password, dan impor data murid.</p>
             </div>
-        </header>
+        <div class="flex flex-wrap items-center gap-2">
+            <button
+                type="button"
+                @click="openImportModal"
+                class="inline-flex items-center gap-2 rounded-xl border border-emerald-600/30 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:border-emerald-600/50 hover:bg-emerald-100"
+            >
+                <UploadCloud class="h-4 w-4 text-emerald-600" />
+                <span class="hidden sm:inline">Impor Murid</span>
+                <span class="sm:hidden">Impor</span>
+            </button>
+            <button
+                type="button"
+                @click="openAddModal"
+                class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-600/30 transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            >
+                <UserPlus class="h-4 w-4" />
+                <span>Tambah Pengguna</span>
+            </button>
+        </div>
+        </div>
 
-        <main class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <div>
             <!-- Stat Cards -->
             <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                 <!-- Total Users -->
@@ -879,7 +845,7 @@ async function executeImport(): Promise<void> {
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
 
         <!-- ============================================== -->
         <!-- MODAL: Tambah Pengguna Baru (Admin/Guru/Murid) -->
@@ -1650,5 +1616,5 @@ async function executeImport(): Promise<void> {
                 </div>
             </div>
         </div>
-    </div>
+    </SettingsLayout>
 </template>

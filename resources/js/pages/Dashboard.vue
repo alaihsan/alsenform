@@ -917,7 +917,7 @@ function closeDonationModal(): void {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem v-else-if="user?.role === 'guru'" :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
                                     <Link
-                                        :href="route('cohorts.index')"
+                                        :href="route('students.index')"
                                         class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
                                     >
                                         <div
@@ -986,20 +986,6 @@ function closeDonationModal(): void {
                             <Key class="h-4 w-4 text-slate-500" />
                             <span>Ubah Password</span>
                         </DropdownMenuItem>
-                        <template v-if="user?.is_admin || user?.role === 'guru'">
-                            <DropdownMenuItem v-if="user?.is_admin" :as-child="true">
-                                <Link :href="route('users.index')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
-                                    <Users class="h-4 w-4 text-slate-500" />
-                                    <span>Pengaturan User</span>
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem :as-child="true">
-                                <Link :href="route('cohorts.index')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
-                                    <BookOpen class="h-4 w-4 text-slate-500" />
-                                    <span>Cohort & Kelas</span>
-                                </Link>
-                            </DropdownMenuItem>
-                        </template>
                         <DropdownMenuItem :as-child="true">
                             <Link :href="route('help')" class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900">
                                 <HelpCircle class="h-4 w-4 text-slate-500" />
