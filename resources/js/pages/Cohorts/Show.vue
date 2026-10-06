@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import {
     Users,
     UserPlus,
@@ -20,7 +20,9 @@ import {
     AlertCircle,
     Plus,
 } from 'lucide-vue-next';
+import { useFlashMessages } from '@/composables/useFlashMessages';
 import { useToast } from '@/composables/useToast';
+import SettingsLayout from '@/layouts/settings/Layout.vue';
 
 interface StudentMember {
     id: number;
@@ -74,17 +76,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const page = usePage();
-const { toastMessage, showToast } = useToast(3000);
-
-// Flash message listener
-watch(
-    () => (page.props as any).flash?.success,
-    (msg) => {
-        if (msg) showToast(msg);
-    },
-    { immediate: true }
-);
+const { toastMessage, toastType, showToast } = useToast(3000);
+useFlashMessages(showToast);
 
 // Search & Filter
 const searchInput = ref(props.filters.search || '');
@@ -131,7 +124,6 @@ function submitAddClass(): void {
     addClassForm.post(route('cohorts.members.add', props.cohort.id), {
         onSuccess: () => {
             isAddClassModalOpen.value = false;
-            showToast(`Murid dari Kelas ${addClassForm.class_name} berhasil ditambahkan!`);
         },
     });
 }
@@ -154,7 +146,6 @@ function confirmRemove(): void {
             isRemoving.value = false;
             isRemoveModalOpen.value = false;
             memberToRemove.value = null;
-            showToast('Murid berhasil dikeluarkan dari cohort.');
         },
     });
 }
@@ -163,7 +154,7 @@ function confirmRemove(): void {
 <template>
     <Head :title="`Cohort ${cohort.name} - AlsenForm`" />
 
-    <div class="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white pb-16">
+    <SettingsLayout wide>
         <!-- Toast Notification -->
         <Transition
             enter-active-class="transform ease-out duration-300 transition"
@@ -177,54 +168,41 @@ function confirmRemove(): void {
                 v-if="toastMessage"
                 class="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
             >
-                <div class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white">
-                    <Check class="h-4 w-4 stroke-[3]" />
+                <div class="flex h-7 w-7 items-center justify-center rounded-full" :class="toastType === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white'">
+                    <X v-if="toastType === 'error'" class="h-4 w-4 stroke-[3]" />
+                    <Check v-else class="h-4 w-4 stroke-[3]" />
                 </div>
                 <span>{{ toastMessage }}</span>
             </div>
         </Transition>
 
-        <!-- Navbar Header -->
-        <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
-            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-                <div class="flex items-center gap-3">
-                    <Link
-                        :href="route('cohorts.index')"
-                        class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 shadow-sm"
-                        title="Kembali ke Daftar Cohort"
-                    >
-                        <ArrowLeft class="h-5 w-5" />
-                    </Link>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl truncate max-w-md">
-                                {{ cohort.name }}
-                            </h1>
-                            <span v-if="cohort.code" class="rounded-lg bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
-                                {{ cohort.code }}
-                            </span>
-                        </div>
-                        <p class="text-xs text-slate-500 hidden sm:block">
-                            {{ cohort.description || 'Kelola daftar murid anggota cohort ini' }}
-                        </p>
-                    </div>
+        <!-- Page heading -->
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div class="min-w-0">
+                <Link :href="route('cohorts.index')" class="mb-1 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800">
+                    <ArrowLeft class="h-3.5 w-3.5" />
+                    Semua Cohort
+                </Link>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">{{ cohort.name }}</h2>
+                    <span v-if="cohort.code" class="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700">{{ cohort.code }}</span>
                 </div>
-
-                <div class="flex items-center gap-2">
-                    <button
-                        v-if="allAvailableClasses.length > 0"
-                        type="button"
-                        @click="openAddClassModal"
-                        class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 hover:bg-indigo-700 transition"
-                    >
-                        <UserPlus class="h-4 w-4" />
-                        <span>Tambah dari Kelas</span>
-                    </button>
-                </div>
+                <p class="mt-1 text-sm text-slate-500">{{ cohort.description || 'Kelola daftar murid anggota cohort ini' }}</p>
             </div>
-        </header>
+        <div class="flex flex-wrap items-center gap-2">
+            <button
+                v-if="allAvailableClasses.length > 0"
+                type="button"
+                @click="openAddClassModal"
+                class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 hover:bg-indigo-700 transition"
+            >
+                <UserPlus class="h-4 w-4" />
+                <span>Tambah dari Kelas</span>
+            </button>
+        </div>
+        </div>
 
-        <main class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <div>
             <!-- Details Overview Banner -->
             <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs mb-6">
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -396,7 +374,7 @@ function confirmRemove(): void {
                     </div>
                 </div>
             </div>
-        </main>
+        </div>
 
         <!-- ============================================== -->
         <!-- MODAL: Tambah Murid dari Kelas                 -->
@@ -498,5 +476,5 @@ function confirmRemove(): void {
                 </div>
             </div>
         </div>
-    </div>
+    </SettingsLayout>
 </template>
