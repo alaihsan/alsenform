@@ -54,6 +54,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
         Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
         Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
+        Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
 

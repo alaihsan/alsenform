@@ -3,12 +3,29 @@
 namespace App\Http\Controllers;
 
 use App\Services\DocxImportService;
+use App\Services\DocxImportTemplate;
 use App\Services\ExamViewImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class QuestionImportController extends Controller
 {
+    /**
+     * Download the Word template that explains the import rules with an example of every question type.
+     */
+    public function template(DocxImportTemplate $template): BinaryFileResponse
+    {
+        $path = tempnam(sys_get_temp_dir(), 'alsenform-template');
+        $template->save($path);
+
+        return response()
+            ->download($path, $template->filename(), [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])
+            ->deleteFileAfterSend();
+    }
+
     /**
      * Parse uploaded .docx file and return parsed questions.
      */
@@ -25,6 +42,7 @@ class QuestionImportController extends Controller
                 'success' => true,
                 'total' => count($questions),
                 'questions' => $questions,
+                'warnings' => $service->warnings(),
             ]);
         } catch (\RuntimeException $e) {
             return response()->json([

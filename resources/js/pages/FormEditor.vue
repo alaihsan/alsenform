@@ -208,6 +208,27 @@ watch(isImportModalOpen, (isOpen) => {
         importSummary.value = '';
     }
 });
+watch(importSource, () => {
+    importError.value = '';
+    importWarnings.value = [];
+    importSummary.value = '';
+});
+/** Values accepted after "Tipe:" in the Word import (see DocxImportService::TYPE_ALIASES). */
+const docxImportTypes = [
+    'Pilihan Ganda',
+    'Kotak Centang',
+    'Drop-down',
+    'Benar Salah',
+    'Isian Singkat',
+    'Uraian',
+    'Menjodohkan',
+    'Kisi Pilihan Ganda',
+    'Kisi Kotak Centang',
+    'Skala Linear',
+    'Rating',
+    'Tanggal',
+    'Waktu',
+];
 const page = usePage<any>();
 const currentUser = computed(() => page.props.auth?.user);
 const isCollaboratorModalOpen = ref(false);
@@ -1066,8 +1087,8 @@ const handleDrop = (question: Question, event: DragEvent) => {
 
 const downloadImportTemplate = () => {
     const link = document.createElement('a');
-    link.href = '/templates/template_import_soal.docx';
-    link.download = 'template_import_soal.docx';
+    link.href = route('questions.import.template');
+    link.download = 'template_import_soal_alsenform.docx';
     link.click();
     markChanged('DOCX template downloaded');
 };
@@ -1082,6 +1103,8 @@ const handleImportDocxFile = async (event: Event) => {
 
     isImportingFile.value = true;
     importError.value = '';
+    importWarnings.value = [];
+    importSummary.value = '';
 
     const formData = new FormData();
     formData.append('file', file);
@@ -1128,9 +1151,17 @@ const handleImportDocxFile = async (event: Event) => {
                 activeQuestionId.value = question.id;
             });
 
-            isImportModalOpen.value = false;
             activeTab.value = 'questions';
             markChanged(`${importedQuestions.length} pertanyaan berhasil diimpor`);
+
+            // Keep the dialog open when some questions were not read exactly as written (unknown type, key, ...).
+            const warnings: string[] = Array.isArray(response.data.warnings) ? response.data.warnings : [];
+            if (warnings.length > 0) {
+                importWarnings.value = warnings;
+                importSummary.value = `${importedQuestions.length} soal berhasil diimpor. Periksa catatan berikut:`;
+            } else {
+                isImportModalOpen.value = false;
+            }
         } else {
             importError.value = 'Tidak ada pertanyaan valid yang ditemukan di dalam berkas.';
         }
@@ -3660,7 +3691,7 @@ watch(
         </div>
 
         <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <section class="w-full max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-2xl">
+            <section class="max-h-[92vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
                 <div class="flex items-center justify-between">
                     <h2 class="text-xl font-extrabold text-slate-900">Import Bank Soal</h2>
                     <button type="button" class="text-lg font-bold text-slate-400 transition hover:text-slate-600" @click="isImportModalOpen = false">
@@ -3753,8 +3784,8 @@ watch(
                 <!-- Word (.docx) Import Tab -->
                 <div v-else class="space-y-4">
                     <p class="text-sm leading-relaxed text-slate-500">
-                        Unggah dokumen Word (.docx) yang berisi daftar pertanyaan Anda. Untuk mempermudah impor, silakan gunakan templat resmi di
-                        bawah ini.
+                        Unggah dokumen Word (.docx) berisi soal Anda. Templat di bawah memuat aturan penulisan dan contoh setiap tipe soal yang bisa
+                        langsung dicoba impor.
                     </p>
 
                     <!-- Clean style template download section -->
@@ -3765,7 +3796,7 @@ watch(
                             </div>
                             <div>
                                 <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
-                                <span class="block text-[11px] font-medium text-slate-500">Format: Soal, Opsi, Kunci</span>
+                                <span class="block text-[11px] font-medium text-slate-500">Aturan + contoh semua tipe soal</span>
                             </div>
                         </div>
                         <button
@@ -3778,6 +3809,44 @@ watch(
                         </button>
                     </div>
 
+                    <details class="group rounded-2xl border border-slate-200 bg-slate-50/60 text-xs text-slate-600">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-bold text-slate-800">
+                            Ringkasan aturan penulisan
+                            <ChevronDown class="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+                        </summary>
+                        <div class="space-y-3 border-t border-slate-200 px-4 pb-4 pt-3">
+                            <pre
+                                class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700"
+                            >
+1. Teks soal
+Tipe: Kotak Centang
+Poin: 10
+A. Pilihan pertama
+B. Pilihan kedua
+C. Pilihan ketiga
+Jawaban: A, C</pre
+                            >
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Setiap soal diakhiri baris <strong>Jawaban:</strong> (soal tanpa kunci: <code>Jawaban: -</code>).</li>
+                                <li>
+                                    <strong>Tipe:</strong> boleh tidak ditulis untuk Pilihan Ganda dan Isian Singkat. <strong>Poin:</strong>,
+                                    <strong>Wajib:</strong> dan <strong>Skala:</strong> opsional.
+                                </li>
+                                <li>Benar/Salah beberapa pernyataan, Menjodohkan dan Kisi ditulis dalam tabel Word.</li>
+                                <li>Hanya teks di bawah baris <strong>MULAI SOAL</strong> yang diimpor; baris diawali <code>//</code> diabaikan.</li>
+                            </ul>
+                            <div class="flex flex-wrap gap-1.5">
+                                <span
+                                    v-for="docxType in docxImportTypes"
+                                    :key="docxType"
+                                    class="rounded-full border border-indigo-100 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-700"
+                                >
+                                    {{ docxType }}
+                                </span>
+                            </div>
+                        </div>
+                    </details>
+
                     <!-- Import / Upload Box -->
                     <div class="space-y-3">
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Unggah Berkas DOCX</label>
@@ -3789,7 +3858,7 @@ watch(
                                 <UploadCloud class="h-6 w-6" />
                             </div>
                             <span class="text-sm font-bold text-slate-800">Klik untuk memilih berkas</span>
-                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .docx (maks. 5MB)</span>
+                            <span class="mt-1 text-[11px] text-slate-500">Dukung file format .docx (maks. 10MB)</span>
                         </div>
 
                         <div
@@ -3806,6 +3875,16 @@ watch(
                         >
                             <span class="font-extrabold">Gagal:</span>
                             <span>{{ importError }}</span>
+                        </div>
+
+                        <div
+                            v-if="importWarnings.length"
+                            class="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900"
+                        >
+                            <span class="block font-extrabold">{{ importSummary }}</span>
+                            <ul class="max-h-48 list-inside list-disc space-y-1 overflow-y-auto font-medium">
+                                <li v-for="(warning, warningIndex) in importWarnings" :key="`docx-import-warning-${warningIndex}`">{{ warning }}</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
