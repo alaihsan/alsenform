@@ -69,7 +69,7 @@ class DocxImportTemplate
                 'key' => 'Huruf pilihan yang benar, atau teks pilihannya.',
                 'lines' => [
                     '1. Ibu kota negara Republik Indonesia adalah ...',
-                    'Poin: 10',
+                    'Poin: 1',
                     'Wajib: Ya',
                     'A. Surabaya', 'B. Jakarta', 'C. Bandung', 'D. Medan',
                     'Jawaban: B',
@@ -83,6 +83,7 @@ class DocxImportTemplate
                 'lines' => [
                     '2. Manakah yang termasuk bilangan prima? (jawaban boleh lebih dari satu)',
                     'Tipe: Kotak Centang',
+                    'Poin: 1',
                     'A. 2', 'B. 4', 'C. 5', 'D. 9',
                     'Jawaban: A, C',
                 ],
@@ -95,6 +96,7 @@ class DocxImportTemplate
                 'lines' => [
                     '3. Planet terbesar di tata surya kita adalah ...',
                     'Tipe: Drop-down',
+                    'Poin: 1',
                     'A. Mars', 'B. Bumi', 'C. Jupiter', 'D. Venus',
                     'Jawaban: C',
                 ],
@@ -107,6 +109,7 @@ class DocxImportTemplate
                 'lines' => [
                     '4. Matahari terbit dari arah barat.',
                     'Tipe: Benar Salah',
+                    'Poin: 1',
                     'Jawaban: Salah',
                 ],
             ],
@@ -117,6 +120,7 @@ class DocxImportTemplate
                 'key' => 'Jawaban benar. Beberapa jawaban yang diterima dipisah tanda |. Huruf besar/kecil tidak dibedakan.',
                 'lines' => [
                     '5. Sebutkan ibu kota Provinsi Jawa Barat!',
+                    'Poin: 1',
                     'Jawaban: Bandung | Kota Bandung',
                 ],
             ],
@@ -128,19 +132,19 @@ class DocxImportTemplate
                 'lines' => [
                     '6. Panjang meja hasil pengukuran adalah ... cm (toleransi 0,5 cm)',
                     'Tipe: Isian Singkat',
-                    'Poin: 5',
+                    'Poin: 1',
                     'Jawaban: 119.5..120.5',
                 ],
             ],
             [
                 'title' => 'Uraian / Esai',
                 'type' => 'Paragraph',
-                'summary' => 'Jawaban panjang yang dinilai guru, tidak dikoreksi otomatis.',
+                'summary' => 'Jawaban panjang yang dinilai guru. Tidak dikoreksi otomatis, jadi tidak dihitung dalam nilai 0–100.',
                 'key' => 'Contoh jawaban atau rubrik untuk guru dalam satu paragraf, atau "-" bila tidak ada.',
                 'lines' => [
                     '7. Jelaskan secara singkat proses terjadinya hujan!',
                     'Tipe: Uraian',
-                    'Poin: 20',
+                    'Poin: 1',
                     'Jawaban: Air menguap karena panas matahari, uap air mengembun menjadi awan, lalu jatuh kembali sebagai hujan.',
                 ],
             ],
@@ -153,6 +157,7 @@ class DocxImportTemplate
                 'lines' => [
                     '8. Tentukan Benar atau Salah setiap pernyataan berikut!',
                     'Tipe: Benar Salah',
+                    'Poin: 1',
                 ],
                 'table' => [
                     ['No', 'Pernyataan', 'Benar/Salah'],
@@ -171,6 +176,7 @@ class DocxImportTemplate
                 'lines' => [
                     '9. Pasangkan negara dengan ibu kotanya!',
                     'Tipe: Menjodohkan',
+                    'Poin: 1',
                 ],
                 'table' => [
                     ['No', 'Negara', 'Ibu Kota'],
@@ -189,6 +195,7 @@ class DocxImportTemplate
                 'lines' => [
                     '10. Kelompokkan hewan berikut sesuai golongannya!',
                     'Tipe: Kisi Pilihan Ganda',
+                    'Poin: 1',
                 ],
                 'table' => [
                     ['Hewan', 'Mamalia', 'Burung', 'Reptil'],
@@ -207,6 +214,7 @@ class DocxImportTemplate
                 'lines' => [
                     '11. Centang semua ciri yang dimiliki setiap hewan!',
                     'Tipe: Kisi Kotak Centang',
+                    'Poin: 1',
                 ],
                 'table' => [
                     ['Hewan', 'Berkaki empat', 'Menyusui', 'Bertelur'],
@@ -221,12 +229,12 @@ class DocxImportTemplate
                 'title' => 'Skala Linear',
                 'type' => 'Linear scale',
                 'summary' => 'Murid memilih angka pada skala, cocok untuk survei. Rentang diatur dengan "Skala:", dari 0 atau 1 sampai paling besar 10 (bawaan 1-5).',
-                'key' => '"-" untuk survei (tanpa kunci), atau angka yang dianggap benar.',
+                'key' => '"-" untuk survei (tanpa kunci, tidak dihitung dalam nilai), atau angka yang dianggap benar.',
                 'lines' => [
                     '12. Seberapa paham kamu dengan materi hari ini?',
                     'Tipe: Skala Linear',
+                    'Poin: 1',
                     'Skala: 1-5',
-                    'Poin: 0',
                     'Jawaban: -',
                 ],
             ],
@@ -238,8 +246,8 @@ class DocxImportTemplate
                 'lines' => [
                     '13. Beri nilai untuk cara guru menjelaskan materi.',
                     'Tipe: Rating',
+                    'Poin: 1',
                     'Skala: 1-5',
-                    'Poin: 0',
                     'Jawaban: -',
                 ],
             ],
@@ -251,6 +259,7 @@ class DocxImportTemplate
                 'lines' => [
                     '14. Kapan Proklamasi Kemerdekaan Indonesia dibacakan?',
                     'Tipe: Tanggal',
+                    'Poin: 1',
                     'Jawaban: 17-08-1945',
                 ],
             ],
@@ -262,6 +271,7 @@ class DocxImportTemplate
                 'lines' => [
                     '15. Pukul berapa upacara bendera hari Senin dimulai?',
                     'Tipe: Waktu',
+                    'Poin: 1',
                     'Jawaban: 07:00',
                 ],
             ],

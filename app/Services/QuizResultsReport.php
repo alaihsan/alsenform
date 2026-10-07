@@ -38,9 +38,10 @@ class QuizResultsReport
             ->values()
             ->all();
 
-        $maxScore = array_sum(array_map(fn (array $question) => $this->scoring->points($question), $questions));
+        // Only questions with an answer key can be earned, so a fully correct sheet is 100.
+        $maxScore = $this->scoring->maxPoints($questions);
         $kkm = $this->kkm($quizForm);
-        $students = $this->students($quizForm, $maxScore);
+        $students = $this->students($quizForm, $questions, $maxScore);
 
         (new XlsxWriter)
             ->addSheet('Rekap Nilai', ...$this->scoreSheet($quizForm, $students, $maxScore, $kkm))
@@ -189,17 +190,19 @@ class QuizResultsReport
     /**
      * The students who responded, sorted by class and name.
      *
+     * @param  list<array<string, mixed>>  $questions
      * @return Collection<int, array<string, mixed>>
      */
-    protected function students(QuizForm $quizForm, int $maxScore): Collection
+    protected function students(QuizForm $quizForm, array $questions, int $maxScore): Collection
     {
         $timezone = (string) config('app.display_timezone', config('app.timezone'));
 
         return $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->get(['id', 'quiz_form_id', 'user_id', 'email', 'score', 'is_timeout', 'answers', 'created_at'])
-            ->map(function (QuizResponse $response) use ($maxScore, $timezone): array {
-                $score = (int) ($response->score ?? 0);
+            ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone): array {
+                // Scored against the current answer keys, so a corrected key re-grades earlier answers.
+                $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
 
                 return [
                     'nis' => $response->user?->nis ?: '-',
@@ -207,7 +210,7 @@ class QuizResultsReport
                     'kelas' => $response->user?->kelas ?: '-',
                     'email' => $response->email ?: ($response->user?->email ?: '-'),
                     'score' => $score,
-                    'grade' => $maxScore > 0 ? round($score / $maxScore * 100, 1) : 0.0,
+                    'grade' => $this->scoring->grade($score, $maxScore),
                     'isTimeout' => (bool) $response->is_timeout,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
                     'answers' => is_array($response->answers) ? $response->answers : [],
@@ -324,7 +327,7 @@ class QuizResultsReport
 
     protected function decimal(float $value): string
     {
-        return rtrim(rtrim(number_format($value, 1, ',', '.'), '0'), ',');
+        return rtrim(rtrim(number_format($value, 2, ',', '.'), '0'), ',');
     }
 
     protected function now(): Carbon

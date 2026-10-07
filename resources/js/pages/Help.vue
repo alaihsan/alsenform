@@ -546,9 +546,18 @@ const selectTopic = (id: string) => {
                                 </div>
 
                                 <div class="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                                    <h4 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-2">Penetapan Skor & Poin</h4>
-                                    <p class="text-xs text-slate-600 leading-relaxed">
-                                        Setiap butir soal memiliki input bobot poin di pojok bawah kartu soal. Total akumulasi skor dari semua butir soal akan otomatis dikalkulasikan menjadi skala nilai 0-100 pada lembar hasil siswa.
+                                    <h4 class="mb-2 text-xs font-bold uppercase tracking-wider text-slate-800">Penetapan Skor & Poin</h4>
+                                    <p class="text-xs leading-relaxed text-slate-600">
+                                        Setiap soal bernilai <strong>1 poin</strong> secara bawaan dan dapat diganti angka lain per soal (atau lewat
+                                        Settings › Default quiz points). Nilai akhir murid selalu berada pada rentang <strong>0–100</strong>:
+                                    </p>
+                                    <p class="mt-2 rounded-xl bg-white px-3 py-2 text-center font-mono text-xs font-bold text-indigo-700">
+                                        Nilai = poin soal yang dijawab benar ÷ total poin soal berkunci jawaban × 100
+                                    </p>
+                                    <p class="mt-2 text-xs leading-relaxed text-slate-600">
+                                        Contoh: 20 soal masing-masing 1 poin, 15 benar → nilai 75. Soal uraian dan soal tanpa kunci jawaban (misalnya
+                                        survei) tidak ikut dihitung. Nilai dihitung ulang dari kunci terbaru, jadi kunci yang diperbaiki langsung
+                                        memperbarui nilai murid.
                                     </p>
                                 </div>
                             </div>

@@ -142,8 +142,8 @@ test('reporting: payloads include gradebook and maxScore summary', function () {
         'slug' => 'payload-test-quiz',
         'published_at' => now(),
         'questions' => [
-            ['id' => 1, 'title' => 'Soal 1', 'points' => 20],
-            ['id' => 2, 'title' => 'Soal 2', 'points' => 30],
+            ['id' => 1, 'title' => 'Soal 1', 'type' => 'Multiple choice', 'options' => ['Ans1', 'Lain'], 'answer' => 0, 'points' => 20],
+            ['id' => 2, 'title' => 'Soal 2', 'type' => 'Short answer', 'answer' => 'Ans2', 'points' => 30],
         ],
     ]);
 
@@ -171,4 +171,59 @@ test('reporting: payloads include gradebook and maxScore summary', function () {
         ->and($editorData['responses']['gradebook'][0]['percentage'])->toBe(100.0)
         ->and($editorData['responses']['gradebook'][0]['is_timeout'])->toBeFalse()
         ->and($editorData['exportResponsesUrl'])->toContain('responses/export');
+});
+
+test('reporting: the gradebook re-grades answers against the current answer key', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+    $student = User::factory()->create(['role' => 'siswa', 'nis' => '20240103']);
+    $quizForm = QuizForm::factory()->create([
+        'user_id' => $teacher->id,
+        'questions' => [
+            ['id' => 1, 'title' => 'Ibu kota?', 'type' => 'Multiple choice', 'options' => ['Bandung', 'Jakarta'], 'answer' => 0],
+            ['id' => 2, 'title' => '7 x 8', 'type' => 'Short answer', 'answer' => '56'],
+            ['id' => 3, 'title' => 'Jelaskan', 'type' => 'Paragraph', 'answer' => ''],
+        ],
+    ]);
+    // Scored 1 of 2 at submission, when the key of question 1 was wrong.
+    QuizResponse::create([
+        'quiz_form_id' => $quizForm->id,
+        'user_id' => $student->id,
+        'respondent_identifier' => 'user_'.$student->id,
+        'score' => 1,
+        'answers' => ['1' => 'Jakarta', '2' => '56', '3' => 'Uraian murid'],
+    ]);
+
+    $questions = $quizForm->questions;
+    $questions[0]['answer'] = 1;
+    $quizForm->update(['questions' => $questions]);
+
+    $gradebook = app(QuizFormPayloads::class)->responses($quizForm->refresh());
+
+    expect($gradebook['maxScore'])->toBe(2)
+        ->and($gradebook['gradebook'][0]['score'])->toBe(2)
+        ->and($gradebook['gradebook'][0]['percentage'])->toBe(100.0);
+});
+
+test('reporting: grid answers are summarised per row instead of breaking the editor', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+    $quizForm = QuizForm::factory()->create([
+        'user_id' => $teacher->id,
+        'questions' => [
+            ['id' => 1, 'title' => 'Ciri hewan', 'type' => 'Tick box grid', 'rows' => ['Kucing', 'Ayam'], 'columns' => ['Menyusui', 'Bertelur'], 'answer' => ['0' => [0], '1' => [1]]],
+            ['id' => 2, 'title' => 'Golongan', 'type' => 'Multiple-choice grid', 'rows' => ['Paus'], 'columns' => ['Mamalia', 'Ikan'], 'answer' => ['0' => 0]],
+        ],
+    ]);
+    QuizResponse::create([
+        'quiz_form_id' => $quizForm->id,
+        'respondent_identifier' => 'guest_grid',
+        'score' => 0,
+        'answers' => ['1' => ['0' => [0, 1], '1' => [1]], '2' => ['0' => 0]],
+    ]);
+
+    $this->actingAs($teacher)->get(route('forms.edit', ['quizForm' => $quizForm->slug]))->assertOk();
+
+    $summary = app(QuizFormPayloads::class)->responses($quizForm)['questions'];
+
+    expect(collect($summary[0]['options'])->pluck('label')->all())->toEqualCanonicalizing(['Kucing → Menyusui', 'Kucing → Bertelur', 'Ayam → Bertelur'])
+        ->and($summary[1]['options'][0]['label'])->toBe('Paus → Mamalia');
 });

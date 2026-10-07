@@ -54,7 +54,10 @@ const rules = [
 ];
 
 const optionalLines = [
-    { line: 'Poin: 5', text: 'Bobot nilai soal. Bawaan 10. Tulis 0 untuk soal survei yang tidak dinilai.' },
+    {
+        line: 'Poin: 1',
+        text: 'Bobot nilai soal. Bawaan 1; tulis angka lain (misalnya Poin: 2) untuk soal yang lebih berbobot. Nilai akhir murid tetap 0–100.',
+    },
     { line: 'Wajib: Ya', text: 'Soal harus dijawab sebelum jawaban bisa dikirim. Bawaan: tidak wajib.' },
     { line: 'Skala: 1-10', text: 'Rentang Skala Linear atau jumlah bintang Rating. Bawaan 1-5, paling besar 0-10.' },
 ];

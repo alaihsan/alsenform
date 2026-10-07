@@ -418,7 +418,8 @@ XML;
         'title' => 'Perhatikan gambar sel [Gambar 1]. Bagian yang bertanda X disebut ...',
         'options' => ['Mitokondria', 'Nukleus', 'Ribosom'],
         'answer' => 1,
-        'points' => 10,
+        // The pool gives no points, so the default weight of 1 applies.
+        'points' => 1,
     ])->and($mc['media'])->toHaveCount(1);
 
     expect($tf)->toMatchArray(['options' => ['Benar', 'Salah'], 'answer' => 0, 'title' => 'Kafé di Indonesia menjual kopi.']);

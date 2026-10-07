@@ -74,11 +74,16 @@ test('the grade recap lists students by class and name with grade, KKM result an
     $cells = reportCells($this->path, 1);
 
     expect($cells['A1'][0])->toBe('Rekap Nilai: PTS IPA Kelas X')
-        ->and($cells['A2'][0])->toContain('3 peserta')->toContain('KKM 70')->toContain('Tuntas 0 dari 3')
+        ->and($cells['A2'][0])->toContain('3 peserta')->toContain('KKM 70')->toContain('Tuntas 1 dari 3')
         ->and([$cells['C5'][0], $cells['C6'][0], $cells['C7'][0]])->toBe(['Budi', 'Ani', 'Zaki'])
-        // Zaki: 20 of 30 points = 66.7, below the teacher's KKM of 70
-        ->and($cells['H7'])->toBe(['66.7', 'decimal'])
-        ->and($cells['I7'])->toBe(['Belum Tuntas', 'fail'])
+        // The essay is graded by the teacher, so the grade is out of the 20 points with an answer key.
+        ->and($cells['G7'])->toBe(['20', 'integer'])
+        // Zaki: 20 of 20 points = 100
+        ->and($cells['H7'])->toBe(['100', 'decimal'])
+        ->and($cells['I7'])->toBe(['Tuntas', 'pass'])
+        // Ani: 10 of 20 points = 50, below the teacher's KKM of 70
+        ->and($cells['H6'])->toBe(['50', 'decimal'])
+        ->and($cells['I6'])->toBe(['Belum Tuntas', 'fail'])
         // 01:00 UTC is 08:00 WIB
         ->and((float) $cells['K7'][0])->toEqualWithDelta(46299 + 8 / 24, 0.0001);
 });

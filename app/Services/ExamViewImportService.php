@@ -31,7 +31,7 @@ class ExamViewImportService
     /**
      * Points used when the export does not define a score for a question.
      */
-    protected const DEFAULT_POINTS = 10;
+    protected const DEFAULT_POINTS = 1;
 
     /**
      * Question numbers start here so they never collide with questions already in the editor.

@@ -43,6 +43,36 @@ class QuizScoring
     }
 
     /**
+     * Points that can be earned automatically: every question with an answer key. Essays and
+     * questions without a key are left out, so a student who answers everything correctly gets 100.
+     *
+     * @param  array<int, mixed>  $questions
+     */
+    public function maxPoints(array $questions): int
+    {
+        $total = 0;
+        foreach ($questions as $question) {
+            if (is_array($question) && $this->isAutoScored($question)) {
+                $total += max(0, $this->points($question));
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * The grade on a 0–100 scale: points earned ÷ points that can be earned × 100, two decimals.
+     */
+    public function grade(int|float $points, int $maxPoints): float
+    {
+        if ($maxPoints <= 0) {
+            return 0.0;
+        }
+
+        return round(min(100, max(0, $points / $maxPoints * 100)), 2);
+    }
+
+    /**
      * Whether the question is scored automatically: it has an answer key and is not an essay
      * (which the teacher grades manually).
      *

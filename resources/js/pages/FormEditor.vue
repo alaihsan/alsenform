@@ -94,7 +94,7 @@ const form = reactive({
             answer: q.answer,
             required: Boolean(q.required),
             media: (q.media ?? []).map((m: any) => ({ type: m.type, url: m.url ?? '' })),
-            points: q.points ?? 10,
+            points: q.points ?? 1,
         })) ?? [
             {
                 id: 1,
@@ -105,7 +105,7 @@ const form = reactive({
                 answer: '',
                 required: Boolean(props.quizForm?.settings?.defaultQuestionRequired ?? false),
                 media: [],
-                points: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
+                points: props.quizForm?.settings?.defaultQuestionPoints ?? 1,
             },
         ]),
     ] as Question[],
@@ -124,7 +124,7 @@ const form = reactive({
         disableRespondentAutosave: props.quizForm?.settings?.disableRespondentAutosave ?? false,
         defaultCollectEmailMode: props.quizForm?.settings?.defaultCollectEmailMode ?? 'none',
         defaultQuestionRequired: props.quizForm?.settings?.defaultQuestionRequired ?? false,
-        defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
+        defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 1,
         maxUploadSize: Math.min(props.quizForm?.settings?.maxUploadSize ?? 20, 40),
         questionFont: props.quizForm?.settings?.questionFont ?? "'Inter', sans-serif",
         answerFont: props.quizForm?.settings?.answerFont ?? "'Inter', sans-serif",
@@ -730,7 +730,7 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         answer: gridQuestionTypes.includes(type) ? {} : type === 'Checkboxes' ? [] : '',
         required: false,
         media: [],
-        points: 10,
+        points: form.settings.defaultQuestionPoints ?? 1,
     };
 
     form.questions.push(question);
@@ -764,7 +764,7 @@ const duplicateQuestion = (question: Question) => {
                     : JSON.parse(JSON.stringify(question.answer))
                 : question.answer,
         media: (question.media ?? []).map((m) => ({ ...m })),
-        points: question.points ?? 10,
+        points: question.points ?? 1,
     };
 
     const index = form.questions.findIndex((item) => item.id === question.id);
@@ -867,10 +867,13 @@ const normalizeCorrectAnswer = (question: Question) => {
     }
 
     if (!optionQuestionTypes.includes(question.type)) {
-        if (['Linear scale', 'Rating', 'Date', 'Time'].includes(question.type)) {
-            return;
+        // Text keys (short answer, essay rubric, scale value, date, time) are kept, so an imported
+        // "Bandung | Kota Bandung" survives opening the editor. Changing the type clears the key.
+        if (typeof question.answer === 'number') {
+            question.answer = String(question.answer);
+        } else if (typeof question.answer !== 'string') {
+            question.answer = '';
         }
-        question.answer = '';
         return;
     }
 
@@ -1226,7 +1229,7 @@ const handleImportDocxFile = async (event: Event) => {
                     answer: answerVal,
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
-                    points: q.points ?? 10,
+                    points: q.points ?? 1,
                 };
                 form.questions.push(question);
                 activeQuestionId.value = question.id;
@@ -1296,7 +1299,7 @@ const handleImportExamViewFile = async (event: Event) => {
                             : q.answer,
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
-                    points: q.points ?? 10,
+                    points: q.points ?? 1,
                 };
                 form.questions.push(question);
                 activeQuestionId.value = question.id;
@@ -2995,7 +2998,7 @@ watch(
                                         >
                                             {{ item.percentage }}
                                         </span>
-                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ maxScore }}</p>
+                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ maxScore }} poin</p>
                                         <p :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']">
                                             {{ item.is_timeout ? 'Timeout' : 'Selesai' }}
                                         </p>
@@ -3020,8 +3023,8 @@ watch(
                                             <th class="px-4 py-3">NIS</th>
                                             <th class="px-4 py-3">Nama Siswa</th>
                                             <th class="px-4 py-3">Kelas / Cohort</th>
-                                            <th class="px-4 py-3 text-center">Skor Poin</th>
-                                            <th class="px-4 py-3 text-center">Nilai (100)</th>
+                                            <th class="px-4 py-3 text-center">Poin Benar</th>
+                                            <th class="px-4 py-3 text-center" title="Poin benar ÷ total poin soal berkunci × 100">Nilai (0-100)</th>
                                             <th class="px-4 py-3">Status</th>
                                             <th class="px-4 py-3">Waktu Selesai</th>
                                         </tr>
@@ -4048,7 +4051,7 @@ watch(
                             >
 1. Teks soal
 Tipe: Kotak Centang
-Poin: 10
+Poin: 1
 A. Pilihan pertama
 B. Pilihan kedua
 C. Pilihan ketiga

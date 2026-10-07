@@ -78,6 +78,9 @@ test('students cannot download the Word template', function () {
 test('the template imports one sample of every question type', function () {
     $questions = templateQuestions();
 
+    // Every sample carries "Poin: 1", the default weight.
+    expect(array_unique(array_column($questions, 'points')))->toBe([1]);
+
     expect(array_column($questions, 'type'))->toBe([
         'Multiple choice', 'Checkboxes', 'Drop-down', 'Multiple choice', 'Short answer', 'Short answer', 'Paragraph',
         'Multiple-choice grid', 'Multiple-choice grid', 'Multiple-choice grid', 'Tick box grid',
@@ -86,20 +89,20 @@ test('the template imports one sample of every question type', function () {
 
     [$choice, $checkboxes, $dropDown, $trueFalse, $shortAnswer, $range, $essay, $trueFalseTable, $matching, $grid, $tickGrid, $scale, $rating, $date, $time] = $questions;
 
-    expect($choice)->toMatchArray(['title' => 'Ibu kota negara Republik Indonesia adalah ...', 'options' => ['Surabaya', 'Jakarta', 'Bandung', 'Medan'], 'answer' => 1, 'points' => 10, 'required' => true])
+    expect($choice)->toMatchArray(['title' => 'Ibu kota negara Republik Indonesia adalah ...', 'options' => ['Surabaya', 'Jakarta', 'Bandung', 'Medan'], 'answer' => 1, 'points' => 1, 'required' => true])
         ->and($checkboxes)->toMatchArray(['options' => ['2', '4', '5', '9'], 'answer' => [0, 2], 'required' => false])
         ->and($dropDown['answer'])->toBe(2)
         ->and($trueFalse)->toMatchArray(['options' => ['Benar', 'Salah'], 'answer' => 1])
         ->and($shortAnswer['answer'])->toBe('Bandung | Kota Bandung')
-        ->and($range)->toMatchArray(['answer' => '119.5..120.5', 'points' => 5])
-        ->and($essay)->toMatchArray(['points' => 20])
+        ->and($range)->toMatchArray(['answer' => '119.5..120.5', 'points' => 1])
+        ->and($essay)->toMatchArray(['type' => 'Paragraph', 'points' => 1])
         ->and($trueFalseTable)->toMatchArray(['columns' => ['Benar', 'Salah'], 'answer' => [0, 1, 0]])
         ->and($trueFalseTable['rows'])->toHaveCount(3)
         ->and($matching)->toMatchArray(['rows' => ['1. Jepang', '2. Prancis', '3. Mesir'], 'columns' => ['A. Paris', 'B. Kairo', 'C. Tokyo'], 'answer' => [2, 0, 1]])
         ->and($grid)->toMatchArray(['rows' => ['Paus', 'Elang', 'Kadal'], 'columns' => ['Mamalia', 'Burung', 'Reptil'], 'answer' => [0, 1, 2]])
         ->and($tickGrid)->toMatchArray(['columns' => ['Berkaki empat', 'Menyusui', 'Bertelur'], 'answer' => [[0, 1], [2], [0, 1]]])
-        ->and($scale)->toMatchArray(['options' => ['1', '2', '3', '4', '5'], 'answer' => '', 'points' => 0])
-        ->and($rating)->toMatchArray(['options' => ['1', '2', '3', '4', '5'], 'answer' => '', 'points' => 0])
+        ->and($scale)->toMatchArray(['options' => ['1', '2', '3', '4', '5'], 'answer' => '', 'points' => 1])
+        ->and($rating)->toMatchArray(['options' => ['1', '2', '3', '4', '5'], 'answer' => '', 'points' => 1])
         ->and($date['answer'])->toBe('1945-08-17')
         ->and($time['answer'])->toBe('07:00');
 
@@ -136,7 +139,11 @@ test('the answer keys of the template score the answers students give', function
     expect($scoring->isCorrect($questions[1], ['2', '4']))->toBeFalse()
         ->and($scoring->isCorrect($questions[6], 'jawaban esai'))->toBeNull()
         ->and($scoring->isCorrect($questions[11], '4'))->toBeNull()
-        ->and($scoring->score($questions, $correctAnswers))->toBe(10 * 11 + 5);
+        ->and($scoring->score($questions, $correctAnswers))->toBe(12)
+        // 12 questions have a key (the essay and the two survey questions do not), each worth 1 point.
+        ->and($scoring->maxPoints($questions))->toBe(12)
+        ->and($scoring->grade($scoring->score($questions, $correctAnswers), $scoring->maxPoints($questions)))->toBe(100.0)
+        ->and($scoring->grade($scoring->score($questions, array_slice($correctAnswers, 0, 9, true)), $scoring->maxPoints($questions)))->toBe(75.0);
 });
 
 test('the type, points and required lines accept common spellings', function () {
@@ -175,7 +182,7 @@ test('the type, points and required lines accept common spellings', function () 
         ->and($questions[1])->toMatchArray(['type' => 'Paragraph', 'answer' => ''])
         ->and($questions[2])->toMatchArray(['type' => 'Linear scale', 'options' => array_map('strval', range(0, 10))])
         ->and($questions[3])->toMatchArray(['type' => 'Multiple choice', 'options' => ['Benar', 'Salah'], 'answer' => 0])
-        ->and($questions[4])->toMatchArray(['type' => 'Short answer', 'answer' => 'merah putih', 'points' => 10, 'required' => false])
+        ->and($questions[4])->toMatchArray(['type' => 'Short answer', 'answer' => 'merah putih', 'points' => 1, 'required' => false])
         ->and($questions[5])->toMatchArray(['type' => 'Short answer', 'title' => "Jarak dua kota pada peta 4 cm. Berapa jarak sebenarnya?\nSkala: 1:100.000"]);
 });
 

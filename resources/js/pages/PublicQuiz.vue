@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import {
+    Check,
     Star,
     Lock,
     Clock,
@@ -1043,6 +1044,21 @@ const isCheckboxChecked = (questionId: number, option: string) => {
     return Array.isArray(answers.value[questionId]) && answers.value[questionId].includes(option);
 };
 
+const isOptionSelected = (question: Question, option: string): boolean =>
+    question.type === 'Checkboxes' ? isCheckboxChecked(question.id, option) : answers.value[question.id] === option;
+
+const isGridCellSelected = (question: Question, rowIndex: number, colIndex: number): boolean => {
+    const rowAnswer = answers.value[question.id]?.[rowIndex];
+
+    return question.type === 'Tick box grid' ? Array.isArray(rowAnswer) && rowAnswer.includes(colIndex) : rowAnswer === colIndex;
+};
+
+/** Letters shown before the choices, in the order they appear. */
+const optionLetter = (index: number): string => String.fromCharCode(65 + index);
+
+/** Teachers often type "1." before a question; the card already shows "Soal 1", so the typed number is dropped. */
+const questionText = (title: string): string => (title ?? '').replace(/^\s*\d{1,3}\s*[.)]\s+/, '');
+
 const validationErrors = ref<Record<number, string>>({});
 
 const validateForm = (): boolean => {
@@ -1282,20 +1298,22 @@ const submitAnotherResponse = () => {
 <template>
     <Head :title="quizForm.title" />
 
-    <!-- Floating Countdown Timer -->
+    <!-- Countdown timer: a slim bar across the top on phones, a floating card on larger screens -->
     <div
         v-if="hasCountdownTimer"
-        class="fixed right-3 top-3 z-40 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md transition-all sm:right-8 sm:top-8 sm:gap-3 sm:bg-white/70 sm:px-4 sm:py-3"
-        :class="{ 'animate-pulse border-red-200 bg-red-50/80 text-red-600': timeRemaining < 60000 }"
+        role="timer"
+        aria-label="Sisa waktu ujian"
+        class="fixed inset-x-0 top-0 z-40 flex h-12 items-center justify-center gap-2 border-b border-slate-200/80 bg-white/95 px-4 shadow-sm backdrop-blur-md transition-all sm:inset-x-auto sm:right-8 sm:top-8 sm:h-auto sm:gap-3 sm:rounded-2xl sm:border sm:bg-white/70 sm:px-4 sm:py-3 sm:shadow-lg"
+        :class="{ 'animate-pulse border-red-200 bg-red-50/90 text-red-600': timeRemaining < 60000 }"
     >
         <Clock class="h-5 w-5" :class="{ 'text-red-500 animate-spin': timeRemaining < 60000, 'text-indigo-600': timeRemaining >= 60000 }" />
-        <div>
+        <div class="flex items-baseline gap-2 sm:block">
             <span
-                class="hidden text-[10px] font-extrabold uppercase tracking-wider text-slate-400 sm:block"
+                class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 sm:block sm:text-[10px]"
                 :class="{ 'text-red-400': timeRemaining < 60000 }"
                 >Sisa Waktu</span
             >
-            <span class="block font-mono text-base font-black leading-none sm:text-lg" aria-label="Sisa waktu">{{ formattedTime }}</span>
+            <span class="font-mono text-base font-black leading-none sm:block sm:text-lg">{{ formattedTime }}</span>
         </div>
     </div>
 
@@ -1313,8 +1331,8 @@ const submitAnotherResponse = () => {
             quizForm.settings.backgroundColorClass ?? 'bg-violet-50',
             quizForm.settings.backgroundPatternClass ?? 'pattern-none',
             isQuestionNavAvailable ? 'pb-24 lg:pb-8' : '',
-            // Room for the timer pill, so it does not cover the exam title on phones.
-            hasCountdownTimer ? 'pt-14 sm:pt-8' : '',
+            // Room for the timer bar across the top on phones.
+            hasCountdownTimer ? 'pt-16 sm:pt-8' : '',
             isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
     >
@@ -1388,7 +1406,7 @@ const submitAnotherResponse = () => {
         <template v-else>
             <section class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
                 <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
-                <div class="p-6 sm:p-8">
+                <div class="p-5 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="flex-1">
                             <div v-if="isPaginated" class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
@@ -1460,8 +1478,11 @@ const submitAnotherResponse = () => {
                         </span>
                         <span v-if="question.required" class="text-xs font-bold text-red-500">* Wajib</span>
                     </div>
-                    <h2 class="mt-3 text-base font-semibold sm:text-lg" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
-                        <RichContent :content="question.title" />
+                    <h2
+                        class="mt-3 text-[17px] font-medium leading-relaxed text-slate-900 sm:text-lg"
+                        :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                    >
+                        <RichContent :content="questionText(question.title)" />
                     </h2>
                     
                     <div v-if="validationErrors[question.id]" class="mt-2 text-xs font-bold text-red-600 flex items-center gap-1.5 animate-in fade-in duration-150">
@@ -1503,8 +1524,14 @@ const submitAnotherResponse = () => {
                                         class="max-h-[550px] w-full object-contain p-2 transition-transform duration-200 group-hover:scale-[1.01]"
                                         loading="lazy"
                                     />
+                                    <span
+                                        class="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow sm:hidden"
+                                    >
+                                        <ZoomIn class="h-3.5 w-3.5 text-indigo-600" />
+                                        Perbesar
+                                    </span>
                                     <div
-                                        class="absolute inset-0 flex items-center justify-center bg-slate-900/30 opacity-0 backdrop-blur-[1px] transition duration-200 group-hover:opacity-100"
+                                        class="absolute inset-0 hidden items-center justify-center bg-slate-900/30 opacity-0 backdrop-blur-[1px] transition duration-200 group-hover:opacity-100 sm:flex"
                                     >
                                         <span class="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-slate-800 shadow-lg">
                                             <ZoomIn class="h-4 w-4 text-indigo-600" />
@@ -1572,13 +1599,13 @@ const submitAnotherResponse = () => {
                         v-if="question.type === 'Short answer'"
                         v-model="answers[question.id]"
                         type="text"
-                        class="mt-5 w-full rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-4 w-full rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5"
                         placeholder="Jawaban singkat Anda"
                     />
                     <textarea
                         v-else-if="question.type === 'Paragraph'"
                         v-model="answers[question.id]"
-                        class="mt-5 min-h-28 w-full resize-none overflow-hidden rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-4 min-h-28 w-full resize-none overflow-hidden rounded-2xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5"
                         placeholder="Jawaban panjang Anda"
                         @input="autoResizePublicTextarea($event)"
                         @keydown="handleShiftEnterKeydown($event)"
@@ -1586,7 +1613,7 @@ const submitAnotherResponse = () => {
                     <select
                         v-else-if="question.type === 'Drop-down'"
                         :value="answers[question.id] ?? ''"
-                        class="mt-5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5"
                         @change="answers[question.id] = ($event.target as HTMLSelectElement).value"
                     >
                         <option value="" disabled>Pilih jawaban</option>
@@ -1594,14 +1621,14 @@ const submitAnotherResponse = () => {
                     </select>
                     <div
                         v-else-if="question.type === 'Linear scale'"
-                        class="mt-5 flex items-center justify-between gap-2 rounded-2xl bg-slate-50 p-4"
+                        class="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-50 p-3 sm:mt-5 sm:justify-between sm:p-4"
                     >
                         <button
                             v-for="option in question.options"
                             :key="option"
                             type="button"
                             :class="[
-                                'flex h-11 w-11 items-center justify-center rounded-full border text-sm font-bold transition',
+                                'flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition sm:h-11 sm:w-11',
                                 answers[question.id] === option
                                     ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
                                     : 'border-slate-300 bg-white text-slate-700 hover:border-indigo-400',
@@ -1611,7 +1638,7 @@ const submitAnotherResponse = () => {
                             {{ option }}
                         </button>
                     </div>
-                    <div v-else-if="question.type === 'Rating'" class="mt-5 flex gap-3 rounded-2xl bg-slate-50 p-4">
+                    <div v-else-if="question.type === 'Rating'" class="mt-4 flex flex-wrap gap-2 rounded-2xl bg-slate-50 p-3 sm:mt-5 sm:gap-3 sm:p-4">
                         <button
                             v-for="option in question.options"
                             :key="option"
@@ -1622,70 +1649,135 @@ const submitAnotherResponse = () => {
                             ]"
                             @click="answers[question.id] = option"
                         >
-                            <Star class="h-10 w-10 fill-current" />
+                            <Star class="h-9 w-9 fill-current sm:h-10 sm:w-10" />
                         </button>
                     </div>
                     
                     <!-- Grid Question Types Rendering -->
-                    <div v-else-if="['Multiple-choice grid', 'Tick box grid'].includes(question.type)" class="mt-5 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/50">
-                        <table class="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr class="border-b border-slate-200 bg-slate-100">
-                                    <th class="p-3.5 font-bold text-slate-700">Baris / Kolom</th>
-                                    <th v-for="col in question.columns" :key="col" class="p-3.5 text-center font-bold text-slate-700">
+                    <div v-else-if="['Multiple-choice grid', 'Tick box grid'].includes(question.type)" class="mt-4 sm:mt-5">
+                        <!-- Phones: one card per row with its choices as buttons, instead of a wide table -->
+                        <div class="space-y-3 sm:hidden">
+                            <div
+                                v-for="(row, rIndex) in question.rows"
+                                :key="`grid-card-${question.id}-${rIndex}`"
+                                class="rounded-2xl border border-slate-200 bg-slate-50/60 p-3"
+                            >
+                                <RichContent :content="row" class="block text-[15px] font-semibold leading-snug text-slate-800" />
+                                <div class="mt-2.5 flex flex-wrap gap-2" :role="question.type === 'Tick box grid' ? 'group' : 'radiogroup'">
+                                    <button
+                                        v-for="(col, cIndex) in question.columns"
+                                        :key="`grid-card-${question.id}-${rIndex}-${cIndex}`"
+                                        type="button"
+                                        :role="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
+                                        :aria-checked="isGridCellSelected(question, rIndex, cIndex)"
+                                        :class="[
+                                            'inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition',
+                                            isGridCellSelected(question, rIndex, cIndex)
+                                                ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                                                : 'border-slate-300 bg-white text-slate-700 hover:border-indigo-400',
+                                        ]"
+                                        @click="
+                                            selectGridAnswer(question.id, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')
+                                        "
+                                    >
+                                        <Check v-if="isGridCellSelected(question, rIndex, cIndex)" class="h-4 w-4 shrink-0" />
                                         <RichContent :content="col" />
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="(row, rIndex) in question.rows" :key="row" class="border-b border-slate-150 last:border-0 hover:bg-slate-50/70 transition-colors">
-                                    <td class="p-3.5 font-semibold text-slate-800">
-                                        <RichContent :content="row" />
-                                    </td>
-                                    <td v-for="(col, cIndex) in question.columns" :key="col" class="p-3.5 text-center">
-                                        <label class="inline-flex items-center justify-center cursor-pointer">
-                                            <input
-                                                :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
-                                                :name="`question-grid-row-${question.id}-${rIndex}`"
-                                                :checked="question.type === 'Tick box grid' ? (answers[question.id]?.[rIndex]?.includes(cIndex)) : (answers[question.id]?.[rIndex] === cIndex)"
-                                                class="h-5 w-5 accent-indigo-600 cursor-pointer"
-                                                @change="selectGridAnswer(question.id, rIndex, cIndex, question.type === 'Tick box grid' ? 'multiple' : 'single')"
-                                            />
-                                        </label>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50/50 sm:block">
+                            <table class="w-full border-collapse text-left text-sm">
+                                <thead>
+                                    <tr class="border-b border-slate-200 bg-slate-100">
+                                        <th class="p-3.5 font-bold text-slate-700">Baris / Kolom</th>
+                                        <th v-for="col in question.columns" :key="col" class="p-3.5 text-center font-bold text-slate-700">
+                                            <RichContent :content="col" />
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        v-for="(row, rIndex) in question.rows"
+                                        :key="row"
+                                        class="border-slate-150 border-b transition-colors last:border-0 hover:bg-slate-50/70"
+                                    >
+                                        <td class="p-3.5 font-semibold text-slate-800">
+                                            <RichContent :content="row" />
+                                        </td>
+                                        <td v-for="(col, cIndex) in question.columns" :key="col" class="p-3.5 text-center">
+                                            <label class="inline-flex cursor-pointer items-center justify-center">
+                                                <input
+                                                    :type="question.type === 'Tick box grid' ? 'checkbox' : 'radio'"
+                                                    :name="`question-grid-row-${question.id}-${rIndex}`"
+                                                    :checked="
+                                                        question.type === 'Tick box grid'
+                                                            ? answers[question.id]?.[rIndex]?.includes(cIndex)
+                                                            : answers[question.id]?.[rIndex] === cIndex
+                                                    "
+                                                    class="h-5 w-5 cursor-pointer accent-indigo-600"
+                                                    @change="
+                                                        selectGridAnswer(
+                                                            question.id,
+                                                            rIndex,
+                                                            cIndex,
+                                                            question.type === 'Tick box grid' ? 'multiple' : 'single',
+                                                        )
+                                                    "
+                                                />
+                                            </label>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <div v-else-if="question.options?.length" class="mt-5 space-y-3">
+                    <div v-else-if="question.options?.length" class="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
                         <label
-                            v-for="option in question.options"
+                            v-for="(option, optionIndex) in question.options"
                             :key="option"
-                            class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
+                            :class="[
+                                'flex cursor-pointer items-start gap-3 rounded-2xl border px-3.5 py-3 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-300 sm:px-4',
+                                isOptionSelected(question, option) ? 'border-indigo-500 bg-indigo-50/70' : 'border-slate-200 hover:bg-slate-50',
+                            ]"
                             :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
                         >
                             <input
                                 :type="question.type === 'Checkboxes' ? 'checkbox' : 'radio'"
                                 :name="`question-${question.id}`"
-                                :checked="question.type === 'Checkboxes' ? isCheckboxChecked(question.id, option) : answers[question.id] === option"
-                                class="mt-0.5 h-5 w-5 shrink-0 accent-indigo-600"
+                                :checked="isOptionSelected(question, option)"
+                                class="sr-only"
                                 @change="question.type === 'Checkboxes' ? toggleCheckbox(question.id, option) : (answers[question.id] = option)"
                             />
-                            <RichContent :content="option" class="text-slate-800 flex-1" />
+                            <span
+                                aria-hidden="true"
+                                :class="[
+                                    'flex h-7 w-7 shrink-0 items-center justify-center text-xs font-bold transition',
+                                    question.type === 'Checkboxes' ? 'rounded-lg' : 'rounded-full',
+                                    isOptionSelected(question, option)
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'border border-slate-300 bg-white text-slate-600',
+                                ]"
+                            >
+                                <Check v-if="question.type === 'Checkboxes' && isOptionSelected(question, option)" class="h-4 w-4" />
+                                <template v-else>{{ optionLetter(optionIndex) }}</template>
+                            </span>
+                            <RichContent :content="option" class="min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-slate-800 sm:text-base" />
                         </label>
                     </div>
                     <input
                         v-else-if="question.type === 'Date'"
                         v-model="answers[question.id]"
                         type="date"
-                        class="mt-5 rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-4 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5 sm:w-auto"
                     />
                     <input
                         v-else-if="question.type === 'Time'"
                         v-model="answers[question.id]"
                         type="time"
-                        class="mt-5 rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        class="mt-4 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5 sm:w-auto"
                     />
                     <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
                 </article>
