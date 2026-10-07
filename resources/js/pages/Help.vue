@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DocxImportGuide, { type DocxGuideSample } from '@/components/help/DocxImportGuide.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
@@ -7,6 +8,7 @@ import {
     ClipboardList,
     Clock,
     FileSpreadsheet,
+    FileText,
     KeyRound,
     Layers,
     LayoutGrid,
@@ -220,8 +222,17 @@ const teacherTopics: HelpTopic[] = [
         summary: 'Panduan ekspor Blackboard 6.0-9.0 dari ExamView dan impor ke Alsenform lengkap dengan gambar soal.',
     },
     {
+        id: 'docx-import',
+        title: '6. Import Soal dari Word (.docx)',
+        icon: FileText,
+        badge: 'Import',
+        badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+        summary:
+            'Aturan penulisan soal di Word, baris Tipe/Poin/Wajib/Skala, dan contoh setiap tipe soal: pilihan ganda, kotak centang, drop-down, benar salah, isian, uraian, menjodohkan, kisi, skala, rating, tanggal, waktu.',
+    },
+    {
         id: 'proctoring-anti-cheat',
-        title: '6. Pengawasan CBT & Fitur Anti-Curang',
+        title: '7. Pengawasan CBT & Fitur Anti-Curang',
         icon: Shield,
         badge: 'Keamanan',
         badgeColor: 'bg-red-50 text-red-700 border-red-200',
@@ -229,7 +240,7 @@ const teacherTopics: HelpTopic[] = [
     },
     {
         id: 'students-cohort',
-        title: '7. Manajemen Siswa & Kelas (Cohort)',
+        title: '8. Manajemen Siswa & Kelas (Cohort)',
         icon: Users,
         badge: 'Akademik',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -237,7 +248,7 @@ const teacherTopics: HelpTopic[] = [
     },
     {
         id: 'results-gradebook',
-        title: '8. Rekap Nilai & Analisis Ujian',
+        title: '9. Rekap Nilai & Analisis Ujian',
         icon: FileSpreadsheet,
         badge: 'Laporan',
         badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
@@ -245,7 +256,7 @@ const teacherTopics: HelpTopic[] = [
     },
     {
         id: 'profile-settings',
-        title: '9. Pengaturan Profil & Keamanan Akun',
+        title: '10. Pengaturan Profil & Keamanan Akun',
         icon: KeyRound,
         badge: 'Akun',
         badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -255,8 +266,14 @@ const teacherTopics: HelpTopic[] = [
 
 const topics = computed<HelpTopic[]>(() => (isStudent.value ? studentArticles : teacherTopics));
 
+const docxImportGuide = computed<DocxGuideSample[]>(() => page.props.docxImportGuide ?? []);
+
 const searchQuery = ref('');
-const activeSection = ref<string>(isStudent.value ? 'student-login' : 'getting-started');
+// "?topic=docx-import" opens that topic directly (used by the import dialog in the editor).
+const requestedTopic = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('topic');
+const activeSection = ref<string>(
+    topics.value.some((topic) => topic.id === requestedTopic) ? (requestedTopic as string) : isStudent.value ? 'student-login' : 'getting-started',
+);
 
 const filteredTopics = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
@@ -320,8 +337,20 @@ const selectTopic = (id: string) => {
             </div>
 
             <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-                <aside>
-                    <nav class="space-y-1.5 lg:sticky lg:top-20" aria-label="Daftar topik bantuan">
+                <aside class="min-w-0">
+                    <!-- Phones: a compact topic picker instead of the long list -->
+                    <label class="block lg:hidden">
+                        <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500">Topik panduan</span>
+                        <select
+                            :value="activeSection"
+                            class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                            @change="selectTopic(($event.target as HTMLSelectElement).value)"
+                        >
+                            <option v-for="topic in topics" :key="topic.id" :value="topic.id">{{ topic.title }}</option>
+                        </select>
+                    </label>
+
+                    <nav class="hidden space-y-1.5 lg:sticky lg:top-20 lg:block" aria-label="Daftar topik bantuan">
                         <button
                             v-for="topic in filteredTopics"
                             :key="topic.id"
@@ -352,6 +381,12 @@ const selectTopic = (id: string) => {
                 </aside>
 
                 <section id="help-content" class="min-w-0 scroll-mt-20 space-y-6">
+                    <p
+                        v-if="filteredTopics.length === 0"
+                        class="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 lg:hidden"
+                    >
+                        Tidak ada panduan yang cocok dengan "{{ searchQuery }}".
+                    </p>
                     <!-- Panduan siswa -->
                     <template v-if="isStudent">
                         <article
@@ -359,7 +394,7 @@ const selectTopic = (id: string) => {
                             v-show="isTopicVisible(article.id)"
                             :id="article.id"
                             :key="article.id"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
@@ -401,7 +436,7 @@ const selectTopic = (id: string) => {
                         <section
                             v-show="isTopicVisible('getting-started')"
                             id="getting-started"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -468,7 +503,7 @@ const selectTopic = (id: string) => {
                         <section
                             v-show="isTopicVisible('question-editor')"
                             id="question-editor"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
@@ -523,7 +558,7 @@ const selectTopic = (id: string) => {
                         <section
                             v-show="isTopicVisible('arabic-quran')"
                             id="arabic-quran"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -613,7 +648,7 @@ const selectTopic = (id: string) => {
                         <section
                             v-show="isTopicVisible('math-katex')"
                             id="math-katex"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
@@ -680,7 +715,7 @@ const selectTopic = (id: string) => {
                         <section
                             v-show="isTopicVisible('examview-import')"
                             id="examview-import"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600">
@@ -704,18 +739,27 @@ const selectTopic = (id: string) => {
                             </div>
                         </section>
 
-                        <!-- 6. PENGAWASAN CBT & ANTI-CURANG -->
+                        <!-- 6. IMPORT SOAL DARI WORD (DOCX) -->
+                        <section
+                            v-show="isTopicVisible('docx-import')"
+                            id="docx-import"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
+                        >
+                            <DocxImportGuide title="6. Import Soal dari Word (.docx)" :samples="docxImportGuide" />
+                        </section>
+
+                        <!-- 7. PENGAWASAN CBT & ANTI-CURANG -->
                         <section
                             v-show="isTopicVisible('proctoring-anti-cheat')"
                             id="proctoring-anti-cheat"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-600">
                                     <Shield class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">6. Pengawasan CBT & Fitur Anti-Curang</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">7. Pengawasan CBT & Fitur Anti-Curang</h2>
                                     <p class="text-xs text-slate-500">Mekanisme menjaga integritas dan kejujuran ujian online sekolah</p>
                                 </div>
                             </div>
@@ -738,18 +782,18 @@ const selectTopic = (id: string) => {
                             </div>
                         </section>
 
-                        <!-- 7. MANAJEMEN SISWA & KELAS -->
+                        <!-- 8. MANAJEMEN SISWA & KELAS -->
                         <section
                             v-show="isTopicVisible('students-cohort')"
                             id="students-cohort"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
                                     <Users class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">7. Manajemen Siswa & Kelas (Cohort)</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">8. Manajemen Siswa & Kelas (Cohort)</h2>
                                     <p class="text-xs text-slate-500">Pengelolaan data peserta ujian, kelas, dan kredensial akun siswa</p>
                                 </div>
                             </div>
@@ -766,18 +810,18 @@ const selectTopic = (id: string) => {
                             </div>
                         </section>
 
-                        <!-- 8. REKAP NILAI & ANALISIS -->
+                        <!-- 9. REKAP NILAI & ANALISIS -->
                         <section
                             v-show="isTopicVisible('results-gradebook')"
                             id="results-gradebook"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 text-purple-600">
                                     <FileSpreadsheet class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">8. Rekap Nilai & Analisis Ujian</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">9. Rekap Nilai & Analisis Ujian</h2>
                                     <p class="text-xs text-slate-500">Melihat hasil pengerjaan siswa dan mengunduh laporan rekapitulasi</p>
                                 </div>
                             </div>
@@ -799,18 +843,18 @@ const selectTopic = (id: string) => {
                             </div>
                         </section>
 
-                        <!-- 9. PENGATURAN PROFIL & AKUN -->
+                        <!-- 10. PENGATURAN PROFIL & AKUN -->
                         <section
                             v-show="isTopicVisible('profile-settings')"
                             id="profile-settings"
-                            class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                            class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"
                         >
                             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                                     <KeyRound class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">9. Pengaturan Profil & Keamanan Akun</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">10. Pengaturan Profil & Keamanan Akun</h2>
                                     <p class="text-xs text-slate-500">Konfigurasi preferensi pribadi, proteksi sesi, dan backup bank soal</p>
                                 </div>
                             </div>

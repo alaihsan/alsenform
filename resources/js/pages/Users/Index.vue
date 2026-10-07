@@ -664,17 +664,17 @@ async function executeImport(): Promise<void> {
                     <table class="w-full text-left text-xs text-slate-600">
                         <thead class="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                             <tr>
-                                <th scope="col" class="px-5 py-3.5">Pengguna & Akun</th>
-                                <th scope="col" class="px-4 py-3.5">Peran / Hak Akses</th>
-                                <th scope="col" class="px-4 py-3.5">NIS & Kelas</th>
-                                <th scope="col" class="px-4 py-3.5">Info Password</th>
-                                <th scope="col" class="px-5 py-3.5 text-right">Aksi</th>
+                                <th scope="col" class="px-4 py-3.5 sm:px-5">Pengguna & Akun</th>
+                                <th scope="col" class="hidden px-4 py-3.5 sm:table-cell">Peran / Hak Akses</th>
+                                <th scope="col" class="hidden px-4 py-3.5 md:table-cell">NIS & Kelas</th>
+                                <th scope="col" class="hidden px-4 py-3.5 md:table-cell">Info Password</th>
+                                <th scope="col" class="px-4 py-3.5 text-right sm:px-5">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
                             <tr v-for="u in users.data" :key="u.id" class="transition hover:bg-slate-50/80">
                                 <!-- Name & Email -->
-                                <td class="px-5 py-3.5">
+                                <td class="px-4 py-3.5 sm:px-5">
                                     <div class="flex items-center gap-3">
                                         <div
                                             class="shadow-xs flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-black uppercase"
@@ -699,12 +699,34 @@ async function executeImport(): Promise<void> {
                                             <div class="truncate text-[11px] text-slate-500">
                                                 {{ u.email || 'Tanpa email (Login via NIS)' }}
                                             </div>
+                                            <!-- Phones: role, NIS and class under the name (their columns are hidden) -->
+                                            <div class="mt-1 flex flex-wrap items-center gap-1.5 sm:hidden">
+                                                <span
+                                                    class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                                    :class="{
+                                                        'bg-indigo-100 text-indigo-800': u.role === 'admin',
+                                                        'bg-blue-100 text-blue-800': u.role === 'guru',
+                                                        'bg-emerald-100 text-emerald-800': u.role === 'siswa',
+                                                    }"
+                                                >
+                                                    {{ u.role === 'admin' ? 'Admin' : u.role === 'guru' ? 'Guru' : 'Murid' }}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 underline-offset-2 hover:underline"
+                                                    @click="openRoleModal(u)"
+                                                >
+                                                    Ubah peran
+                                                </button>
+                                                <span v-if="u.nis" class="font-mono text-[10px] text-slate-500">NIS {{ u.nis }}</span>
+                                                <span v-if="u.kelas" class="text-[10px] font-semibold text-slate-500">· {{ u.kelas }}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
 
                                 <!-- Role & Quick Switch Button -->
-                                <td class="px-4 py-3.5">
+                                <td class="hidden px-4 py-3.5 sm:table-cell">
                                     <div class="flex items-center gap-2">
                                         <span
                                             class="shadow-xs inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold"
@@ -735,7 +757,7 @@ async function executeImport(): Promise<void> {
                                 </td>
 
                                 <!-- NIS & Kelas -->
-                                <td class="px-4 py-3.5">
+                                <td class="hidden px-4 py-3.5 md:table-cell">
                                     <div v-if="u.nis || u.kelas">
                                         <div v-if="u.nis" class="font-mono font-semibold text-slate-800">NIS: {{ u.nis }}</div>
                                         <div
@@ -749,15 +771,15 @@ async function executeImport(): Promise<void> {
                                 </td>
 
                                 <!-- Password Info -->
-                                <td class="px-4 py-3.5">
+                                <td class="hidden px-4 py-3.5 md:table-cell">
                                     <div class="flex items-center gap-1.5 font-mono text-xs text-slate-400">
                                         <span>••••••</span>
                                     </div>
                                 </td>
 
                                 <!-- Actions -->
-                                <td class="px-5 py-3.5 text-right">
-                                    <div class="flex items-center justify-end gap-1.5">
+                                <td class="px-4 py-3.5 text-right sm:px-5">
+                                    <div class="flex items-center justify-end gap-1 sm:gap-1.5">
                                         <!-- Ubah Password -->
                                         <button
                                             type="button"
@@ -766,7 +788,7 @@ async function executeImport(): Promise<void> {
                                             title="Ubah atau reset password"
                                         >
                                             <Key class="h-3 w-3 text-amber-500" />
-                                            <span>Password</span>
+                                            <span class="hidden sm:inline">Password</span>
                                         </button>
 
                                         <!-- Edit -->

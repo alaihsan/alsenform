@@ -1285,13 +1285,17 @@ const submitAnotherResponse = () => {
     <!-- Floating Countdown Timer -->
     <div
         v-if="hasCountdownTimer"
-        class="fixed right-4 top-16 z-40 flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3 shadow-lg backdrop-blur-md transition-all sm:right-8 sm:top-8"
+        class="fixed right-3 top-3 z-40 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-1.5 shadow-lg backdrop-blur-md transition-all sm:right-8 sm:top-8 sm:gap-3 sm:bg-white/70 sm:px-4 sm:py-3"
         :class="{ 'animate-pulse border-red-200 bg-red-50/80 text-red-600': timeRemaining < 60000 }"
     >
         <Clock class="h-5 w-5" :class="{ 'text-red-500 animate-spin': timeRemaining < 60000, 'text-indigo-600': timeRemaining >= 60000 }" />
         <div>
-            <span class="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400" :class="{ 'text-red-400': timeRemaining < 60000 }">Sisa Waktu</span>
-            <span class="block font-mono text-lg font-black leading-none">{{ formattedTime }}</span>
+            <span
+                class="hidden text-[10px] font-extrabold uppercase tracking-wider text-slate-400 sm:block"
+                :class="{ 'text-red-400': timeRemaining < 60000 }"
+                >Sisa Waktu</span
+            >
+            <span class="block font-mono text-base font-black leading-none sm:text-lg" aria-label="Sisa waktu">{{ formattedTime }}</span>
         </div>
     </div>
 
@@ -1309,6 +1313,8 @@ const submitAnotherResponse = () => {
             quizForm.settings.backgroundColorClass ?? 'bg-violet-50',
             quizForm.settings.backgroundPatternClass ?? 'pattern-none',
             isQuestionNavAvailable ? 'pb-24 lg:pb-8' : '',
+            // Room for the timer pill, so it does not cover the exam title on phones.
+            hasCountdownTimer ? 'pt-14 sm:pt-8' : '',
             isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
     >
@@ -1365,7 +1371,7 @@ const submitAnotherResponse = () => {
         <section v-else-if="isSubmitted" class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
             <div class="p-6 sm:p-8">
-                <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                <h1 class="text-2xl font-semibold leading-tight sm:text-3xl" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
                     {{ quizForm.settings.confirmationMessage ?? 'Your response has been recorded' }}
                 </h1>
                 <button
@@ -1388,7 +1394,10 @@ const submitAnotherResponse = () => {
                             <div v-if="isPaginated" class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
                                 <span>Bagian {{ currentPage }} dari {{ totalPages }}</span>
                             </div>
-                            <h1 class="text-3xl font-semibold" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                            <h1
+                                class="text-2xl font-semibold leading-tight sm:text-3xl"
+                                :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                            >
                                 <RichContent :content="quizForm.title" />
                             </h1>
                         </div>
@@ -1434,25 +1443,25 @@ const submitAnotherResponse = () => {
                     :id="`question-card-${question.id}`"
                     :data-question-id="question.id"
                     :class="[
-                        'rounded-3xl border p-6 bg-white shadow-sm transition-all duration-300',
+                        'rounded-3xl border bg-white p-4 shadow-sm transition-all duration-300 sm:p-6',
                         validationErrors[question.id] ? 'border-red-400 bg-red-50/5 ring-2 ring-red-100' : 'border-slate-200'
                     ]"
                 >
-                    <h2
-                        class="flex flex-wrap items-center text-lg font-semibold"
-                        :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
-                    >
-                        <span class="mr-2.5 inline-flex items-center justify-center rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                    <!-- Number, points and "wajib" above the question, so the question text gets the full width on phones -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="inline-flex items-center justify-center rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                             Soal {{ getQuestionNumber(question.id) }}
                         </span>
-                        <RichContent :content="question.title" class="flex-1" />
-                        <span v-if="question.required" class="ml-1 text-red-500">*</span>
                         <span
                             v-if="quizForm.settings.isQuiz !== false && question.points"
-                            class="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
+                            class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
                         >
                             {{ question.points }} Poin
                         </span>
+                        <span v-if="question.required" class="text-xs font-bold text-red-500">* Wajib</span>
+                    </div>
+                    <h2 class="mt-3 text-base font-semibold sm:text-lg" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                        <RichContent :content="question.title" />
                     </h2>
                     
                     <div v-if="validationErrors[question.id]" class="mt-2 text-xs font-bold text-red-600 flex items-center gap-1.5 animate-in fade-in duration-150">
@@ -1576,10 +1585,11 @@ const submitAnotherResponse = () => {
                     ></textarea>
                     <select
                         v-else-if="question.type === 'Drop-down'"
-                        v-model="answers[question.id]"
+                        :value="answers[question.id] ?? ''"
                         class="mt-5 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                        @change="answers[question.id] = ($event.target as HTMLSelectElement).value"
                     >
-                        <option value="">Pilih jawaban</option>
+                        <option value="" disabled>Pilih jawaban</option>
                         <option v-for="option in question.options" :key="option" :value="option">{{ option }}</option>
                     </select>
                     <div

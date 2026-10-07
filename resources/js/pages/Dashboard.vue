@@ -1348,7 +1348,7 @@ function closeDonationModal(): void {
                 </button>
             </div>
 
-            <div v-if="!isStudent && folders.length" class="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <div v-if="!isStudent && folders.length" class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
                 <article
                     v-for="folder in folders"
                     :key="folder.id"
@@ -1412,7 +1412,7 @@ function closeDonationModal(): void {
 
             <div
                 v-if="filteredRecentForms.length"
-                :class="[viewMode === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5' : 'flex flex-col gap-2']"
+                :class="[viewMode === 'grid' ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5' : 'flex flex-col gap-2']"
             >
                 <article
                     v-for="form in filteredRecentForms"
@@ -2553,7 +2553,7 @@ button[aria-label]::after,
     top: calc(100% + 8px);
     z-index: 60;
     max-width: 180px;
-    transform: translate(-50%, -4px);
+    transform: translateX(-50%);
     white-space: nowrap;
     border-radius: 8px;
     background: #0f172a;
@@ -2562,18 +2562,20 @@ button[aria-label]::after,
     font-weight: 700;
     line-height: 1;
     color: white;
-    opacity: 0;
     box-shadow: 0 10px 25px rgb(15 23 42 / 18%);
-    transition:
-        opacity 120ms ease,
-        transform 120ms ease;
+    /* Only rendered while shown: a hidden tooltip near the screen edge would widen the page on phones. */
+    display: none;
 }
 
-button[aria-label]:hover::after,
 button[aria-label]:focus-visible::after,
-.with-tooltip:hover::after,
 .with-tooltip:focus-visible::after {
-    transform: translate(-50%, 0);
-    opacity: 1;
+    display: block;
+}
+
+@media (hover: hover) {
+    button[aria-label]:hover::after,
+    .with-tooltip:hover::after {
+        display: block;
+    }
 }
 </style>

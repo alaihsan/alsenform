@@ -31,7 +31,7 @@ const options = [
                 </div>
             </div>
 
-            <div class="mt-6 grid gap-3 sm:grid-cols-3">
+            <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
                     v-for="option in options"
                     :key="option.value"

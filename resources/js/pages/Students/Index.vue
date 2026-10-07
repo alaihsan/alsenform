@@ -547,12 +547,12 @@ async function executeImport(): Promise<void> {
                     <table class="w-full text-left text-xs">
                         <thead class="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500">
                             <tr>
-                                <th class="py-3.5 pl-6 pr-3">NIS</th>
-                                <th class="px-4 py-3.5">Nama Murid</th>
-                                <th class="px-4 py-3.5">Kelas</th>
-                                <th class="px-4 py-3.5">Password Default</th>
-                                <th class="px-4 py-3.5">Terdaftar</th>
-                                <th class="py-3.5 pl-4 pr-6 text-right">Aksi</th>
+                                <th class="hidden py-3.5 pl-6 pr-3 sm:table-cell">NIS</th>
+                                <th class="py-3.5 pl-4 pr-3 sm:px-4">Nama Murid</th>
+                                <th class="px-2 py-3.5 sm:px-4">Kelas</th>
+                                <th class="hidden px-4 py-3.5 md:table-cell">Password Default</th>
+                                <th class="hidden px-4 py-3.5 md:table-cell">Terdaftar</th>
+                                <th class="py-3.5 pl-2 pr-4 text-right sm:pl-4 sm:pr-6">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -562,27 +562,30 @@ async function executeImport(): Promise<void> {
                                 class="transition hover:bg-slate-50/80"
                             >
                                 <!-- NIS -->
-                                <td class="py-3.5 pl-6 pr-3 font-mono font-bold text-slate-900">
+                                <td class="hidden py-3.5 pl-6 pr-3 font-mono font-bold text-slate-900 sm:table-cell">
                                     <span class="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-800">
                                         {{ student.nis || '-' }}
                                     </span>
                                 </td>
 
                                 <!-- Nama -->
-                                <td class="px-4 py-3.5">
+                                <td class="py-3.5 pl-4 pr-3 sm:px-4">
                                     <div class="flex items-center gap-2.5">
-                                        <div class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-800">
+                                        <div
+                                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-800"
+                                        >
                                             {{ student.name.charAt(0).toUpperCase() }}
                                         </div>
-                                        <div>
+                                        <div class="min-w-0">
                                             <p class="font-semibold text-slate-900">{{ student.name }}</p>
-                                            <p v-if="student.email" class="text-[10px] text-slate-400">{{ student.email }}</p>
+                                            <p class="font-mono text-[10px] text-slate-500 sm:hidden">NIS {{ student.nis || '-' }}</p>
+                                            <p v-if="student.email" class="hidden text-[10px] text-slate-400 sm:block">{{ student.email }}</p>
                                         </div>
                                     </div>
                                 </td>
 
                                 <!-- Kelas -->
-                                <td class="px-4 py-3.5">
+                                <td class="px-2 py-3.5 sm:px-4">
                                     <span
                                         v-if="student.kelas"
                                         class="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700"
@@ -593,20 +596,20 @@ async function executeImport(): Promise<void> {
                                 </td>
 
                                 <!-- Password Default (6 digit) -->
-                                <td class="px-4 py-3.5">
+                                <td class="hidden px-4 py-3.5 md:table-cell">
                                     <div class="flex items-center gap-1.5 text-slate-400 text-xs font-mono">
                                         <span>••••••</span>
                                     </div>
                                 </td>
 
                                 <!-- Terdaftar -->
-                                <td class="px-4 py-3.5 text-slate-500 text-[11px]">
+                                <td class="hidden px-4 py-3.5 text-[11px] text-slate-500 md:table-cell">
                                     {{ student.created_at }}
                                 </td>
 
                                 <!-- Aksi -->
-                                <td class="py-3.5 pl-4 pr-6 text-right">
-                                    <div class="flex items-center justify-end gap-1.5">
+                                <td class="py-3.5 pl-2 pr-4 text-right sm:pl-4 sm:pr-6">
+                                    <div class="flex items-center justify-end gap-1 sm:gap-1.5">
                                         <button
                                             type="button"
                                             @click="openPasswordModal(student)"

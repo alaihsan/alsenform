@@ -67,24 +67,24 @@ const isActive = (href: string): boolean => currentPath === href || currentPath.
                 </p>
             </div>
 
-            <div class="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-                <aside>
-                    <nav class="flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-20 lg:flex-col lg:overflow-visible lg:pb-0">
+            <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+                <aside class="min-w-0">
+                    <nav class="flex flex-wrap gap-2 lg:sticky lg:top-20 lg:flex-col">
                         <Link
                             v-for="item in sidebarNavItems"
                             :key="item.href"
                             :href="item.href"
                             :class="[
-                                'flex shrink-0 items-center gap-3 rounded-2xl border px-4 py-3 transition',
+                                'flex items-center gap-2 rounded-2xl border py-1.5 pl-1.5 pr-3 transition lg:gap-3 lg:px-4 lg:py-3',
                                 isActive(item.href)
                                     ? 'border-indigo-200 bg-white text-indigo-700 shadow-sm'
-                                    : 'border-transparent text-slate-600 hover:bg-white/70 hover:text-slate-900',
+                                    : 'border-slate-200 bg-white/60 text-slate-600 hover:bg-white/70 hover:text-slate-900 lg:border-transparent lg:bg-transparent',
                             ]"
                             :aria-current="isActive(item.href) ? 'page' : undefined"
                         >
                             <span
                                 :class="[
-                                    'flex h-9 w-9 items-center justify-center rounded-xl',
+                                    'flex h-7 w-7 items-center justify-center rounded-xl lg:h-9 lg:w-9',
                                     isActive(item.href) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 shadow-sm',
                                 ]"
                             >

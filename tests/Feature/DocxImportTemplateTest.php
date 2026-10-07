@@ -6,6 +6,7 @@ use App\Services\DocxImportTemplate;
 use App\Support\DocxWriter;
 use App\Support\QuizScoring;
 use Illuminate\Http\UploadedFile;
+use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * A Word file whose blocks are paragraphs (strings) or tables (lists of rows).
@@ -57,8 +58,15 @@ test('teachers download the Word template', function () {
     $document = $zip->getFromName('word/document.xml');
     $zip->close();
 
-    expect($document)->toContain('MULAI SOAL')
-        ->and($document)->toContain('Tipe: Kisi Kotak Centang');
+    $xml = simplexml_load_string($document);
+    $xml->registerXPathNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+    $paragraphs = array_map('strval', $xml->xpath('//w:body/w:p/w:r/w:t'));
+
+    // Only sample questions: the explanation lives in the Help page.
+    expect($paragraphs[0])->toBe('1. Ibu kota negara Republik Indonesia adalah ...')
+        ->and($document)->toContain('Tipe: Kisi Kotak Centang')
+        ->and($document)->not->toContain('MULAI SOAL')
+        ->and($document)->not->toContain('Aturan');
 });
 
 test('students cannot download the Word template', function () {
@@ -67,7 +75,7 @@ test('students cannot download the Word template', function () {
     $this->actingAs($student)->get(route('questions.import.template'))->assertForbidden();
 });
 
-test('the template imports one example of every question type without its instructions', function () {
+test('the template imports one sample of every question type', function () {
     $questions = templateQuestions();
 
     expect(array_column($questions, 'type'))->toBe([
@@ -96,8 +104,7 @@ test('the template imports one example of every question type without its instru
         ->and($time['answer'])->toBe('07:00');
 
     $titles = implode("\n", array_column($questions, 'title'));
-    expect($titles)->not->toContain('Aturan Penulisan')
-        ->and($titles)->not->toContain('//');
+    expect($titles)->not->toMatch('/^(Tipe|Poin|Wajib|Skala|Jawaban):/m');
 });
 
 test('the answer keys of the template score the answers students give', function () {
@@ -223,4 +230,25 @@ test('true or false tables can be marked with X and matching rows keep ordinary 
         'columns' => ['A. Biologi sel', 'B. Komputer'],
         'answer' => [1, 0],
     ]);
+});
+
+test('the help page explains every sample of the template to teachers', function () {
+    $teacher = User::factory()->create(['role' => 'guru', 'nip' => '198001012005011001']);
+
+    $this->actingAs($teacher)->get(route('help'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Help')
+            ->has('docxImportGuide', 15)
+            ->where('docxImportGuide.0.title', 'Pilihan Ganda')
+            ->where('docxImportGuide.0.lines.0', '1. Ibu kota negara Republik Indonesia adalah ...')
+            ->where('docxImportGuide.1.typeAliases', fn ($aliases) => collect($aliases)->contains('kotak centang') && collect($aliases)->contains('pgk'))
+            ->where('docxImportGuide.8.table.0', ['No', 'Negara', 'Ibu Kota'])
+            ->where('docxImportGuide.8.answer', 'Jawaban: 1C, 2A, 3B')
+        );
+
+    $student = User::factory()->create(['role' => 'siswa', 'nis' => '20240999']);
+    $this->actingAs($student)->get(route('help'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('docxImportGuide', null));
 });
