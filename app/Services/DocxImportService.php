@@ -818,7 +818,7 @@ class DocxImportService
             'options' => array_values($options),
             'answer' => $answer,
             'required' => false,
-            'points' => 10,
+            'points' => 1,
             'media' => $media,
         ];
     }
@@ -944,7 +944,7 @@ class DocxImportService
                 'columns' => $columns,
                 'answer' => (object) $answer,
                 'required' => false,
-                'points' => 10,
+                'points' => 1,
                 'media' => $media,
             ];
         }
@@ -1015,7 +1015,7 @@ class DocxImportService
                 'columns' => $gridCols,
                 'answer' => (object) $answer,
                 'required' => false,
-                'points' => 10,
+                'points' => 1,
                 'media' => $media,
             ];
         }
@@ -1036,7 +1036,7 @@ class DocxImportService
             'options' => [],
             'answer' => $rawAnswer,
             'required' => false,
-            'points' => 10,
+            'points' => 1,
             'media' => $media,
         ];
     }
@@ -1074,7 +1074,7 @@ class DocxImportService
                         'answer' => 0,
                         'raw_answer' => '',
                         'required' => false,
-                        'points' => 10,
+                        'points' => 1,
                         'media' => $media,
                     ];
                 }

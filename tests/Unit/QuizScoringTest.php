@@ -47,3 +47,25 @@ test('unexpected answer shapes never break scoring', function () {
 
     expect($this->scoring->score($questions, [1 => ['A'], 2 => ['3'], 3 => ['56']]))->toBe(0);
 });
+
+test('questions are worth 1 point unless another weight is given', function () {
+    expect($this->scoring->points(['id' => 1, 'type' => 'Short answer']))->toBe(1)
+        ->and($this->scoring->points(['id' => 1, 'type' => 'Short answer', 'points' => 3]))->toBe(3);
+});
+
+test('the grade is the share of points that can be earned on a 0 to 100 scale', function () {
+    $questions = [
+        ['id' => 1, 'type' => 'Short answer', 'answer' => 'a'],
+        ['id' => 2, 'type' => 'Short answer', 'answer' => 'b', 'points' => 2],
+        ['id' => 3, 'type' => 'Paragraph', 'answer' => 'rubrik', 'points' => 5],
+        ['id' => 4, 'type' => 'Linear scale', 'answer' => '', 'points' => 1],
+    ];
+
+    // Only the two questions with an answer key count: 1 + 2 points.
+    expect($this->scoring->maxPoints($questions))->toBe(3)
+        ->and($this->scoring->grade($this->scoring->score($questions, [1 => 'a', 2 => 'b']), 3))->toBe(100.0)
+        ->and($this->scoring->grade($this->scoring->score($questions, [2 => 'b']), 3))->toBe(66.67)
+        ->and($this->scoring->grade(0, 3))->toBe(0.0)
+        ->and($this->scoring->grade(5, 3))->toBe(100.0)
+        ->and($this->scoring->grade(1, 0))->toBe(0.0);
+});

@@ -31,6 +31,7 @@ import {
     ChevronDown,
     Circle,
     Download,
+    ExternalLink,
     Eye,
     FileText,
     FileUp,
@@ -93,7 +94,7 @@ const form = reactive({
             answer: q.answer,
             required: Boolean(q.required),
             media: (q.media ?? []).map((m: any) => ({ type: m.type, url: m.url ?? '' })),
-            points: q.points ?? 10,
+            points: q.points ?? 1,
         })) ?? [
             {
                 id: 1,
@@ -104,7 +105,7 @@ const form = reactive({
                 answer: '',
                 required: Boolean(props.quizForm?.settings?.defaultQuestionRequired ?? false),
                 media: [],
-                points: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
+                points: props.quizForm?.settings?.defaultQuestionPoints ?? 1,
             },
         ]),
     ] as Question[],
@@ -123,7 +124,7 @@ const form = reactive({
         disableRespondentAutosave: props.quizForm?.settings?.disableRespondentAutosave ?? false,
         defaultCollectEmailMode: props.quizForm?.settings?.defaultCollectEmailMode ?? 'none',
         defaultQuestionRequired: props.quizForm?.settings?.defaultQuestionRequired ?? false,
-        defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 10,
+        defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 1,
         maxUploadSize: Math.min(props.quizForm?.settings?.maxUploadSize ?? 20, 40),
         questionFont: props.quizForm?.settings?.questionFont ?? "'Inter', sans-serif",
         answerFont: props.quizForm?.settings?.answerFont ?? "'Inter', sans-serif",
@@ -729,7 +730,7 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         answer: gridQuestionTypes.includes(type) ? {} : type === 'Checkboxes' ? [] : '',
         required: false,
         media: [],
-        points: 10,
+        points: form.settings.defaultQuestionPoints ?? 1,
     };
 
     form.questions.push(question);
@@ -763,7 +764,7 @@ const duplicateQuestion = (question: Question) => {
                     : JSON.parse(JSON.stringify(question.answer))
                 : question.answer,
         media: (question.media ?? []).map((m) => ({ ...m })),
-        points: question.points ?? 10,
+        points: question.points ?? 1,
     };
 
     const index = form.questions.findIndex((item) => item.id === question.id);
@@ -866,10 +867,13 @@ const normalizeCorrectAnswer = (question: Question) => {
     }
 
     if (!optionQuestionTypes.includes(question.type)) {
-        if (['Linear scale', 'Rating', 'Date', 'Time'].includes(question.type)) {
-            return;
+        // Text keys (short answer, essay rubric, scale value, date, time) are kept, so an imported
+        // "Bandung | Kota Bandung" survives opening the editor. Changing the type clears the key.
+        if (typeof question.answer === 'number') {
+            question.answer = String(question.answer);
+        } else if (typeof question.answer !== 'string') {
+            question.answer = '';
         }
-        question.answer = '';
         return;
     }
 
@@ -1225,7 +1229,7 @@ const handleImportDocxFile = async (event: Event) => {
                     answer: answerVal,
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
-                    points: q.points ?? 10,
+                    points: q.points ?? 1,
                 };
                 form.questions.push(question);
                 activeQuestionId.value = question.id;
@@ -1295,7 +1299,7 @@ const handleImportExamViewFile = async (event: Event) => {
                             : q.answer,
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
-                    points: q.points ?? 10,
+                    points: q.points ?? 1,
                 };
                 form.questions.push(question);
                 activeQuestionId.value = question.id;
@@ -1742,23 +1746,23 @@ watch(
                 </div>
             </div>
 
-            <nav class="flex h-10 items-end justify-center gap-5 bg-white sm:gap-8">
+            <nav class="grid h-10 grid-cols-4 items-end bg-white px-1 sm:flex sm:justify-center sm:gap-8 sm:px-0">
                 <button
                     v-for="tab in ['questions', 'responses', 'settings', 'keamanan']"
                     :key="tab"
                     type="button"
                     :class="[
-                        'px-3 pb-2.5 text-sm font-bold capitalize transition',
+                        'whitespace-nowrap px-1 pb-2.5 text-[13px] font-bold capitalize transition sm:px-3 sm:text-sm',
                         activeTab === tab ? 'border-b-4 border-indigo-600 text-indigo-700' : 'text-slate-700 hover:text-indigo-600',
                     ]"
                     @click="activeTab = tab as 'questions' | 'responses' | 'settings' | 'keamanan'"
                 >
-                    {{ tab === 'keamanan' ? 'keamanan & kunci' : tab }}
+                    {{ tab === 'keamanan' ? 'keamanan' : tab }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span>
                 </button>
             </nav>
         </header>
 
-        <section class="mx-auto grid max-w-[980px] grid-cols-1 gap-4 px-4 py-5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_60px]">
+        <section class="mx-auto grid max-w-[980px] grid-cols-1 gap-4 px-4 pb-28 pt-5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_60px] lg:pb-5">
             <input ref="docxFileInput" type="file" accept=".docx" class="hidden" @change="handleImportDocxFile" />
             <input ref="examviewFileInput" type="file" accept=".zip" class="hidden" @change="handleImportExamViewFile" />
             <div class="space-y-4">
@@ -1867,7 +1871,7 @@ watch(
                         >
                             <div
                                 :class="[
-                                    'grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_260px]',
+                                    'grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_260px]',
                                     activeQuestionId === question.id ? 'border-l-4 border-blue-500' : 'border-l-4 border-transparent',
                                 ]"
                             >
@@ -2793,36 +2797,38 @@ watch(
                                                 </template>
                                             </div>
                                         </div>
+                                    </aside>
 
-                                        <div class="mt-auto border-t border-slate-200 pt-6">
-                                            <div class="flex items-center justify-end gap-4 text-slate-600 sm:gap-5">
-                                                <button
-                                                    type="button"
-                                                    aria-label="Duplicate question"
-                                                    class="transition hover:text-indigo-600"
-                                                    @click.stop="duplicateQuestion(question)"
-                                                >
-                                                    <FileText class="h-6 w-6" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    aria-label="Delete question"
-                                                    class="transition hover:text-red-500"
-                                                    @click.stop="deleteQuestion(question)"
-                                                >
-                                                    <Trash2 class="h-6 w-6" />
-                                                </button>
-                                                <span class="h-8 border-l border-slate-200"></span>
-                                                <button
-                                                    v-if="form.settings.isQuiz"
-                                                    type="button"
-                                                    class="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-100"
-                                                    @click.stop="editingAnswerKeyQuestionId = question.id"
-                                                >
-                                                    <Key class="h-3.5 w-3.5" />
-                                                    Kunci Jawaban
-                                                </button>
-                                                <span v-if="form.settings.isQuiz" class="h-8 border-l border-slate-200"></span>
+                                    <div class="border-t border-slate-200 pt-4 lg:col-span-2">
+                                        <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 text-slate-600 sm:gap-5">
+                                            <button
+                                                type="button"
+                                                aria-label="Duplicate question"
+                                                class="transition hover:text-indigo-600"
+                                                @click.stop="duplicateQuestion(question)"
+                                            >
+                                                <FileText class="h-6 w-6" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label="Delete question"
+                                                class="transition hover:text-red-500"
+                                                @click.stop="deleteQuestion(question)"
+                                            >
+                                                <Trash2 class="h-6 w-6" />
+                                            </button>
+                                            <span class="hidden h-8 border-l border-slate-200 sm:block"></span>
+                                            <button
+                                                v-if="form.settings.isQuiz"
+                                                type="button"
+                                                class="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-100"
+                                                @click.stop="editingAnswerKeyQuestionId = question.id"
+                                            >
+                                                <Key class="h-3.5 w-3.5" />
+                                                Kunci<span class="hidden sm:inline">Jawaban</span>
+                                            </button>
+                                            <span v-if="form.settings.isQuiz" class="hidden h-8 border-l border-slate-200 sm:block"></span>
+                                            <span class="flex items-center gap-2">
                                                 <span class="text-sm font-medium">Required</span>
                                                 <button
                                                     type="button"
@@ -2839,10 +2845,10 @@ watch(
                                                         ]"
                                                     />
                                                 </button>
-                                                <MoreVertical class="h-6 w-6" />
-                                            </div>
+                                            </span>
+                                            <MoreVertical class="hidden h-6 w-6 sm:block" />
                                         </div>
-                                    </aside>
+                                    </div>
                                 </template>
                             </div>
                             <Transition
@@ -2855,7 +2861,7 @@ watch(
                             >
                                 <div
                                     v-if="activeQuestionId === question.id"
-                                    class="absolute -bottom-7 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg lg:-right-20 lg:bottom-auto lg:left-auto lg:top-4 lg:translate-x-0 lg:flex-col"
+                                    class="fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg lg:absolute lg:-right-20 lg:bottom-auto lg:left-auto lg:top-4 lg:z-20 lg:translate-x-0 lg:flex-col"
                                 >
                                     <button type="button" aria-label="Tambah pertanyaan" class="tool-button-primary" @click.stop="addQuestion()">
                                         <PlusCircle class="h-5 w-5" />
@@ -2923,7 +2929,7 @@ watch(
                             </div>
                         </div>
 
-                        <div class="mt-6 grid gap-4 sm:grid-cols-3">
+                        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                             <div class="rounded-2xl bg-slate-50 p-5">
                                 <p class="text-sm font-bold text-slate-500">Total responses</p>
                                 <p class="mt-2 text-4xl font-black text-indigo-600">{{ responseCount }}</p>
@@ -2951,17 +2957,17 @@ watch(
                                     <h3 class="text-base font-bold text-slate-900">Rekapitulasi Nilai Siswa</h3>
                                     <p class="text-xs text-slate-500">Daftar skor dan status pengerjaan seluruh responden.</p>
                                 </div>
-                                <div class="flex items-center gap-2">
+                                <div class="flex w-full items-center gap-2 sm:w-auto">
                                     <input
                                         v-model="gradebookSearch"
                                         type="text"
                                         placeholder="Cari siswa / NIS / kelas..."
-                                        class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none sm:w-auto sm:py-1.5"
                                     />
                                     <a
                                         v-if="responseCount"
                                         :href="exportResponsesUrl"
-                                        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                                        class="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:inline-flex"
                                     >
                                         <Download class="h-3.5 w-3.5" />
                                         Unduh Excel
@@ -2969,7 +2975,45 @@ watch(
                                 </div>
                             </div>
 
-                            <div class="overflow-x-auto">
+                            <!-- Phones: one card per student instead of a wide table -->
+                            <ul class="divide-y divide-slate-100 sm:hidden">
+                                <li v-for="(item, idx) in filteredGradebook" :key="`grade-card-${item.id}`" class="flex items-center gap-3 px-4 py-3">
+                                    <span class="w-5 shrink-0 text-xs font-semibold text-slate-400">{{ idx + 1 }}</span>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm font-bold text-slate-900">{{ item.name }}</p>
+                                        <p class="truncate text-[11px] text-slate-500">
+                                            <span class="font-mono">{{ item.nis }}</span> · {{ item.kelas }} · {{ item.formattedDate }}
+                                        </p>
+                                    </div>
+                                    <div class="shrink-0 text-right">
+                                        <span
+                                            :class="[
+                                                'inline-block rounded-full px-2.5 py-0.5 text-xs font-bold',
+                                                item.percentage >= 75
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : item.percentage >= 60
+                                                      ? 'bg-amber-100 text-amber-800'
+                                                      : 'bg-rose-100 text-rose-800',
+                                            ]"
+                                        >
+                                            {{ item.percentage }}
+                                        </span>
+                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ maxScore }} poin</p>
+                                        <p :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']">
+                                            {{ item.is_timeout ? 'Timeout' : 'Selesai' }}
+                                        </p>
+                                    </div>
+                                </li>
+                                <li v-if="filteredGradebook.length === 0" class="px-4 py-8 text-center text-xs text-slate-400">
+                                    {{
+                                        gradebook.length === 0
+                                            ? 'Belum ada tanggapan masuk untuk kuis ini.'
+                                            : 'Tidak ada data siswa yang cocok dengan pencarian.'
+                                    }}
+                                </li>
+                            </ul>
+
+                            <div class="hidden overflow-x-auto sm:block">
                                 <table class="w-full text-left text-xs text-slate-600">
                                     <thead
                                         class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
@@ -2979,8 +3023,8 @@ watch(
                                             <th class="px-4 py-3">NIS</th>
                                             <th class="px-4 py-3">Nama Siswa</th>
                                             <th class="px-4 py-3">Kelas / Cohort</th>
-                                            <th class="px-4 py-3 text-center">Skor Poin</th>
-                                            <th class="px-4 py-3 text-center">Nilai (100)</th>
+                                            <th class="px-4 py-3 text-center">Poin Benar</th>
+                                            <th class="px-4 py-3 text-center" title="Poin benar ÷ total poin soal berkunci × 100">Nilai (0-100)</th>
                                             <th class="px-4 py-3">Status</th>
                                             <th class="px-4 py-3">Waktu Selesai</th>
                                         </tr>
@@ -3057,7 +3101,7 @@ watch(
                         >
                             <div class="flex flex-wrap items-start justify-between gap-4">
                                 <div class="min-w-0">
-                                    <h3 class="truncate text-lg font-bold text-slate-900">{{ question.title }}</h3>
+                                    <h3 class="break-words text-base font-bold text-slate-900 sm:truncate sm:text-lg">{{ question.title }}</h3>
                                     <p class="mt-1 text-sm font-semibold text-slate-500">{{ question.total }} answer</p>
                                 </div>
                                 <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ question.type }}</span>
@@ -3107,18 +3151,23 @@ watch(
 
                 <template v-else-if="activeTab === 'settings'">
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
-                        <div class="px-7 py-7">
-                            <h2 class="text-2xl font-normal text-slate-950">Settings</h2>
+                        <div class="px-5 py-6 sm:px-7 sm:py-7">
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Settings</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
 
-                            <div class="flex items-center justify-between gap-6 px-11 py-16">
+                            <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-16">
                                 <div>
-                                    <h3 class="text-xl font-normal text-slate-950">Make this a quiz</h3>
-                                    <p class="mt-2 text-lg text-slate-600">Assign point values, set answers and automatically provide feedback</p>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Make this a quiz</h3>
+                                    <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
+                                        Assign point values, set answers and automatically provide feedback
+                                    </p>
                                 </div>
                                 <button
                                     type="button"
-                                    :class="['relative h-5 w-11 rounded-full transition', form.settings.isQuiz ? 'bg-indigo-500' : 'bg-slate-300']"
+                                    :class="[
+                                        'relative h-5 w-11 shrink-0 rounded-full transition',
+                                        form.settings.isQuiz ? 'bg-indigo-500' : 'bg-slate-300',
+                                    ]"
                                     @click="toggleSetting('isQuiz')"
                                 >
                                     <span
@@ -3132,26 +3181,32 @@ watch(
 
                             <div class="border-t border-slate-200"></div>
 
-                            <section class="px-11 py-12">
+                            <section class="py-8 sm:px-11 sm:py-12">
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isResponsesSettingsOpen = !isResponsesSettingsOpen"
                                 >
                                     <span>
-                                        <span class="block text-xl font-normal text-slate-950">Responses</span>
-                                        <span class="mt-2 block text-lg text-slate-600">Manage how responses are collected and protected</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Responses</span>
+                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
+                                            >Manage how responses are collected and protected</span
+                                        >
                                     </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isResponsesSettingsOpen ? 'rotate-180' : '']" />
+                                    <ChevronDown
+                                        :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isResponsesSettingsOpen ? 'rotate-180' : '']"
+                                    />
                                 </button>
 
-                                <div v-if="isResponsesSettingsOpen" class="mt-10 space-y-9">
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <label class="text-xl font-normal text-slate-950" for="emailCollectionMode">Collect email addresses</label>
+                                <div v-if="isResponsesSettingsOpen" class="mt-8 space-y-8 sm:mt-10 sm:space-y-9">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
+                                        <label class="text-base font-normal text-slate-950 sm:text-xl" for="emailCollectionMode"
+                                            >Collect email addresses</label
+                                        >
                                         <select
                                             id="emailCollectionMode"
                                             v-model="form.settings.emailCollectionMode"
-                                            class="h-14 w-64 rounded border border-slate-300 bg-white px-5 text-lg text-slate-950 focus:border-indigo-500 focus:ring-indigo-500"
+                                            class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 focus:border-indigo-500 focus:ring-indigo-500 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
                                             @change="markSettingsChanged"
                                         >
                                             <option value="none">Do not collect</option>
@@ -3160,15 +3215,19 @@ watch(
                                         </select>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">Send responders a copy of their response</span>
-                                            <span class="mt-1 block text-base text-slate-600">Requires <strong>Collect email addresses</strong></span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl"
+                                                >Send responders a copy of their response</span
+                                            >
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-base"
+                                                >Requires <strong>Collect email addresses</strong></span
+                                            >
                                         </span>
                                         <select
                                             v-model="form.settings.sendResponseCopy"
                                             :disabled="form.settings.emailCollectionMode === 'none'"
-                                            class="h-14 w-64 rounded border border-slate-300 bg-white px-5 text-lg text-slate-950 disabled:bg-slate-50 disabled:text-slate-400"
+                                            class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 disabled:bg-slate-50 disabled:text-slate-400 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
                                             @change="markSettingsChanged"
                                         >
                                             <option value="off">Off</option>
@@ -3177,15 +3236,17 @@ watch(
                                         </select>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">Allow response editing</span>
-                                            <span class="mt-1 block text-lg text-slate-600">Responses can be changed after being submitted</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Allow response editing</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg"
+                                                >Responses can be changed after being submitted</span
+                                            >
                                         </span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.allowResponseEditing ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('allowResponseEditing')"
@@ -3199,13 +3260,13 @@ watch(
                                         </button>
                                     </div>
 
-                                    <p class="pl-11 text-sm font-bold uppercase tracking-widest text-slate-600">Requires sign-in</p>
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <span class="block text-xl font-normal text-slate-950">Limit to 1 response</span>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Requires sign-in</p>
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Limit to 1 response</span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.limitOneResponse ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('limitOneResponse')"
@@ -3223,14 +3284,14 @@ watch(
 
                             <div class="border-t border-slate-200"></div>
 
-                            <section class="px-11 py-12">
+                            <section class="py-8 sm:px-11 sm:py-12">
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isCohortSettingsOpen = !isCohortSettingsOpen"
                                 >
                                     <span>
-                                        <span class="flex items-center gap-2 text-xl font-normal text-slate-950">
+                                        <span class="flex flex-wrap items-center gap-2 text-base font-normal text-slate-950 sm:text-xl">
                                             <span>Peserta & Kelompok (Cohort)</span>
                                             <span
                                                 v-if="selectedCohortIds.length > 0"
@@ -3239,14 +3300,14 @@ watch(
                                                 {{ selectedCohortIds.length }} Cohort Terpilih
                                             </span>
                                         </span>
-                                        <span class="mt-2 block text-lg text-slate-600">
+                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg">
                                             Batasi kuis agar hanya dapat dikerjakan oleh anggota kelompok/rombel tertentu
                                         </span>
                                     </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isCohortSettingsOpen ? 'rotate-180' : '']" />
+                                    <ChevronDown :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isCohortSettingsOpen ? 'rotate-180' : '']" />
                                 </button>
 
-                                <div v-if="isCohortSettingsOpen" class="mt-10 space-y-6 pl-11">
+                                <div v-if="isCohortSettingsOpen" class="mt-8 space-y-6 sm:mt-10 sm:pl-11">
                                     <div class="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
                                         <label
                                             class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition"
@@ -3352,27 +3413,31 @@ watch(
 
                             <div class="border-t border-slate-200"></div>
 
-                            <section class="px-11 py-12">
+                            <section class="py-8 sm:px-11 sm:py-12">
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isPresentationSettingsOpen = !isPresentationSettingsOpen"
                                 >
                                     <span>
-                                        <span class="block text-xl font-normal text-slate-950">Presentation</span>
-                                        <span class="mt-2 block text-lg text-slate-600">Manage how the form and responses are presented</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Presentation</span>
+                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
+                                            >Manage how the form and responses are presented</span
+                                        >
                                     </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isPresentationSettingsOpen ? 'rotate-180' : '']" />
+                                    <ChevronDown
+                                        :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isPresentationSettingsOpen ? 'rotate-180' : '']"
+                                    />
                                 </button>
 
-                                <div v-if="isPresentationSettingsOpen" class="mt-10 space-y-9">
-                                    <p class="pl-11 text-sm font-bold uppercase tracking-widest text-slate-600">Form presentation</p>
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <span class="block text-xl font-normal text-slate-950">Show progress bar</span>
+                                <div v-if="isPresentationSettingsOpen" class="mt-8 space-y-8 sm:mt-10 sm:space-y-9">
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Form presentation</p>
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Show progress bar</span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.showProgress ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('showProgress')"
@@ -3386,12 +3451,12 @@ watch(
                                         </button>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <span class="block text-xl font-normal text-slate-950">Shuffle question order</span>
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Shuffle question order</span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.shuffleQuestions ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('shuffleQuestions')"
@@ -3405,14 +3470,14 @@ watch(
                                         </button>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
                                         <div>
-                                            <span class="block text-xl font-normal text-slate-950">Pembagian Tampilan Soal</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Pembagian Tampilan Soal</span>
                                             <span class="mt-1 block text-sm text-slate-500">Atur jumlah butir soal yang ditampilkan per halaman untuk siswa</span>
                                         </div>
                                         <select
                                             v-model="form.settings.questionsPerPage"
-                                            class="h-11 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                                            class="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 sm:w-auto"
                                             @change="markSettingsChanged"
                                         >
                                             <option value="all">Semua Soal (1 Halaman Penuh)</option>
@@ -3429,26 +3494,30 @@ watch(
                                         </select>
                                     </div>
 
-                                    <p class="pl-11 text-sm font-bold uppercase tracking-widest text-slate-600">After submission</p>
-                                    <div class="flex items-start justify-between gap-8 pl-11">
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">After submission</p>
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:pl-11">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">Confirmation message</span>
-                                            <span class="mt-2 block text-lg italic text-slate-600">{{ form.settings.confirmationMessage }}</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Confirmation message</span>
+                                            <span class="mt-1 block text-sm italic text-slate-600 sm:mt-2 sm:text-lg">{{
+                                                form.settings.confirmationMessage
+                                            }}</span>
                                         </span>
                                         <input
                                             v-model="form.settings.confirmationMessage"
                                             type="text"
-                                            class="h-11 w-80 rounded border border-transparent px-3 text-right text-lg font-semibold text-blue-600 outline-none hover:border-slate-200 focus:border-indigo-500 focus:text-slate-900"
+                                            class="h-11 w-full rounded border border-slate-200 px-3 text-left text-base font-semibold text-blue-600 outline-none hover:border-slate-200 focus:border-indigo-500 focus:text-slate-900 sm:w-80 sm:border-transparent sm:text-right sm:text-lg"
                                             @input="markSettingsChanged"
                                         />
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <span class="block text-xl font-normal text-slate-950">Show link to submit another response</span>
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl"
+                                            >Show link to submit another response</span
+                                        >
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.showSubmitAnotherResponse ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('showSubmitAnotherResponse')"
@@ -3462,15 +3531,15 @@ watch(
                                         </button>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8 pl-11">
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">View results summary</span>
-                                            <span class="mt-1 block text-lg text-slate-600">Share results summary with respondents.</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">View results summary</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Share results summary with respondents.</span>
                                         </span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.showResultsSummary ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('showResultsSummary')"
@@ -3484,13 +3553,15 @@ watch(
                                         </button>
                                     </div>
 
-                                    <p class="pl-11 text-sm font-bold uppercase tracking-widest text-slate-600">Restrictions</p>
-                                    <div class="flex items-center justify-between gap-8 pl-11">
-                                        <span class="block text-xl font-normal text-slate-950">Disable auto-save for all respondents</span>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Restrictions</p>
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl"
+                                            >Disable auto-save for all respondents</span
+                                        >
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.disableRespondentAutosave ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('disableRespondentAutosave')"
@@ -3509,21 +3580,21 @@ watch(
                     </section>
 
                     <section class="mt-5 rounded-xl border border-slate-300 bg-white shadow-sm">
-                        <div class="px-7 py-7">
-                            <h2 class="text-2xl font-normal text-slate-950">Security & Limits</h2>
+                        <div class="px-5 py-6 sm:px-7 sm:py-7">
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Security & Limits</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
 
-                            <div class="flex items-center justify-between gap-6 px-11 py-12">
+                            <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-12">
                                 <div>
-                                    <h3 class="text-xl font-normal text-slate-950">Lock quiz on tab switch</h3>
-                                    <p class="mt-2 text-lg text-slate-600">
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Lock quiz on tab switch</h3>
+                                    <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
                                         Automatically lock attempt if respondent switches tab or blurs window. Requires approval to unlock.
                                     </p>
                                 </div>
                                 <button
                                     type="button"
                                     :class="[
-                                        'relative h-5 w-11 rounded-full transition',
+                                        'relative h-5 w-11 shrink-0 rounded-full transition',
                                         form.settings.lockOnBlur ? 'bg-indigo-500' : 'bg-slate-300',
                                     ]"
                                     @click="toggleSetting('lockOnBlur')"
@@ -3539,51 +3610,58 @@ watch(
 
                             <div class="border-t border-slate-200"></div>
 
-                            <div class="flex items-center justify-between gap-6 px-11 py-12">
+                            <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-12">
                                 <div>
-                                    <h3 class="text-xl font-normal text-slate-950">Batas Waktu Pengerjaan (Menit)</h3>
-                                    <p class="mt-2 text-lg text-slate-600">Batasi waktu pengisian kuis (0 atau kosong untuk tanpa batas waktu)</p>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Batas Waktu Pengerjaan (Menit)</h3>
+                                    <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
+                                        Batasi waktu pengisian kuis (0 atau kosong untuk tanpa batas waktu)
+                                    </p>
                                 </div>
-                                <div class="flex items-center gap-2">
+                                <div class="flex shrink-0 items-center gap-2">
                                     <input
                                         v-model.number="form.settings.timeLimit"
                                         type="number"
                                         min="0"
-                                        class="h-12 w-28 rounded border border-slate-300 px-4 text-lg focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="h-11 w-20 rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500 sm:h-12 sm:w-28 sm:px-4 sm:text-lg"
                                         @change="markSettingsChanged"
                                     />
-                                    <span class="text-lg text-slate-600">menit</span>
+                                    <span class="text-sm text-slate-600 sm:text-lg">menit</span>
                                 </div>
                             </div>
                         </div>
                     </section>
 
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
-                        <div class="px-7 py-7">
-                            <h2 class="text-2xl font-normal text-slate-950">Defaults</h2>
+                        <div class="px-5 py-6 sm:px-7 sm:py-7">
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Defaults</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
 
-                            <section class="px-11 py-12">
+                            <section class="py-8 sm:px-11 sm:py-12">
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isFormDefaultsOpen = !isFormDefaultsOpen"
                                 >
                                     <span>
-                                        <span class="block text-xl font-normal text-slate-950">Form defaults</span>
-                                        <span class="mt-2 block text-lg text-slate-600">Settings applied to this form and new forms</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Form defaults</span>
+                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
+                                            >Settings applied to this form and new forms</span
+                                        >
                                     </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isFormDefaultsOpen ? 'rotate-180' : '']" />
+                                    <ChevronDown :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isFormDefaultsOpen ? 'rotate-180' : '']" />
                                 </button>
 
-                                <div v-if="isFormDefaultsOpen" class="mt-10 flex items-center justify-between gap-8 pl-11">
-                                    <label class="text-xl font-normal text-slate-950" for="defaultCollectEmailMode"
+                                <div
+                                    v-if="isFormDefaultsOpen"
+                                    class="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11"
+                                >
+                                    <label class="text-base font-normal text-slate-950 sm:text-xl" for="defaultCollectEmailMode"
                                         >Collect email addresses by default</label
                                     >
                                     <select
                                         id="defaultCollectEmailMode"
                                         v-model="form.settings.defaultCollectEmailMode"
-                                        class="h-14 w-64 rounded border border-slate-300 bg-white px-5 text-lg text-slate-950 focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 focus:border-indigo-500 focus:ring-indigo-500 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
                                         @change="markSettingsChanged"
                                     >
                                         <option value="none">Do not collect</option>
@@ -3595,26 +3673,30 @@ watch(
 
                             <div class="border-t border-slate-200"></div>
 
-                            <section class="px-11 py-12">
+                            <section class="py-8 sm:px-11 sm:py-12">
                                 <button
                                     type="button"
                                     class="flex w-full items-start justify-between gap-5 text-left"
                                     @click="isQuestionDefaultsOpen = !isQuestionDefaultsOpen"
                                 >
                                     <span>
-                                        <span class="block text-xl font-normal text-slate-950">Question defaults</span>
-                                        <span class="mt-2 block text-lg text-slate-600">Settings applied to all new questions</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Question defaults</span>
+                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
+                                            >Settings applied to all new questions</span
+                                        >
                                     </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 transition-transform', isQuestionDefaultsOpen ? 'rotate-180' : '']" />
+                                    <ChevronDown
+                                        :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isQuestionDefaultsOpen ? 'rotate-180' : '']"
+                                    />
                                 </button>
 
-                                <div v-if="isQuestionDefaultsOpen" class="mt-10 space-y-8 pl-11">
-                                    <div v-if="form.settings.isQuiz" class="flex items-center justify-between gap-8">
-                                        <span class="block text-xl font-normal text-slate-950">Make questions required by default</span>
+                                <div v-if="isQuestionDefaultsOpen" class="mt-8 space-y-8 sm:mt-10 sm:pl-11">
+                                    <div v-if="form.settings.isQuiz" class="flex items-center justify-between gap-4 sm:gap-8">
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Make questions required by default</span>
                                         <button
                                             type="button"
                                             :class="[
-                                                'relative h-5 w-11 rounded-full transition',
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
                                                 form.settings.defaultQuestionRequired ? 'bg-indigo-500' : 'bg-slate-300',
                                             ]"
                                             @click="toggleSetting('defaultQuestionRequired')"
@@ -3628,39 +3710,41 @@ watch(
                                         </button>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8">
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">Default quiz points</span>
-                                            <span class="mt-1 block text-lg text-slate-600">Applied when adding new questions.</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Default quiz points</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Applied when adding new questions.</span>
                                         </span>
-                                        <div class="flex items-center gap-2">
+                                        <div class="flex shrink-0 items-center gap-2">
                                             <input
                                                 v-model.number="form.settings.defaultQuestionPoints"
                                                 type="number"
                                                 min="0"
                                                 max="1000"
-                                                class="h-12 w-28 rounded border border-slate-300 px-4 text-lg focus:border-indigo-500 focus:ring-indigo-500"
+                                                class="h-11 w-20 rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500 sm:h-12 sm:w-28 sm:px-4 sm:text-lg"
                                                 @change="markSettingsChanged"
                                             />
-                                            <span class="text-lg text-slate-600">points</span>
+                                            <span class="text-sm text-slate-600 sm:text-lg">points</span>
                                         </div>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-8">
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8">
                                         <span>
-                                            <span class="block text-xl font-normal text-slate-950">Media upload limit</span>
-                                            <span class="mt-1 block text-lg text-slate-600">Maximum image/video upload size in the editor.</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Media upload limit</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg"
+                                                >Maximum image/video upload size in the editor.</span
+                                            >
                                         </span>
-                                        <div class="flex items-center gap-2">
+                                        <div class="flex shrink-0 items-center gap-2">
                                             <input
                                                 v-model.number="form.settings.maxUploadSize"
                                                 type="number"
                                                 min="1"
                                                 max="40"
-                                                class="h-12 w-28 rounded border border-slate-300 px-4 text-lg focus:border-indigo-500 focus:ring-indigo-500"
+                                                class="h-11 w-20 rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500 sm:h-12 sm:w-28 sm:px-4 sm:text-lg"
                                                 @change="markSettingsChanged"
                                             />
-                                            <span class="text-lg text-slate-600">MB</span>
+                                            <span class="text-sm text-slate-600 sm:text-lg">MB</span>
                                         </div>
                                     </div>
                                 </div>
@@ -3701,7 +3785,7 @@ watch(
                         </p>
                         <RichContent v-if="question.description" :content="question.description" as="p" class="mt-1 text-sm text-slate-500" />
                         <!-- Preview media display -->
-                        <div v-if="question.media && question.media.length" class="mb-4 mt-3 grid gap-4 sm:grid-cols-2">
+                        <div v-if="question.media && question.media.length" class="mb-4 mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div
                                 v-for="(media, idx) in question.media"
                                 :key="idx"
@@ -3932,8 +4016,7 @@ watch(
                 <!-- Word (.docx) Import Tab -->
                 <div v-else class="space-y-4">
                     <p class="text-sm leading-relaxed text-slate-500">
-                        Unggah dokumen Word (.docx) berisi soal Anda. Templat di bawah memuat aturan penulisan dan contoh setiap tipe soal yang bisa
-                        langsung dicoba impor.
+                        Unggah dokumen Word (.docx) berisi soal Anda. Templat di bawah berisi contoh setiap tipe soal yang bisa langsung dicoba impor.
                     </p>
 
                     <!-- Clean style template download section -->
@@ -3944,7 +4027,7 @@ watch(
                             </div>
                             <div>
                                 <span class="block text-sm font-bold text-slate-800">Templat Soal DOCX</span>
-                                <span class="block text-[11px] font-medium text-slate-500">Aturan + contoh semua tipe soal</span>
+                                <span class="block text-[11px] font-medium text-slate-500">Contoh semua tipe soal</span>
                             </div>
                         </div>
                         <button
@@ -3968,7 +4051,7 @@ watch(
                             >
 1. Teks soal
 Tipe: Kotak Centang
-Poin: 10
+Poin: 1
 A. Pilihan pertama
 B. Pilihan kedua
 C. Pilihan ketiga
@@ -3981,7 +4064,7 @@ Jawaban: A, C</pre
                                     <strong>Wajib:</strong> dan <strong>Skala:</strong> opsional.
                                 </li>
                                 <li>Benar/Salah beberapa pernyataan, Menjodohkan dan Kisi ditulis dalam tabel Word.</li>
-                                <li>Hanya teks di bawah baris <strong>MULAI SOAL</strong> yang diimpor; baris diawali <code>//</code> diabaikan.</li>
+                                <li>Kop/petunjuk di atas baris <strong>MULAI SOAL</strong> dan baris diawali <code>//</code> tidak ikut diimpor.</li>
                             </ul>
                             <div class="flex flex-wrap gap-1.5">
                                 <span
@@ -3992,6 +4075,15 @@ Jawaban: A, C</pre
                                     {{ docxType }}
                                 </span>
                             </div>
+                            <a
+                                :href="route('help', { topic: 'docx-import' })"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center gap-1 font-bold text-indigo-700 hover:underline"
+                            >
+                                Panduan lengkap setiap tipe soal di Pusat Bantuan
+                                <ExternalLink class="h-3.5 w-3.5" />
+                            </a>
                         </div>
                     </details>
 
@@ -4507,7 +4599,7 @@ button[aria-label]::after,
     top: calc(100% + 8px);
     z-index: 70;
     max-width: 190px;
-    transform: translate(-50%, -4px);
+    transform: translateX(-50%);
     white-space: nowrap;
     border-radius: 8px;
     background: #0f172a;
@@ -4516,18 +4608,20 @@ button[aria-label]::after,
     font-weight: 700;
     line-height: 1;
     color: white;
-    opacity: 0;
     box-shadow: 0 10px 25px rgb(15 23 42 / 18%);
-    transition:
-        opacity 120ms ease,
-        transform 120ms ease;
+    /* Only rendered while shown: a hidden tooltip near the screen edge would widen the page on phones. */
+    display: none;
 }
 
-button[aria-label]:hover::after,
 button[aria-label]:focus-visible::after,
-.with-tooltip:hover::after,
 .with-tooltip:focus-visible::after {
-    transform: translate(-50%, 0);
-    opacity: 1;
+    display: block;
+}
+
+@media (hover: hover) {
+    button[aria-label]:hover::after,
+    .with-tooltip:hover::after {
+        display: block;
+    }
 }
 </style>

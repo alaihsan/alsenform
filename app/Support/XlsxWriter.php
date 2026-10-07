@@ -480,7 +480,7 @@ class XlsxWriter
 
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<numFmts count="2"><numFmt numFmtId="164" formatCode="0.0"/><numFmt numFmtId="165" formatCode="dd/mm/yyyy hh:mm"/></numFmts>'
+            .'<numFmts count="2"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="dd/mm/yyyy hh:mm"/></numFmts>'
             .'<fonts count="'.count($fonts).'">'.implode('', $fonts).'</fonts>'
             .'<fills count="'.count($fills).'">'.implode('', $fills).'</fills>'
             .'<borders count="'.count($borders).'">'.implode('', $borders).'</borders>'

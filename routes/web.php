@@ -12,6 +12,8 @@ use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
+use App\Services\DocxImportTemplate;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -26,8 +28,11 @@ Route::get('/', function () {
 Route::get('dashboard', DashboardController::class)->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
-    Route::get('help', function () {
-        return Inertia::render('Help');
+    Route::get('help', function (Request $request, DocxImportTemplate $docxTemplate) {
+        return Inertia::render('Help', [
+            // The Word import guide is for the people who write exams.
+            'docxImportGuide' => $request->user()->isStudent() ? null : $docxTemplate->guide(),
+        ]);
     })->name('help');
 
     // Developer Support Routes

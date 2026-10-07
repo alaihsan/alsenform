@@ -189,14 +189,14 @@ class QuizFormPayloads
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
-        $maxScore = 0;
-        foreach ($quizForm->questions ?? [] as $q) {
-            $maxScore += isset($q['points']) ? (int) $q['points'] : 1;
-        }
+        // Scored against the current answer keys, so correcting a key re-grades earlier answers.
+        $scoring = new QuizScoring;
+        $formQuestions = is_array($quizForm->questions) ? $quizForm->questions : [];
+        $maxScore = $scoring->maxPoints($formQuestions);
 
-        $gradebook = $responses->map(function (QuizResponse $response) use ($maxScore): array {
-            $score = $response->score ?? 0;
-            $percentage = $maxScore > 0 ? round(($score / $maxScore) * 100, 1) : 0;
+        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore): array {
+            $score = is_array($response->answers) ? $scoring->score($formQuestions, $response->answers) : (int) ($response->score ?? 0);
+            $percentage = $scoring->grade($score, $maxScore);
 
             return [
                 'id' => $response->id,
@@ -246,12 +246,7 @@ class QuizFormPayloads
                     continue;
                 }
 
-                foreach ((array) $answer as $value) {
-                    if ($value === null || $value === '') {
-                        continue;
-                    }
-
-                    $label = (string) $value;
+                foreach ($this->answerLabels($question, $answer) as $label) {
                     $counts[$label] = ($counts[$label] ?? 0) + 1;
 
                     if (count($textAnswers) < 8) {
@@ -274,5 +269,44 @@ class QuizFormPayloads
                 'textAnswers' => $textAnswers,
             ];
         })->values()->all();
+    }
+
+    /**
+     * An answer as labels for the summary: choices as written, grid answers as "row → column"
+     * (a tick box grid answer holds a list of columns per row).
+     *
+     * @param  array<string, mixed>  $question
+     * @return list<string>
+     */
+    private function answerLabels(array $question, mixed $answer): array
+    {
+        $labels = [];
+
+        if (in_array($question['type'] ?? '', ['Multiple-choice grid', 'Tick box grid'], true) && is_array($answer)) {
+            $rows = is_array($question['rows'] ?? null) ? $question['rows'] : [];
+            $columns = is_array($question['columns'] ?? null) ? $question['columns'] : [];
+
+            foreach ($answer as $rowIndex => $selected) {
+                foreach ((array) $selected as $columnIndex) {
+                    if (! is_scalar($columnIndex) || $columnIndex === '') {
+                        continue;
+                    }
+
+                    $row = is_scalar($rows[$rowIndex] ?? null) ? (string) $rows[$rowIndex] : 'Baris '.((int) $rowIndex + 1);
+                    $column = is_scalar($columns[(int) $columnIndex] ?? null) ? (string) $columns[(int) $columnIndex] : (string) $columnIndex;
+                    $labels[] = "{$row} → {$column}";
+                }
+            }
+
+            return $labels;
+        }
+
+        foreach ((array) $answer as $value) {
+            if (is_scalar($value) && $value !== '') {
+                $labels[] = (string) $value;
+            }
+        }
+
+        return $labels;
     }
 }

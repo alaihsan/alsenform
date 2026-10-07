@@ -288,11 +288,11 @@ function confirmRemove(): void {
                     <table class="w-full text-left text-xs text-slate-600">
                         <thead class="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                             <tr>
-                                <th scope="col" class="px-5 py-3.5">Nama Murid</th>
-                                <th scope="col" class="px-4 py-3.5">NIS</th>
-                                <th scope="col" class="px-4 py-3.5">Kelas</th>
-                                <th scope="col" class="px-4 py-3.5">Email</th>
-                                <th scope="col" class="px-5 py-3.5 text-right">Aksi</th>
+                                <th scope="col" class="px-4 py-3.5 sm:px-5">Nama Murid</th>
+                                <th scope="col" class="hidden px-4 py-3.5 sm:table-cell">NIS</th>
+                                <th scope="col" class="hidden px-4 py-3.5 sm:table-cell">Kelas</th>
+                                <th scope="col" class="hidden px-4 py-3.5 md:table-cell">Email</th>
+                                <th scope="col" class="px-4 py-3.5 text-right sm:px-5">Aksi</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -301,27 +301,35 @@ function confirmRemove(): void {
                                 :key="m.id"
                                 class="transition hover:bg-slate-50/80"
                             >
-                                <td class="px-5 py-3.5 font-bold text-slate-900">
+                                <td class="px-4 py-3.5 font-bold text-slate-900 sm:px-5">
                                     <div class="flex items-center gap-2.5">
-                                        <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-bold uppercase text-xs">
+                                        <div
+                                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-xs font-bold uppercase text-indigo-700"
+                                        >
                                             {{ m.name.charAt(0) }}
                                         </div>
-                                        <span>{{ m.name }}</span>
+                                        <span class="min-w-0">
+                                            <span class="block">{{ m.name }}</span>
+                                            <!-- Phones: NIS and class under the name (their columns are hidden) -->
+                                            <span class="block font-mono text-[10px] font-medium text-slate-500 sm:hidden">
+                                                NIS {{ m.nis || '-' }}<template v-if="m.kelas"> · {{ m.kelas }}</template>
+                                            </span>
+                                        </span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-3.5 font-mono font-semibold text-slate-800">
+                                <td class="hidden px-4 py-3.5 font-mono font-semibold text-slate-800 sm:table-cell">
                                     {{ m.nis || '-' }}
                                 </td>
-                                <td class="px-4 py-3.5">
+                                <td class="hidden px-4 py-3.5 sm:table-cell">
                                     <span v-if="m.kelas" class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
                                         {{ m.kelas }}
                                     </span>
                                     <span v-else class="text-slate-400">-</span>
                                 </td>
-                                <td class="px-4 py-3.5 text-slate-500">
+                                <td class="hidden px-4 py-3.5 text-slate-500 md:table-cell">
                                     {{ m.email || '-' }}
                                 </td>
-                                <td class="px-5 py-3.5 text-right">
+                                <td class="px-4 py-3.5 text-right sm:px-5">
                                     <button
                                         type="button"
                                         @click="openRemoveModal(m)"
