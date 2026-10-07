@@ -61,6 +61,147 @@ test('lan:serve port utility methods work correctly', function () {
     expect($command->getPortPids($freePort))->toBeArray();
 });
 
+/**
+ * Start a PHP server with workers, like lan:serve does, and wait until it listens.
+ *
+ * @param  list<string>  $arguments
+ */
+function startLanTestServer(int $port, array $arguments): Process
+{
+    $process = new Process([PHP_BINARY, '-S', "127.0.0.1:{$port}", ...$arguments], base_path(), ['PHP_CLI_SERVER_WORKERS' => '2']);
+    $process->start();
+
+    $deadline = microtime(true) + 5;
+    while (microtime(true) < $deadline && (new ServeLanCommand)->getPortPids($port) === []) {
+        usleep(50 * 1000);
+    }
+
+    return $process;
+}
+
+function lanCommandWithoutMetadata(): ServeLanCommand
+{
+    return new class extends ServeLanCommand
+    {
+        protected function infoFilePath(): string
+        {
+            return storage_path('framework/testing/lan_server_missing.json');
+        }
+
+        public function stop(): int
+        {
+            return $this->handleStop();
+        }
+    };
+}
+
+test('lan:serve stops the server on the port without touching programs connected to it', function () {
+    $port = 59140;
+    $server = startLanTestServer($port, [base_path('server.php')]);
+    $client = stream_socket_client("tcp://127.0.0.1:{$port}");
+
+    try {
+        $command = new ServeLanCommand;
+        $pids = $command->getPortPids($port);
+
+        expect($pids)->toContain((string) $server->getPid())
+            ->toHaveCount(3)
+            ->not->toContain((string) getmypid())
+            ->and($command->killPortProcesses($port))->toBeTrue()
+            ->and($command->isPortInUse($port))->toBeFalse();
+    } finally {
+        fclose($client);
+        $server->stop(0);
+    }
+});
+
+test('lan:stop stops an alsenform server that has no background metadata', function () {
+    $port = 59141;
+    $server = startLanTestServer($port, [base_path('server.php')]);
+
+    try {
+        $command = lanCommandWithoutMetadata();
+        $command->setInput(new ArrayInput(['--port' => (string) $port], $command->getDefinition()));
+        $buffer = new BufferedOutput;
+        $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
+
+        expect($command->stop())->toBe(0)
+            ->and($buffer->fetch())->toContain("Server Alsenform pada port {$port} telah dihentikan")
+            ->and($command->isPortInUse($port))->toBeFalse();
+    } finally {
+        $server->stop(0);
+    }
+});
+
+test('lan:stop leaves a server of another application running', function () {
+    $port = 59142;
+    $server = startLanTestServer($port, ['-t', public_path()]);
+
+    try {
+        $command = lanCommandWithoutMetadata();
+        $command->setInput(new ArrayInput(['--port' => (string) $port], $command->getDefinition()));
+        $buffer = new BufferedOutput;
+        $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
+
+        expect($command->stop())->toBe(1)
+            ->and($buffer->fetch())->toContain('bukan oleh server Alsenform')
+            ->and($command->isPortInUse($port))->toBeTrue();
+    } finally {
+        $server->stop(0);
+    }
+});
+
+test('lan:serve explains a port it cannot free and offers the next free port', function () {
+    $command = new class extends ServeLanCommand
+    {
+        /** @var list<list<string>> */
+        public array $pidSnapshots = [['1327', '1541'], ['2001', '2002']];
+
+        public function getPortPids(int $port): array
+        {
+            return array_shift($this->pidSnapshots) ?? ['2001', '2002'];
+        }
+
+        public function killPortProcesses(int $port): bool
+        {
+            return false;
+        }
+
+        public function findAvailablePort(int $startPort, int $maxTries = 10): int
+        {
+            return $startPort;
+        }
+
+        protected function describeProcesses(array $pids): array
+        {
+            return array_map(fn (string $pid): string => "{$pid} 1 root php -S 0.0.0.0:8000 server.php", $pids);
+        }
+
+        public function resolve(int $port): ?int
+        {
+            return $this->resolveBusyPort($port, '0.0.0.0');
+        }
+    };
+
+    $input = new ArrayInput([], $command->getDefinition());
+    $answers = fopen('php://memory', 'r+');
+    fwrite($answers, "kill\nyes\n");
+    rewind($answers);
+    $input->setStream($answers);
+
+    $buffer = new BufferedOutput;
+    $command->setInput($input);
+    $command->setOutput(new OutputStyle($input, $buffer));
+
+    expect($command->resolve(8000))->toBe(8001);
+
+    expect($buffer->fetch())->toContain('Gagal membebaskan port 8000')
+        ->toContain('2001 1 root php -S 0.0.0.0:8000 server.php')
+        ->toContain('Proses baru muncul lagi')
+        ->toContain('sudo kill -9 $(sudo lsof -nP -iTCP:8000 -sTCP:LISTEN -t)')
+        ->toContain('Menggunakan port baru yang tersedia: 8001');
+});
+
 test('lan:serve announces the new student url when the server ip address changes', function () {
     $command = new class extends ServeLanCommand
     {
