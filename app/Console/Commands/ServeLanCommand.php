@@ -411,14 +411,30 @@ class ServeLanCommand extends Command
         $port = (int) $this->option('port');
 
         if (! file_exists($infoFile)) {
-            if ($this->isPortInUse($port)) {
-                $this->warn("⚠️  Port {$port} sedang digunakan, tetapi tidak memiliki metadata Alsenform.");
+            if (! $this->isPortInUse($port)) {
+                $this->info('ℹ️  Tidak ada server latar belakang yang sedang aktif.');
+
+                return self::SUCCESS;
+            }
+
+            $pids = $this->getPortPids($port);
+            if (! $this->isAlsenformServer($pids)) {
+                $this->warn("⚠️  Port {$port} sedang digunakan, tetapi bukan oleh server Alsenform ini.");
                 $this->line('   Demi keamanan, tidak ada proses yang dihentikan. Periksa proses tersebut secara manual.');
+                $this->explainBusyPort($port, []);
 
                 return self::FAILURE;
-            } else {
-                $this->info('ℹ️  Tidak ada server latar belakang yang sedang aktif.');
             }
+
+            // A foreground server left in another terminal window, or one whose metadata is gone.
+            if (! $this->killPortProcesses($port)) {
+                $this->error("Gagal menghentikan server Alsenform pada port {$port}.");
+                $this->explainBusyPort($port, $pids);
+
+                return self::FAILURE;
+            }
+
+            $this->info("✓ Server Alsenform pada port {$port} telah dihentikan.");
 
             return self::SUCCESS;
         }
@@ -535,9 +551,7 @@ class ServeLanCommand extends Command
             return true;
         }
 
-        $output = @shell_exec("lsof -ti :{$port} 2>/dev/null");
-
-        return ! empty(trim((string) $output));
+        return $this->getPortPids($port) !== [];
     }
 
     /**
@@ -562,41 +576,131 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * Retrieve process IDs listening on the given port.
+     * Retrieve the IDs of the processes listening on the given port. Programs only connected
+     * to it, such as a browser that has the exam open, are left out so they are never killed.
      *
-     * @return array<int, string>
+     * @return list<string>
      */
     public function getPortPids(int $port): array
     {
-        $output = @shell_exec("lsof -ti :{$port} 2>/dev/null");
+        $output = @shell_exec("lsof -nP -iTCP:{$port} -sTCP:LISTEN -t 2>/dev/null");
         if (! $output) {
             return [];
         }
 
-        $pids = array_filter(array_map('trim', explode("\n", (string) $output)));
+        $pids = array_filter(array_map('trim', explode("\n", (string) $output)), 'ctype_digit');
 
         return array_values(array_unique($pids));
     }
 
     /**
-     * Terminate processes listening on the given port.
+     * Terminate the processes listening on the given port: politely first (SIGTERM), then
+     * forcefully (SIGKILL), waiting until the port is really free. A server with 24 workers
+     * needs a moment to release it.
      */
     public function killPortProcesses(int $port): bool
     {
         $pids = $this->getPortPids($port);
-        if (empty($pids)) {
+        if ($pids === []) {
+            return ! $this->isPortInUse($port);
+        }
+
+        $this->signalProcesses($pids, 'TERM');
+        if ($this->waitUntilPortIsFree($port, 2.0)) {
             return true;
         }
 
-        foreach ($pids as $pid) {
-            if (is_numeric($pid)) {
-                @shell_exec("kill -9 {$pid} 2>/dev/null");
+        $this->signalProcesses($this->getPortPids($port), 'KILL');
+
+        return $this->waitUntilPortIsFree($port, 3.0);
+    }
+
+    /**
+     * @param  list<string>  $pids
+     */
+    protected function signalProcesses(array $pids, string $signal): void
+    {
+        if ($pids !== []) {
+            @shell_exec("kill -{$signal} ".implode(' ', $pids).' 2>/dev/null');
+        }
+    }
+
+    protected function waitUntilPortIsFree(int $port, float $seconds): bool
+    {
+        $deadline = microtime(true) + $seconds;
+
+        do {
+            if (! $this->isPortInUse($port)) {
+                return true;
+            }
+            usleep(100 * 1000);
+        } while (microtime(true) < $deadline);
+
+        return false;
+    }
+
+    /**
+     * "PID PPID USER COMMAND" of each process, as listed by ps.
+     *
+     * @param  list<string>  $pids
+     * @return list<string>
+     */
+    protected function describeProcesses(array $pids): array
+    {
+        if ($pids === []) {
+            return [];
+        }
+
+        $selection = implode(' ', array_map(fn (string $pid): string => "-p {$pid}", $pids));
+        $output = (string) @shell_exec("ps -ww -o pid=,ppid=,user=,command= {$selection} 2>/dev/null");
+
+        return array_values(array_filter(array_map('trim', explode("\n", $output))));
+    }
+
+    /**
+     * Whether every given process is the PHP server of this installation (its own server.php),
+     * so it may be stopped even without the metadata file of the background mode.
+     *
+     * @param  list<string>  $pids
+     */
+    protected function isAlsenformServer(array $pids): bool
+    {
+        $processes = $this->describeProcesses($pids);
+        $serverScript = base_path('server.php');
+
+        return $processes !== []
+            && count($processes) === count($pids)
+            && collect($processes)->every(fn (string $process): bool => str_contains($process, $serverScript));
+    }
+
+    /**
+     * Tell the operator which processes still hold the port and how to free it by hand.
+     *
+     * @param  list<string>  $stoppedPids
+     */
+    protected function explainBusyPort(int $port, array $stoppedPids): void
+    {
+        $remainingPids = $this->getPortPids($port);
+        $processes = $this->describeProcesses($remainingPids);
+
+        if ($processes !== []) {
+            $this->line('   Proses yang masih memakai port (PID, PID induk, pemilik, perintah):');
+            foreach (array_slice($processes, 0, 5) as $process) {
+                $this->line('      <fg=gray>'.mb_strimwidth($process, 0, 140, '…').'</>');
+            }
+            if (count($processes) > 5) {
+                $this->line('      <fg=gray>… dan '.(count($processes) - 5).' proses lain</>');
             }
         }
 
-        usleep(250 * 1000);
+        if ($stoppedPids !== [] && $remainingPids !== [] && array_intersect($remainingPids, $stoppedPids) === []) {
+            $this->line('   Proses baru muncul lagi setelah dihentikan: server ini dijalankan ulang otomatis oleh program lain');
+            $this->line('   (misalnya jendela Terminal lain, Login Items, atau launchd). Hentikan dari sana terlebih dahulu.');
+        }
 
-        return ! $this->isPortInUse($port);
+        $this->line('   Proses milik pengguna lain (misalnya server yang dulu dijalankan dengan sudo) hanya bisa dihentikan dengan:');
+        $this->line("      <fg=yellow>sudo kill -9 $(sudo lsof -nP -iTCP:{$port} -sTCP:LISTEN -t)</>");
+        $this->line('   Atau jalankan di port lain: <fg=yellow>php artisan lan:serve --port='.($port + 1).'</>');
     }
 
     /**
@@ -630,6 +734,7 @@ class ServeLanCommand extends Command
                 return $port;
             }
             $this->error("Gagal menghentikan proses pada port {$port}.");
+            $this->explainBusyPort($port, $pids);
 
             return null;
         }
@@ -654,6 +759,14 @@ class ServeLanCommand extends Command
                     return $port;
                 }
                 $this->error("Gagal membebaskan port {$port}.");
+                $this->explainBusyPort($port, $pids);
+
+                $newPort = $this->findAvailablePort($port + 1);
+                if ($this->confirm("Jalankan server di port {$newPort} saja?", true)) {
+                    $this->info("✓ Menggunakan port baru yang tersedia: {$newPort}");
+
+                    return $newPort;
+                }
             } elseif ($choice === 'next') {
                 $newPort = $this->findAvailablePort($port + 1);
                 $this->info("✓ Menggunakan port baru yang tersedia: {$newPort}");
