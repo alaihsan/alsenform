@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityReportController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
@@ -62,6 +63,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
+
+        // Laporan: logins and exam participation with device, browser and time
+        Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');
+        Route::get('reports/export', [ActivityReportController::class, 'export'])->name('reports.export');
 
         // Unlock Request Admin / Teacher Routes
         Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');

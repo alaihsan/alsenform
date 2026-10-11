@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SaveQuizDraftRequest;
 use App\Http\Requests\StoreQuizResponseRequest;
+use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Support\ActivityRecorder;
 use App\Support\MediaUrl;
 use App\Support\QuizScoring;
 use Illuminate\Database\QueryException;
@@ -97,6 +99,11 @@ class QuizResponseController extends Controller
 
         if (! $quizSession) {
             $quizSession = $this->openExamSession($quizForm, $user, $respondentIdentifier, $requiresStartConfirmation, $timeLimitMinutes);
+
+            // A survey (no rules to confirm) starts as soon as it is opened.
+            if ($quizSession->started_at !== null) {
+                $this->recordExamActivity(ActivityLog::EXAM_STARTED, $request, $quizForm, $quizSession);
+            }
         }
 
         // Until the exam has started the questions stay on the server, so they cannot be read
@@ -178,7 +185,7 @@ class QuizResponseController extends Controller
             $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
             $now = now();
 
-            QuizSession::query()
+            $started = QuizSession::query()
                 ->whereKey($session->id)
                 ->whereNull('started_at')
                 ->update([
@@ -187,6 +194,11 @@ class QuizResponseController extends Controller
                 ]);
 
             $session->refresh();
+
+            // Only the request that actually started the timer is recorded, not its retries.
+            if ($started > 0) {
+                $this->recordExamActivity(ActivityLog::EXAM_STARTED, $request, $quizForm, $session);
+            }
         }
 
         return response()->json([
@@ -277,7 +289,31 @@ class QuizResponseController extends Controller
             'draft_saved_at' => null,
         ]);
 
+        app(ActivityRecorder::class)->record(
+            ActivityLog::EXAM_SUBMITTED,
+            $request,
+            $user,
+            $quizForm,
+            respondentIdentifier: $respondentIdentifier,
+            respondentEmail: $validated['email'] ?? null,
+            meta: $isTimeout ? ['timeout' => true] : [],
+        );
+
         return $this->submissionSucceeded($request, $quizForm);
+    }
+
+    /**
+     * Record an exam step of the respondent of the given session in the activity report.
+     */
+    protected function recordExamActivity(string $event, Request $request, QuizForm $quizForm, QuizSession $session): void
+    {
+        app(ActivityRecorder::class)->record(
+            $event,
+            $request,
+            $session->user_id !== null ? $request->user() : null,
+            $quizForm,
+            respondentIdentifier: $session->respondent_identifier,
+        );
     }
 
     /**

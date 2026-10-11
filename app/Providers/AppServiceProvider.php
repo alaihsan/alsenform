@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\ActivityLog;
 use App\Models\User;
+use App\Support\ActivityRecorder;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -28,6 +33,25 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('teacher-or-admin', fn (User $user) => (bool) ($user->isAdmin() || $user->role === 'guru' || (! $user->isStudent())));
 
         $this->configureQuizRateLimiting();
+        $this->recordLoginActivity();
+    }
+
+    /**
+     * Logins and logouts appear in the activity report with their device, browser and time.
+     */
+    protected function recordLoginActivity(): void
+    {
+        Event::listen(Login::class, function (Login $event): void {
+            if ($event->user instanceof User) {
+                app(ActivityRecorder::class)->record(ActivityLog::LOGIN, request(), $event->user, meta: ['remember' => $event->remember]);
+            }
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            if ($event->user instanceof User) {
+                app(ActivityRecorder::class)->record(ActivityLog::LOGOUT, request(), $event->user);
+            }
+        });
     }
 
     /**
