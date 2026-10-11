@@ -127,10 +127,11 @@ class ActivityReport
             ->get()
             ->keyBy('event');
 
-        // People (accounts, or guests by their device cookie) per kind of device.
+        // People (accounts, plus guests by their device cookie) per kind of device. Plain SQL that
+        // PostgreSQL, MySQL and SQLite all accept.
         $people = $this->query($viewer, $filters, withEvent: false)
             ->reorder()
-            ->selectRaw('device_type, COUNT(DISTINCT COALESCE(CAST(user_id AS VARCHAR(20)), respondent_identifier)) AS total')
+            ->selectRaw('device_type, COUNT(DISTINCT user_id) + COUNT(DISTINCT CASE WHEN user_id IS NULL THEN respondent_identifier END) AS total')
             ->groupBy('device_type')
             ->pluck('total', 'device_type');
 

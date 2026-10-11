@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Support\ActivityRecorder;
+use App\Support\ErrorPage;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -21,7 +22,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One instance per request: the error page remembers whether it just updated the database.
+        $this->app->scoped(ErrorPage::class);
     }
 
     /**

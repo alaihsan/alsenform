@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,6 +22,11 @@ use Throwable;
  */
 class ErrorPage
 {
+    /**
+     * Whether this request just ran the pending migrations of an update.
+     */
+    protected bool $databaseUpdated = false;
+
     /**
      * Content per HTTP status. "action" picks the main button: home, retry (open the address
      * again), previous (back to the page the request came from) or login.
@@ -151,6 +157,8 @@ class ErrorPage
      * Shown on a server error while the database still lacks the tables of an update, e.g. when
      * the code was updated with "git pull" while the server kept running.
      */
+    protected const DATABASE_UPDATED_HINT = 'Aplikasi baru saja di-update dan database sudah diperbarui otomatis. Tekan Coba Lagi untuk membuka halaman ini.';
+
     protected const PENDING_MIGRATIONS_HINT = 'Database belum diperbarui setelah aplikasi di-update. Admin: hentikan server (Ctrl+C), lalu jalankan lagi "php artisan lan:serve" yang otomatis memperbarui database, atau jalankan "php artisan migrate --force".';
 
     /**
@@ -173,6 +181,7 @@ class ErrorPage
     {
         $page = self::PAGES[$status] ?? ($status >= 500 ? self::SERVER_ERROR : self::CLIENT_ERROR);
         $retryAfter = $this->retryAfterSeconds($exception);
+        $databaseHint = $status === 500 ? $this->databaseUpdateHint($exception) : null;
         [$primaryAction, $secondaryAction] = $this->actions($page, $request);
 
         return [
@@ -182,7 +191,7 @@ class ErrorPage
             'detail' => $this->detail($exception),
             'hint' => match (true) {
                 $retryAfter !== null => 'Silakan coba lagi dalam sekitar '.$this->duration($retryAfter).'.',
-                $status === 500 && $this->hasPendingMigrations() => self::PENDING_MIGRATIONS_HINT,
+                $databaseHint !== null => $databaseHint,
                 default => $page['hint'],
             },
             'icon' => $page['icon'],
@@ -201,6 +210,15 @@ class ErrorPage
      */
     public function respond(Response $response, Throwable $exception, Request $request): Response
     {
+        // The database was just brought up to date (see databaseUpdateHint()): open the page again
+        // instead of showing the error. A form sent with POST is not repeated automatically.
+        $databaseUpdated = $this->databaseUpdated;
+        $this->databaseUpdated = false;
+
+        if ($databaseUpdated && $request->isMethod('GET') && ! $request->expectsJson()) {
+            return redirect()->to($request->fullUrl());
+        }
+
         $status = $response->getStatusCode();
 
         if (! $request->header('X-Inertia')
@@ -243,6 +261,42 @@ class ErrorPage
         $message = trim($exception->getMessage());
 
         return $message === '' || in_array($message, Response::$statusTexts, true) ? null : $message;
+    }
+
+    /**
+     * When the database lacks the tables or columns of an update, a database error brings it up
+     * to date right away, so that reloading the page works. Null when migrations are not the cause.
+     */
+    protected function databaseUpdateHint(?Throwable $exception): ?string
+    {
+        if (! $this->hasPendingMigrations()) {
+            return null;
+        }
+
+        if ($this->causedByDatabase($exception)) {
+            try {
+                if (app(PendingMigrations::class)->apply()) {
+                    $this->databaseUpdated = true;
+
+                    return self::DATABASE_UPDATED_HINT;
+                }
+            } catch (Throwable $migrationError) {
+                report($migrationError);
+            }
+        }
+
+        return self::PENDING_MIGRATIONS_HINT;
+    }
+
+    protected function causedByDatabase(?Throwable $exception): bool
+    {
+        for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof QueryException) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function hasPendingMigrations(): bool

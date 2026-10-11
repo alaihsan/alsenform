@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\User;
+use App\Support\PendingMigrations;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Session\TokenMismatchException;
@@ -185,6 +187,30 @@ test('a server error after an update without migrating tells the admin how to up
     // A missing table is exactly what the report page runs into in that situation.
     Schema::drop('activity_logs');
     $this->actingAs(User::factory()->create())->get(route('reports.index'))->assertInternalServerError();
+});
+
+test('a database error after an update brings the database up to date and opens the page again', function () {
+    $missingTable = fn () => throw new QueryException('pgsql', 'select * from "activity_logs"', [], new PDOException('SQLSTATE[42P01]: Undefined table'));
+    Route::middleware('web')->get('_test/missing-table', $missingTable);
+    Route::middleware('web')->post('_test/missing-table', $missingTable);
+
+    $forgetActivityLogs = function (): void {
+        Schema::drop('activity_logs');
+        DB::table('migrations')->where('migration', '2026_10_11_092947_create_activity_logs_table')->delete();
+    };
+
+    // A page visit: the database is updated and the same page is opened again.
+    $forgetActivityLogs();
+    $this->get('/_test/missing-table')->assertRedirect(url('/_test/missing-table'));
+    expect(Schema::hasTable('activity_logs'))->toBeTrue()
+        ->and(app(PendingMigrations::class)->names())->toBe([]);
+
+    // A sent form is not repeated automatically: the page says the database is ready.
+    $forgetActivityLogs();
+    $this->post('/_test/missing-table')
+        ->assertInternalServerError()
+        ->assertSee('database sudah diperbarui otomatis');
+    expect(Schema::hasTable('activity_logs'))->toBeTrue();
 });
 
 test('a server error never shows its internal message', function () {

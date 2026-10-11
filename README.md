@@ -272,6 +272,8 @@ npm run build
 
 Setelah itu, hentikan server (Ctrl+C) lalu jalankan lagi `php artisan lan:serve`. Perintah ini otomatis menjalankan migrasi database dan memperbarui cache. Kalau aplikasi dijalankan dengan cara lain (misalnya lewat Herd), jalankan `php artisan migrate --force` secara manual.
 
+Kalau langkah itu terlewat, aplikasi memperbaikinya sendiri. Begitu ada halaman yang gagal karena tabel baru belum ada, database langsung diperbarui dan halaman dibuka ulang.
+
 ---
 
 ## Pengembangan
