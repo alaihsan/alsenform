@@ -7,7 +7,8 @@ Alsenform lahir dari kebutuhan sekolah yang ujiannya sering terganggu karena int
 ![Laravel 12](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel&logoColor=white)
 ![Vue 3](https://img.shields.io/badge/Vue-3-42B883?logo=vuedotjs&logoColor=white)
 ![PHP 8.2+](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)
 ![Lisensi MIT](https://img.shields.io/badge/lisensi-MIT-blue)
 
 ---
@@ -180,7 +181,7 @@ Data ujian dan nilai murid adalah data sensitif. Berikut perlindungan yang sudah
 - Ganti password akun admin awal segera setelah instalasi.
 - Pastikan `APP_ENV=production` dan `APP_DEBUG=false` di berkas `.env`. Perintah `php artisan exam:optimize --production` bisa mengaturnya.
 - Kalau server dibuka ke internet (bukan hanya jaringan sekolah), pasang HTTPS di depannya.
-- Cadangkan database PostgreSQL secara berkala, misalnya dengan `pg_dump`.
+- Cadangkan database secara berkala, misalnya dengan `pg_dump` (PostgreSQL) atau `mysqldump` (MySQL).
 
 Kalau menemukan celah keamanan, mohon laporkan secara pribadi ke pengelola repositori lebih dulu, jangan lewat issue publik.
 
@@ -188,12 +189,12 @@ Kalau menemukan celah keamanan, mohon laporkan secara pribadi ke pengelola repos
 
 ## Kebutuhan sistem
 
-- PHP 8.2 atau lebih baru, dengan ekstensi `pdo_pgsql`, `zip`, `gd`, `dom`, dan `mbstring`
-- PostgreSQL 14 atau lebih baru
+- PHP 8.2 atau lebih baru, dengan ekstensi `pdo_pgsql` atau `pdo_mysql`, `zip`, `gd`, `dom`, dan `mbstring`
+- PostgreSQL 14 atau lebih baru, atau MySQL 8
 - Node.js 20 atau lebih baru (hanya untuk build aset)
 - Composer 2
 
-Sudah dipakai di Mac Mini M2 untuk ujian serentak sekitar 200 murid. Linux dan Windows juga bisa. Fitur anti-sleep khusus untuk macOS. Di macOS, [Laravel Herd](https://herd.laravel.com) adalah cara termudah untuk memasang PHP dan PostgreSQL sekaligus.
+Sudah dipakai di Mac Mini M2 untuk ujian serentak sekitar 200 murid. Linux dan Windows juga bisa. Fitur anti-sleep khusus untuk macOS. Di macOS, [Laravel Herd](https://herd.laravel.com) adalah cara termudah untuk memasang PHP dan database sekaligus.
 
 ---
 
@@ -223,6 +224,8 @@ DB_PASSWORD=
 
 APP_DISPLAY_TIMEZONE=Asia/Jakarta
 ```
+
+Untuk MySQL, ganti `DB_CONNECTION=mysql` dan `DB_PORT=3306`, lalu sesuaikan nama pengguna dan passwordnya.
 
 Lalu buat tabel dan akun awal:
 
@@ -278,7 +281,7 @@ Kalau langkah itu terlewat, aplikasi memperbaikinya sendiri. Begitu ada halaman 
 
 ## Pengembangan
 
-Dibangun dengan Laravel 12, Inertia.js 2, Vue 3 (TypeScript), Tailwind CSS 3, dan PostgreSQL. Tes memakai Pest.
+Dibangun dengan Laravel 12, Inertia.js 2, Vue 3 (TypeScript), Tailwind CSS 3, dan PostgreSQL atau MySQL. Tes memakai Pest.
 
 ```bash
 composer dev                         # server, queue, dan Vite dengan hot reload

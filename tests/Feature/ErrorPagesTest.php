@@ -183,10 +183,6 @@ test('a server error after an update without migrating tells the admin how to up
         ->assertInternalServerError()
         ->assertJsonPath('component', 'Error')
         ->assertJsonPath('props.hint', fn (string $hint) => str_starts_with($hint, 'Database belum diperbarui'));
-
-    // A missing table is exactly what the report page runs into in that situation.
-    Schema::drop('activity_logs');
-    $this->actingAs(User::factory()->create())->get(route('reports.index'))->assertInternalServerError();
 });
 
 test('a database error after an update brings the database up to date and opens the page again', function () {

@@ -4,7 +4,6 @@ use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\User;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 
 const SAMSUNG_BROWSER = 'Mozilla/5.0 (Linux; Android 13; SAMSUNG SM-A536E) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36';
@@ -98,13 +97,15 @@ test('guests on a public survey are recorded with their email', function () {
         ->and($logs[0]->respondent_identifier)->toStartWith('anon_');
 });
 
-test('logging in still works when the activity table is missing', function () {
-    Schema::drop('activity_logs');
+test('logging in still works when the activity cannot be recorded', function () {
+    // As when the table is missing because the database was not migrated after an update.
+    ActivityLog::creating(fn () => throw new RuntimeException('Base table or view not found: activity_logs'));
 
     $this->post(route('login'), ['identifier' => '2024101', 'password' => 'password'])
         ->assertRedirect(route('dashboard', absolute: false));
 
     $this->assertAuthenticatedAs($this->student);
+    expect(ActivityLog::count())->toBe(0);
 });
 
 test('the report shows each activity with its device, browser and local time', function () {
