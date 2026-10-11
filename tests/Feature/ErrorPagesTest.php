@@ -5,7 +5,9 @@ use App\Models\User;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -161,6 +163,28 @@ test('an upload that is too large explains the size limit', function () {
         ->assertJsonPath('component', 'Error')
         ->assertJsonPath('props.title', 'Berkas Terlalu Besar')
         ->assertJsonPath('props.primaryAction.href', url('/settings/profile'));
+});
+
+test('a server error after an update without migrating tells the admin how to update the database', function () {
+    $this->get('/_test/crash')->assertDontSee('Database belum diperbarui');
+
+    // The code was updated while the server kept running: a migration has not run yet. (The
+    // failing query itself is not repeated here: it would abort the test's own transaction.)
+    DB::table('migrations')->where('migration', '2026_10_11_092947_create_activity_logs_table')->delete();
+
+    $this->get('/_test/crash')
+        ->assertInternalServerError()
+        ->assertSee('Database belum diperbarui setelah aplikasi di-update.')
+        ->assertSee('php artisan lan:serve');
+
+    $this->get('/_test/crash', errorPageInertiaHeaders())
+        ->assertInternalServerError()
+        ->assertJsonPath('component', 'Error')
+        ->assertJsonPath('props.hint', fn (string $hint) => str_starts_with($hint, 'Database belum diperbarui'));
+
+    // A missing table is exactly what the report page runs into in that situation.
+    Schema::drop('activity_logs');
+    $this->actingAs(User::factory()->create())->get(route('reports.index'))->assertInternalServerError();
 });
 
 test('a server error never shows its internal message', function () {

@@ -148,6 +148,12 @@ class ErrorPage
     ];
 
     /**
+     * Shown on a server error while the database still lacks the tables of an update, e.g. when
+     * the code was updated with "git pull" while the server kept running.
+     */
+    protected const PENDING_MIGRATIONS_HINT = 'Database belum diperbarui setelah aplikasi di-update. Admin: hentikan server (Ctrl+C), lalu jalankan lagi "php artisan lan:serve" yang otomatis memperbarui database, atau jalankan "php artisan migrate --force".';
+
+    /**
      * The content of the error page for the given status.
      *
      * @return array{
@@ -174,7 +180,11 @@ class ErrorPage
             'title' => $page['title'],
             'message' => $page['message'],
             'detail' => $this->detail($exception),
-            'hint' => $retryAfter !== null ? 'Silakan coba lagi dalam sekitar '.$this->duration($retryAfter).'.' : $page['hint'],
+            'hint' => match (true) {
+                $retryAfter !== null => 'Silakan coba lagi dalam sekitar '.$this->duration($retryAfter).'.',
+                $status === 500 && $this->hasPendingMigrations() => self::PENDING_MIGRATIONS_HINT,
+                default => $page['hint'],
+            },
             'icon' => $page['icon'],
             'tone' => $page['tone'],
             'primaryAction' => $primaryAction,
@@ -233,6 +243,16 @@ class ErrorPage
         $message = trim($exception->getMessage());
 
         return $message === '' || in_array($message, Response::$statusTexts, true) ? null : $message;
+    }
+
+    protected function hasPendingMigrations(): bool
+    {
+        try {
+            return app(PendingMigrations::class)->names() !== [];
+        } catch (Throwable) {
+            // The database itself is unreachable: the usual hint applies.
+            return false;
+        }
     }
 
     protected function retryAfterSeconds(?Throwable $exception): ?int
