@@ -104,6 +104,13 @@ class QuizResponseController extends Controller
             if ($quizSession->started_at !== null) {
                 $this->recordExamActivity(ActivityLog::EXAM_STARTED, $request, $quizForm, $quizSession);
             }
+        } elseif ($quizSession->submitted_at !== null) {
+            // Another response is allowed: the new attempt gets its own token, so its answers are
+            // not taken for a retry of the attempt that was already submitted (see store()).
+            $quizSession->update([
+                'session_token' => Str::random(40),
+                'submitted_at' => null,
+            ]);
         }
 
         // Until the exam has started the questions stay on the server, so they cannot be read
@@ -227,6 +234,12 @@ class QuizResponseController extends Controller
         // Locate the exam session of this respondent
         $session = $respondentIdentifier ? $this->findExamSession($quizForm, $user, $respondentIdentifier) : null;
 
+        // On weak Wi-Fi the answers may have been saved while the response never reached the
+        // browser. A retry of that same attempt is a success, not a second response.
+        if ($this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)) {
+            return $this->submissionSucceeded($request, $quizForm);
+        }
+
         // Check single response restriction
         if (! empty($quizForm->settings['limitOneResponse'])) {
             $hasSubmitted = false;
@@ -242,12 +255,6 @@ class QuizResponseController extends Controller
             }
 
             if ($hasSubmitted) {
-                // On weak Wi-Fi the answers may have been saved while the response never
-                // reached the browser. A retry of that same attempt is a success, not an error.
-                if ($this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)) {
-                    return $this->submissionSucceeded($request, $quizForm);
-                }
-
                 if ($request->wantsJson()) {
                     return response()->json([
                         'message' => 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.',

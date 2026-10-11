@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
+use App\Models\User;
 use Illuminate\Support\Str;
 
 /**
@@ -78,6 +80,47 @@ test('retrying a submission whose response was lost on the network succeeds with
 
     expect(QuizResponse::where('quiz_form_id', $quizForm->id)->count())->toBe(1)
         ->and($session->refresh()->submitted_at)->not->toBeNull();
+});
+
+test('retrying a submission stores it once when more than one response is allowed', function () {
+    $quizForm = publishedQuiz(['limitOneResponse' => false]);
+    $session = examSessionFor($quizForm, 'resp_lost_response');
+
+    $payload = [
+        'respondent_identifier' => 'resp_lost_response',
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 2'],
+    ];
+
+    $this->postJson(route('forms.responses.store', $quizForm->slug), $payload)->assertOk();
+    $this->postJson(route('forms.responses.store', $quizForm->slug), $payload)
+        ->assertOk()
+        ->assertJson(['success' => true]);
+
+    expect(QuizResponse::where('quiz_form_id', $quizForm->id)->count())->toBe(1)
+        ->and(ActivityLog::where('event', ActivityLog::EXAM_SUBMITTED)->count())->toBe(1);
+});
+
+test('a new attempt after submitting is stored when more than one response is allowed', function () {
+    $quizForm = publishedQuiz(['limitOneResponse' => false]);
+    $this->actingAs(User::factory()->create(['role' => 'siswa', 'nis' => '2024501']));
+
+    $firstToken = $this->get(route('forms.public', $quizForm->slug))->assertOk()->inertiaProps('session.token');
+    $this->postJson(route('forms.responses.store', $quizForm->slug), [
+        'session_token' => $firstToken,
+        'answers' => [1 => 'Option 1'],
+    ])->assertOk();
+
+    // Opening the quiz again ("Submit another response" reloads the page) starts a new attempt.
+    $secondToken = $this->get(route('forms.public', $quizForm->slug))->assertOk()->inertiaProps('session.token');
+    $this->postJson(route('forms.responses.store', $quizForm->slug), [
+        'session_token' => $secondToken,
+        'answers' => [1 => 'Option 2'],
+    ])->assertOk();
+
+    expect($secondToken)->not->toBe($firstToken)
+        ->and(QuizResponse::where('quiz_form_id', $quizForm->id)->orderBy('id')->pluck('answers')->all())
+        ->toBe([['1' => 'Option 1'], ['1' => 'Option 2']]);
 });
 
 test('a second attempt without the original session token is still rejected', function () {

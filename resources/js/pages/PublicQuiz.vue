@@ -1283,15 +1283,13 @@ function onConnectionRestored() {
     }
 }
 
+/**
+ * The new attempt needs a session token of its own: with the token of the attempt just sent the
+ * server would take its answers for a retry of that attempt. Reloading the page hands out a new one.
+ */
 const submitAnotherResponse = () => {
-    answers.value = {};
-    email.value = '';
     clearDraft();
-    isSubmitted.value = false;
-    validationErrors.value = {};
-    currentPage.value = 1;
-    showSubmitConfirmModal.value = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.location.reload();
 };
 </script>
 
