@@ -6,6 +6,7 @@ import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
 import QuestionDrawSettings, { type QuestionDraw } from '@/components/form-editor/QuestionDrawSettings.vue';
+import ItemAnalysisPanel, { type ItemAnalysis } from '@/components/form-editor/ItemAnalysisPanel.vue';
 import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
@@ -1229,6 +1230,27 @@ const handleDrop = (question: Question, event: DragEvent) => {
 const questionLabels = ref<Record<string, QuestionLabels>>({ ...((props.quizForm?.questionLabels as Record<string, QuestionLabels> | undefined) ?? {}) });
 const labelSuggestions = ref<LabelSuggestions>(props.quizForm?.labelSuggestions ?? { subjects: [], grades: [], topics: [] });
 const savingLabelsOf = ref<string | null>(null);
+/* Analisis butir soal (Responses tab), and its difficulty applied to the labels. */
+const itemAnalysis = computed<ItemAnalysis | null>(() => (props.quizForm?.responses as { analysis?: ItemAnalysis } | undefined)?.analysis ?? null);
+const isApplyingDifficulty = ref(false);
+const applyDifficultyMessage = ref('');
+const applyAnalysedDifficulty = async () => {
+    const url = (props.quizForm?.responses as { applyDifficultyUrl?: string } | undefined)?.applyDifficultyUrl;
+    if (!url || isApplyingDifficulty.value) {
+        return;
+    }
+    isApplyingDifficulty.value = true;
+    try {
+        const response = await axios.post(url);
+        questionLabels.value = { ...questionLabels.value, ...(response.data.labels ?? {}) };
+        applyDifficultyMessage.value = `Label tingkat kesulitan ${response.data.labelled} soal diisi dari hasil analisis (Sukar menjadi "Sulit").`;
+    } catch {
+        applyDifficultyMessage.value = 'Label gagal diterapkan. Coba lagi.';
+    } finally {
+        isApplyingDifficulty.value = false;
+    }
+};
+
 const questionDifficulties = computed<Record<string, string | null | undefined>>(() =>
     Object.fromEntries(Object.entries(questionLabels.value).map(([id, labels]) => [id, labels?.difficulty])),
 );
@@ -3277,6 +3299,14 @@ watch(
                                 </table>
                             </div>
                         </div>
+
+                        <ItemAnalysisPanel
+                            v-if="itemAnalysis"
+                            :analysis="itemAnalysis"
+                            :is-applying="isApplyingDifficulty"
+                            :apply-message="applyDifficultyMessage"
+                            @apply-difficulty="applyAnalysedDifficulty"
+                        />
 
                         <div v-if="latestResponses.length" class="mt-6 rounded-2xl border border-slate-200">
                             <div class="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">Recent submissions</div>

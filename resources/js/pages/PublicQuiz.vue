@@ -644,9 +644,55 @@ const probeLock = async () => {
     }
 };
 
+/*
+ * Reloading or closing the page also hides it. That is not leaving the exam: the server only notes
+ * the moment, and locks the attempt if the page is not back within a few seconds.
+ */
+let isPageUnloading = false;
+let hasReportedUnload = false;
+
+const markPageUnloading = () => {
+    isPageUnloading = true;
+    // A cancelled navigation leaves the page open: watch normally again shortly after.
+    setTimeout(() => {
+        isPageUnloading = false;
+        hasReportedUnload = false;
+    }, 3000);
+};
+
+const xsrfToken = () => decodeURIComponent(document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? '');
+
+const reportUnload = () => {
+    if (hasReportedUnload || !props.session?.token || isSubmitted.value) {
+        return;
+    }
+    hasReportedUnload = true;
+    try {
+        // keepalive: the request still goes out while the page is being unloaded.
+        void fetch(`/forms/${props.quizForm.slug}/lock`, {
+            method: 'POST',
+            keepalive: true,
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': xsrfToken(),
+            },
+            body: JSON.stringify({ session_token: props.session.token, reason: 'unload' }),
+        }).catch(() => {});
+    } catch {
+        // ignore
+    }
+};
+
 /** The student left the exam page: another tab or app, or the screen went off. */
 const handleLeave = () => {
     if (!isLockWatchActive || isSubmitted.value || isSubmitting.value || isLocked.value) {
+        return;
+    }
+    if (isPageUnloading) {
+        reportUnload();
         return;
     }
     if (isLockOnBlurEnabled.value) {
@@ -675,14 +721,33 @@ const handleVisibilityChange = () => {
     void refreshLockState();
 };
 
+/*
+ * With the tab-switch lock on, the questions cannot be copied, searched via the context menu or
+ * printed while the exam runs. Typing, selecting and copying inside one's own answers still works.
+ */
+const isExamRunning = ref(false);
+const isQuestionCopyBlocked = computed(() => isExamRunning.value && isLockOnBlurEnabled.value && !isSubmitted.value);
+
+const isInsideAnswerField = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.closest('input, textarea, select, [contenteditable="true"]') !== null);
+
+const blockQuestionCopy = (event: Event) => {
+    if (isQuestionCopyBlocked.value && !isInsideAnswerField(event.target)) {
+        event.preventDefault();
+    }
+};
+
 /** Start following the lock state once the exam is running (not while the rules are read). */
 const startLockWatch = () => {
     if (isLockWatchActive) {
         return;
     }
     isLockWatchActive = true;
+    isExamRunning.value = true;
+    window.addEventListener('beforeunload', markPageUnloading);
     window.addEventListener('blur', handleBlur);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    ['copy', 'cut', 'contextmenu', 'dragstart'].forEach((type) => document.addEventListener(type, blockQuestionCopy));
 
     if (hasPendingLock()) {
         // Locked before a reload, but the server never heard of it: send it now.
@@ -699,8 +764,11 @@ const startLockWatch = () => {
 
 const stopLockWatch = () => {
     isLockWatchActive = false;
+    isExamRunning.value = false;
+    window.removeEventListener('beforeunload', markPageUnloading);
     window.removeEventListener('blur', handleBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    ['copy', 'cut', 'contextmenu', 'dragstart'].forEach((type) => document.removeEventListener(type, blockQuestionCopy));
     if (lockStateTimer) {
         clearTimeout(lockStateTimer);
         lockStateTimer = null;
@@ -1525,15 +1593,11 @@ function onConnectionRestored() {
     }
 }
 
+// Another response is a new attempt (its own session and, for an exam, its own timer): the page
+// is opened again to get one from the server.
 const submitAnotherResponse = () => {
-    answers.value = {};
-    email.value = '';
     clearDraft();
-    isSubmitted.value = false;
-    validationErrors.value = {};
-    currentPage.value = 1;
-    showSubmitConfirmModal.value = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.location.reload();
 };
 </script>
 
@@ -1575,6 +1639,8 @@ const submitAnotherResponse = () => {
             isQuestionNavAvailable ? 'pb-24 lg:pb-8' : '',
             // Room for the timer bar across the top on phones.
             hasCountdownTimer ? 'pt-16 sm:pt-8' : '',
+            // Questions cannot be selected or printed while the tab-switch lock is on.
+            isQuestionCopyBlocked ? 'select-none print:hidden' : '',
             isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
     >

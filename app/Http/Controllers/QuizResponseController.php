@@ -113,6 +113,9 @@ class QuizResponseController extends Controller
             }
         }
 
+        // Back after the page was closed or reloaded: quickly is a reload, later locks the attempt.
+        $quizSession->settleLeave($quizForm, $request->ip());
+
         // Until the exam has started the questions stay on the server, so they cannot be read
         // (from the page source) before the timer runs.
         $hasStarted = $quizSession->started_at !== null;
@@ -745,6 +748,15 @@ class QuizResponseController extends Controller
             ]);
         }
 
+        // The page is being closed or reloaded: only noted; it counts once the page is away too long.
+        if ($request->input('reason') === 'unload') {
+            if ($session !== null && $session->started_at !== null && $session->submitted_at === null && ! $session->is_locked) {
+                $session->forceFill(['left_at' => now()])->saveQuietly();
+            }
+
+            return $this->lockState($quizForm, $session);
+        }
+
         if ($session !== null && $session->started_at !== null && $session->submitted_at === null) {
             $wasLocked = $session->isEffectivelyLocked($quizForm);
             $session->recordBlurEvent($request->ip());
@@ -779,6 +791,7 @@ class QuizResponseController extends Controller
 
         abort_if($session === null, 404);
 
+        $session->settleLeave($quizForm, $request->ip());
         $session->markSeen();
 
         return $this->lockState($quizForm, $session);

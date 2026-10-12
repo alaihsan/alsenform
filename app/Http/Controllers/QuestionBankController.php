@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\QuizForm;
+use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
 use App\Support\ExamLayout;
 use Illuminate\Http\JsonResponse;
@@ -145,6 +146,31 @@ class QuestionBankController extends Controller
         abort_if($labels === null, 422, 'Tulis dan simpan soal ini dulu, baru beri label.');
 
         return response()->json(['labels' => $labels]);
+    }
+
+    /**
+     * Give the questions of an exam the difficulty found by its item analysis (Sukar is "sulit").
+     */
+    public function applyAnalysedDifficulty(Request $request, QuizForm $quizForm, ItemAnalysis $itemAnalysis, QuestionBank $questionBank): JsonResponse
+    {
+        abort_unless($quizForm->canBeEditedBy($request->user()), 403);
+
+        $labelled = 0;
+        foreach ($itemAnalysis->analyze($quizForm)['questions'] as $question) {
+            if ($question['difficulty'] === null) {
+                continue;
+            }
+
+            $difficulty = $question['difficulty']['key'] === 'sukar' ? 'sulit' : $question['difficulty']['key'];
+            if ($questionBank->setLabelsOfQuestion($quizForm, (string) $question['id'], ['difficulty' => $difficulty]) !== null) {
+                $labelled++;
+            }
+        }
+
+        return response()->json([
+            'labelled' => $labelled,
+            'labels' => $questionBank->labelsForExam($quizForm),
+        ]);
     }
 
     /**

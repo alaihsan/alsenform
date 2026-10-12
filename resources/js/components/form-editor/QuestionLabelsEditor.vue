@@ -84,7 +84,7 @@ watch(
 
         <div
             v-if="isOpen"
-            class="absolute bottom-full left-0 z-30 mb-2 w-72 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl"
+            class="absolute left-0 top-full z-30 mt-2 w-72 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl"
         >
             <p class="text-xs font-semibold text-slate-500">Label membantu mencari soal di Bank Soal dan mengacak soal per tingkat kesulitan.</p>
             <label class="block text-xs font-bold text-slate-700">

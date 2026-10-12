@@ -470,3 +470,47 @@ test('answers handed in by the server for a locked attempt are not changed by th
         ->answers->toEqual([1 => 'Option 1'])
         ->is_auto_submitted->toBeTrue();
 });
+
+test('reloading the exam page is not leaving the exam, being away longer is', function () {
+    $student = User::factory()->create(['role' => 'siswa']);
+    $quizForm = lockingQuiz();
+    $session = runningAttempt($quizForm, ['user_id' => $student->id, 'respondent_identifier' => 'user_'.$student->id]);
+    $unload = fn () => $this->actingAs($student)->postJson(route('forms.responses.lock', $quizForm->slug), ['session_token' => $session->session_token, 'reason' => 'unload']);
+
+    // The page is reloaded: noted, not locked, and back within seconds.
+    $unload()->assertJsonPath('locked', false);
+    expect($session->refresh()->left_at)->not->toBeNull()->and($session->is_locked)->toBeFalse();
+
+    $this->travel(5)->seconds();
+    $this->actingAs($student)->get(route('forms.public', $quizForm->slug))->assertInertia(fn (Assert $page) => $page->where('session.is_locked', false));
+    expect($session->refresh())->left_at->toBeNull()->blur_count->toBe(0);
+
+    // The page is left for another site in the same tab and comes back 20 seconds later.
+    $unload();
+    $this->travel(20)->seconds();
+    $this->actingAs($student)->get(route('forms.public', $quizForm->slug))->assertInertia(fn (Assert $page) => $page->where('session.is_locked', true));
+    expect($session->refresh())->is_locked->toBeTrue()->blur_count->toBe(1)->left_at->toBeNull();
+});
+
+test('a page brought back from the browser history after a while is locked by its next status check', function () {
+    $quizForm = lockingQuiz();
+    $session = runningAttempt($quizForm);
+
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), ['session_token' => $session->session_token, 'reason' => 'unload']);
+    $this->travel(30)->seconds();
+
+    $this->getJson(route('forms.responses.status', ['quizForm' => $quizForm->slug, 'session_token' => $session->session_token]))
+        ->assertJsonPath('locked', true);
+});
+
+test('leaving the page while the lock is off is never held against the student', function () {
+    $quizForm = lockingQuiz(['lockOnBlur' => false]);
+    $session = runningAttempt($quizForm);
+
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), ['session_token' => $session->session_token, 'reason' => 'unload']);
+    $this->travel(30)->seconds();
+
+    $this->getJson(route('forms.responses.status', ['quizForm' => $quizForm->slug, 'session_token' => $session->session_token]))
+        ->assertJsonPath('locked', false);
+    expect($session->refresh()->blur_count)->toBe(0);
+});

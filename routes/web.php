@@ -71,6 +71,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::patch('question-bank/archive', [QuestionBankController::class, 'archive'])->name('question-bank.archive');
         Route::post('question-bank/exam', [QuestionBankController::class, 'createExam'])->name('question-bank.exam');
         Route::patch('forms/{quizForm}/questions/{questionId}/labels', [QuestionBankController::class, 'questionLabels'])->name('forms.questions.labels');
+        Route::post('forms/{quizForm}/analysis/apply-difficulty', [QuestionBankController::class, 'applyAnalysedDifficulty'])->name('forms.analysis.apply-difficulty');
 
         // Laporan: logins and exam participation with device, browser and time
         Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');

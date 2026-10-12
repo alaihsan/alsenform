@@ -53,6 +53,7 @@ Fitur editor lainnya:
 - **Bahasa Arab dan Al-Qur'an**: font Amiri Quran, Scheherazade New, dan Noto Naskh Arabic, lengkap dengan panduan pintasan keyboard untuk harakat dan tanda waqaf.
 - **Gambar dan video** di soal maupun pilihan jawaban. Gambar otomatis diperkecil dan diubah ke WebP supaya ringan dibuka dari HP murid.
 - **Bobot nilai per soal** (bawaan 1 poin) dan kunci jawaban untuk koreksi otomatis.
+- **Label soal**: mapel, kelas, topik, dan tingkat kesulitan (mudah, sedang, sulit) lewat tombol **Label** di tiap soal. Label hanya untuk guru dan tidak pernah dikirim ke murid.
 - **Template siap pakai**: Pilihan Ganda PTS/PAS, PAI & Bahasa Arab, Matematika & Eksakta, Esai & Uraian, dan Refleksi Belajar.
 - **Folder, pencarian, duplikat, dan tempat sampah** dengan fitur pulihkan.
 - **Kolaborasi**: beberapa guru bisa menyunting ujian yang sama. Kalau dua orang menyimpan dari salinan yang berbeda, perubahan yang lebih baru tidak akan tertimpa diam-diam.
@@ -63,8 +64,9 @@ Fitur editor lainnya:
 - **Impor dari Microsoft Word (.docx).** Templat Word bisa diunduh dari aplikasi, berisi contoh untuk setiap tipe soal. Cukup ketik nomor soal, pilihan A–E, dan baris `Jawaban:`. Gambar dan rumus ikut terbaca. Baris tambahan `Tipe:`, `Poin:`, `Wajib:`, dan `Skala:` bersifat opsional. Soal yang perlu dicek ulang ditandai setelah impor.
 - **Impor dari ExamView** lewat ekspor Blackboard 6.0–9.0 (.zip), termasuk gambar soal.
 - **Bank soal.** Setiap soal yang ditulis guru tersimpan otomatis sebagai cadangan, juga setelah soal atau ujiannya dihapus. Di **Import Soal → Bank Soal**, guru mencari soal lamanya (teks soal atau pilihan jawaban), menyaring per tipe atau asal ujian, mencentang yang dibutuhkan, lalu menambahkannya lengkap dengan kunci, poin, dan gambar. Soal yang sudah ada di ujian yang sedang dibuka ditandai. Bank soal hanya terlihat oleh guru pemiliknya.
+- **Halaman Bank Soal** (menu akun atau dasbor) untuk mengelola semua soal: saring per mapel, kelas, topik, tingkat kesulitan, tipe, atau asal ujian; lihat soal beserta kuncinya; beri label ke banyak soal sekaligus; arsipkan soal yang tidak dipakai lagi; dan buat ujian baru langsung dari soal yang dicentang.
 - **Impor data murid** dari CSV atau tempel langsung dari Excel. Pemisah koma, titik koma, atau tab dikenali otomatis.
-- **Ekspor nilai ke Excel (.xlsx)** dengan dua lembar: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai) dan jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal.
+- **Ekspor nilai ke Excel (.xlsx)** dengan tiga lembar: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai), jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal, dan analisis butir soal.
 - **Ekspor laporan aktivitas** ke Excel.
 - **Cadangan semua ujian** milik guru dalam satu berkas JSON.
 
@@ -76,7 +78,9 @@ Fitur editor lainnya:
 - Ujian **tanpa batas waktu** tidak pernah dikirim otomatis: jawaban tersimpan sampai murid menekan **Kirim Jawaban**.
 - **Jawaban tersimpan berlapis**: di perangkat murid dan di server. Kalau Wi-Fi putus, HP mati, atau murid pindah perangkat, jawaban bisa dilanjutkan setelah login lagi.
 - **Kirim ulang otomatis** saat koneksi lemah. Untuk ujian yang dibatasi satu kali pengisian, kiriman yang terulang dikenali sebagai kiriman yang sama.
-- Panel nomor soal dengan warna status, acak urutan soal, beberapa soal per halaman, dan indikator kemajuan.
+- Panel nomor soal dengan warna status, beberapa soal per halaman, dan indikator kemajuan.
+- **Acak urutan soal dan urutan pilihan jawaban** per murid. Urutannya ditentukan server dan tetap sama saat halaman dimuat ulang atau dibuka di perangkat lain. Pilihan seperti "Semua jawaban benar" atau "A dan C" tidak ikut diacak karena bergantung pada posisinya.
+- **Soal acak per siswa**: tiap murid hanya mendapat sebagian soal, diambil acak dari ujian. Bisa berdasarkan jumlah soal, atau per tingkat kesulitan (misalnya 5 mudah, 3 sedang, 2 sulit) dari label soal. Nilai dihitung dari soal yang didapat masing-masing murid.
 - Tampilan disusun untuk layar HP: pilihan berhuruf yang besar, kisi soal berubah menjadi kartu, dan timer di bagian atas layar.
 - **Kuis publik tanpa akun.** Saat mempublikasikan, guru memilih data yang wajib diisi peserta di layar konfirmasi: Nama Lengkap, Kelas (7A–9D), dan Email. Setelah ujian dimulai, data itu dikunci. Nama peserta tamu tampil di rekap nilai, berkas Excel, panel buka kunci, dan laporan aktivitas. Nama dan kelas yang sama pada lebih dari satu jawaban diberi tanda "Nama ganda".
 - Bisa dipakai untuk **survei atau angket** tanpa timer dan tanpa login. Ada opsi pengumpulan email, batas satu kali pengisian, pesan konfirmasi, dan ringkasan hasil.
@@ -87,6 +91,8 @@ Fitur editor lainnya:
 - Murid yang terkunci langsung muncul di tab **Keamanan & Kunci** milik guru, lengkap dengan jumlah pindah tab dan jamnya. Guru membuka kunci satu per satu atau sekaligus; halaman murid terbuka sendiri dalam beberapa detik. Selama terkunci, jawaban tidak hilang, waktu tetap berjalan, dan jawaban terkirim otomatis bila waktu habis.
 - Kunci bisa dinyalakan atau dimatikan **sebelum maupun selama ujian**, dan langsung berlaku tanpa pemberitahuan ke murid: begitu dinyalakan, saat murid berikutnya meninggalkan halaman ujian ia terkunci; mematikannya membuka semua murid yang terkunci dalam beberapa detik.
 - Jawaban **dibekukan saat terkunci**: yang dihitung adalah jawaban di halaman pada saat murid meninggalkannya. Perubahan di balik layar kunci (misalnya lewat developer tools) tidak disimpan dan tidak ikut dinilai.
+- **Muat ulang halaman tidak dianggap keluar.** Murid yang memuat ulang halaman ujian dan kembali dalam 15 detik tidak terkunci. Menutup halaman lebih lama dari itu tetap mengunci sesinya.
+- Selama kunci aktif, teks soal **tidak bisa disalin, dipotong, diseret, atau dicetak**, dan menu klik kanan dimatikan.
 - **Pembatasan peserta per kelompok (cohort)**: ujian hanya bisa dibuka oleh murid di kelas atau kelompok yang dipilih.
 - **Laporan aktivitas** (lihat di bawah) menunjukkan perangkat dan browser yang dipakai saat mulai dan mengirim ujian, jadi murid yang berganti perangkat di tengah ujian ikut terlihat.
 
@@ -96,6 +102,7 @@ Fitur editor lainnya:
 - Nilai akhir selalu dalam rentang **0–100**: jumlah poin benar dibagi poin maksimal soal yang dinilai otomatis.
 - **Kunci jawaban bisa diperbaiki setelah ujian.** Nilai seluruh murid langsung dihitung ulang dari kunci yang baru, termasuk di berkas Excel.
 - Rekap di aplikasi menampilkan poin dan nilai setiap murid serta ringkasan jawaban per soal. Rata-rata, KKM, dan status tuntas ada di berkas Excel.
+- **Analisis butir soal** di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik. Analisis baru dapat diandalkan setelah minimal 10 murid mengirim jawaban.
 
 ### Laporan aktivitas
 
@@ -147,7 +154,12 @@ Data ujian dan nilai murid adalah data sensitif. Berikut perlindungan yang sudah
 - Soal baru dikirim setelah murid menekan Kerjakan Sekarang, sehingga tidak bisa diintip dari kode halaman sebelum ujian dimulai.
 - Skor dihitung di server dari jawaban yang tersimpan, bukan dari angka yang dikirim browser.
 - Batas waktu dicek di server (dengan toleransi 60 detik untuk koneksi lambat). Jawaban yang masuk setelah batas itu ditandai "waktu habis".
+- Jawaban yang masuk lebih dari 2 menit setelah waktu habis, dari halaman yang masih tersambung saat waktu habis, tidak dipakai: yang dinilai adalah jawaban yang sudah tersimpan di server. Dari perangkat yang memang offline saat waktu habis, jawabannya diterima tetapi ditandai "Terlambat" beserta lamanya.
+- Penyimpanan jawaban sementara ditolak setelah waktu habis, dan ukuran kiriman jawaban dibatasi.
 - Jawaban dari sesi yang sedang terkunci ditolak oleh server.
+- Ujian hanya bisa dikirim dari sesi yang sudah dimulai lewat tombol Kerjakan Sekarang. Setiap pengerjaan punya sesi sendiri, jadi jawaban tidak bisa dikirim berulang kali dari sesi yang sudah selesai atau dengan identitas peserta yang dipalsukan.
+- Murid hanya menerima soal yang didapatnya; jawaban untuk soal lain diabaikan server.
+- Kode buka kunci berupa 40 karakter acak yang tidak bisa ditebak.
 
 **Akun dan login**
 

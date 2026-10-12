@@ -33,6 +33,7 @@ class QuizSession extends Model
         'draft_saved_at',
         'layout',
         'last_seen_at',
+        'left_at',
     ];
 
     /**
@@ -52,6 +53,7 @@ class QuizSession extends Model
             'draft_answers' => 'array',
             'layout' => 'array',
             'last_seen_at' => 'datetime',
+            'left_at' => 'datetime',
             'draft_saved_at' => 'datetime',
         ];
     }
@@ -84,6 +86,29 @@ class QuizSession extends Model
 
         if ($this->last_seen_at === null || $this->last_seen_at->lt(now()->subSeconds(10))) {
             $this->forceFill(['last_seen_at' => now()])->saveQuietly();
+        }
+    }
+
+    /**
+     * Seconds a closed or reloaded exam page may be away before that counts as leaving the exam.
+     */
+    public const RELOAD_GRACE_SECONDS = 15;
+
+    /**
+     * The exam page came back after it was closed or reloaded: back quickly is a reload, away
+     * longer (another site in the same tab, the tab closed) locks the attempt like a tab switch.
+     */
+    public function settleLeave(QuizForm $quizForm, ?string $ip = null): void
+    {
+        if ($this->left_at === null) {
+            return;
+        }
+
+        $wasAway = $this->left_at->lt(now()->subSeconds(self::RELOAD_GRACE_SECONDS));
+        $this->forceFill(['left_at' => null])->saveQuietly();
+
+        if ($wasAway && $quizForm->locksOnBlur() && $this->started_at !== null && $this->submitted_at === null && ! $this->is_locked) {
+            $this->recordBlurEvent($ip);
         }
     }
 

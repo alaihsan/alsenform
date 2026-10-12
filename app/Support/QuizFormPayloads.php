@@ -7,6 +7,7 @@ use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
 use Illuminate\Support\Collection;
 
@@ -246,6 +247,9 @@ class QuizFormPayloads
             ])->values()->all(),
             'gradebook' => $gradebook,
             'questions' => $questions,
+            // Analisis butir soal: difficulty, discrimination and distractors of each question.
+            'analysis' => app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses),
+            'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
         ];
     }
 

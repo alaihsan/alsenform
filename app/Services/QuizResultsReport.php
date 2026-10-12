@@ -46,6 +46,7 @@ class QuizResultsReport
         (new XlsxWriter)
             ->addSheet('Rekap Nilai', ...$this->scoreSheet($quizForm, $students, $maxScore, $kkm))
             ->addSheet('Jawaban Siswa', ...$this->answerSheet($quizForm, $questions, $students))
+            ->addSheet('Analisis Butir Soal', ...$this->analysisSheet($quizForm))
             ->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
     }
 
@@ -197,6 +198,61 @@ class QuizResultsReport
             'freeze' => 'F5',
             'autoFilter' => "A4:{$lastColumn}{$lastStudentRow}",
             'merge' => $merge,
+            'rowHeights' => [1 => 28, 2 => 20],
+            'repeatRows' => [4, 4],
+        ]];
+    }
+
+    /**
+     * Analisis butir soal: difficulty, discrimination, distractors and a decision per question.
+     *
+     * @return array{0: list<list<mixed>|null>, 1: array<string, mixed>}
+     */
+    protected function analysisSheet(QuizForm $quizForm): array
+    {
+        $analysis = app(ItemAnalysis::class)->analyze($quizForm);
+        $headers = ['No', 'Soal', 'Peserta', 'Benar', 'Tingkat Kesukaran (P)', 'Kategori', 'Daya Pembeda (D)', 'Kategori', 'Pengecoh Tidak Berfungsi', 'Keputusan', 'Catatan'];
+        $lastColumn = XlsxWriter::columnLetter(count($headers));
+
+        $rows = [
+            [XlsxWriter::cell('Analisis Butir Soal: '.$this->plainText((string) $quizForm->title), 'title')],
+            [XlsxWriter::cell(implode('   •   ', [
+                $analysis['respondents'].' peserta',
+                'P: > 0,70 mudah, 0,31–0,70 sedang, ≤ 0,30 sukar',
+                'D: kelompok atas – bawah 27%; > 0,40 baik, 0,21–0,40 cukup, ≤ 0,20 jelek',
+                'Pengecoh berfungsi bila dipilih ≥ 5% peserta',
+            ]).($analysis['reliable'] ? '' : '   •   Peserta masih sedikit: hasil belum dapat diandalkan'), 'subtitle')],
+            null,
+            array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $headers),
+        ];
+
+        foreach ($analysis['questions'] as $question) {
+            $rows[] = [
+                XlsxWriter::cell($question['number'], 'integer'),
+                XlsxWriter::cell($question['title'], 'text'),
+                XlsxWriter::cell($question['takers'], 'integer'),
+                XlsxWriter::cell($question['correct'], 'integer'),
+                XlsxWriter::cell($question['p'], 'decimal'),
+                XlsxWriter::cell($question['difficulty']['label'] ?? '-', 'textCenter'),
+                XlsxWriter::cell($question['d'], 'decimal'),
+                XlsxWriter::cell($question['discrimination']['label'] ?? '-', 'textCenter'),
+                XlsxWriter::cell($question['weakDistractors'] === [] ? '-' : implode(', ', $question['weakDistractors']), 'textCenter'),
+                XlsxWriter::cell($question['decision']['label'] ?? '-', match ($question['decision']['key'] ?? null) {
+                    'dipakai' => 'pass',
+                    'ganti' => 'fail',
+                    default => 'textCenter',
+                }),
+                XlsxWriter::cell($question['note'] ?? '', 'text'),
+            ];
+        }
+
+        $lastRow = max(4, count($rows));
+
+        return [$rows, [
+            'columns' => [5, 48, 9, 8, 12, 11, 12, 12, 14, 12, 40],
+            'freeze' => 'C5',
+            'autoFilter' => "A4:{$lastColumn}{$lastRow}",
+            'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
             'rowHeights' => [1 => 28, 2 => 20],
             'repeatRows' => [4, 4],
         ]];

@@ -3,12 +3,17 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UnlockCode
 {
+    /**
+     * The code is never shown to anyone (teachers unlock from their panel), so it is long and
+     * random: guessing it, even at the rate limit, is not possible.
+     */
     public function generate(): string
     {
-        return (string) random_int(100000, 999999);
+        return Str::random(40);
     }
 
     public function hash(string $code): string
