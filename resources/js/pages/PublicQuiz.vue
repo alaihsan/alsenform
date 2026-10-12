@@ -24,6 +24,9 @@ import {
     Play,
     ScrollText,
     UserRound,
+    Wifi,
+    WifiOff,
+    X,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
@@ -126,11 +129,15 @@ const SERVER_DRAFT_DEBOUNCE_MS = 5000;
 const SERVER_DRAFT_MIN_INTERVAL_MS = 10000;
 const SERVER_DRAFT_RETRY_INTERVAL_MS = 30000;
 const SERVER_PING_INTERVAL_MS = 5000;
+// After a round of quick retries, a pending submission is tried again this often, for as long as the page is open.
+const SUBMIT_RETRY_INTERVAL_MS = 5000;
+// Browsers send at most 64 KB with requests that outlive the page (keepalive).
+const KEEPALIVE_MAX_BYTES = 60000;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Exponential backoff with jitter, so a whole class reconnecting after a Wi-Fi drop does not hit the server at once.
-const retryDelay = (attempt: number) => Math.min(1000 * 2 ** (attempt - 1), 15000) + Math.random() * 1000;
+const retryDelay = (attempt: number) => Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.random() * 1000;
 
 const isNetworkFailure = (error: any) => !error?.response;
 
@@ -175,6 +182,30 @@ const updateOnlineStatus = () => {
         pingServer();
     }
 };
+
+/*
+ * Connection notice: a small toast that never blocks the exam. The student keeps answering; the
+ * answers stay on the device and are sent once the server is reachable again.
+ */
+const isConnectionLost = computed<boolean>(() => !isOnline.value || !isServerReachable.value);
+const isConnectionToastCollapsed = ref(false);
+const isReconnectedToastVisible = ref(false);
+let reconnectedToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(isConnectionLost, (lost, wasLost) => {
+    if (lost) {
+        isConnectionToastCollapsed.value = false;
+        isReconnectedToastVisible.value = false;
+        return;
+    }
+    if (wasLost) {
+        isReconnectedToastVisible.value = true;
+        if (reconnectedToastTimer) {
+            clearTimeout(reconnectedToastTimer);
+        }
+        reconnectedToastTimer = setTimeout(() => (isReconnectedToastVisible.value = false), 4000);
+    }
+});
 
 const activeLightboxMedia = ref<{ url: string; type: 'image' | 'video'; caption?: string } | null>(null);
 
@@ -328,7 +359,9 @@ const canSyncDraftToServer = () =>
 
 const syncDraftToServer = async () => {
     serverDraftTimer = null;
-    if (!canSyncDraftToServer() || !hasUnsyncedDraft || isSubmitted.value || isSubmitting.value) {
+    // While locked (also a lock the server has not heard of yet, offline) the answers of the moment
+    // the student left count: nothing newer is sent.
+    if (!canSyncDraftToServer() || !hasUnsyncedDraft || isSubmitted.value || isSubmitting.value || isLocked.value) {
         return;
     }
     if (isSyncingServerDraft) {
@@ -502,11 +535,14 @@ const hasPendingLock = () => {
 
 type LockState = { lock_on_blur?: boolean; locked?: boolean; unlock_requested?: boolean };
 
+// The answers on the page when the student left, sent with the lock (also later, when it went offline).
+let answersWhenLeft: Record<number, any> | null = null;
+
 /** What a lock request carries: the attempt, and the answers on the page that count while it is locked. */
 const lockPayload = () => ({
     session_token: props.session?.token ?? null,
     respondent_identifier: respondentIdentifier,
-    answers: answers.value,
+    answers: answersWhenLeft ?? answers.value,
 });
 
 const applyLockState = (state: LockState) => {
@@ -532,9 +568,13 @@ const refreshLockState = async () => {
         const response = isSendingLock
             ? await axios.post(`/forms/${props.quizForm.slug}/lock`, lockPayload(), { timeout: REQUEST_TIMEOUT_MS })
             : await axios.get(`/forms/${props.quizForm.slug}/status`, {
-                  params: { session_token: props.session?.token },
+                  params: { session_token: props.session?.token, returning: returningAs },
                   timeout: REQUEST_TIMEOUT_MS,
               });
+        if (!isServerReachable.value) {
+            markServerReachable(true);
+            onConnectionRestored();
+        }
         // A newer lock happened while this request was underway; it is sent right after.
         if (version !== lockVersion) {
             return;
@@ -544,8 +584,11 @@ const refreshLockState = async () => {
             forgetPendingLock();
         }
         applyLockState(response.data);
-    } catch {
-        // Weak Wi-Fi: keep the current state and try again on the next poll.
+    } catch (error: any) {
+        // Weak Wi-Fi: keep the current state (a lock stays on this page) and try again on the next poll.
+        if (isNetworkFailure(error)) {
+            markServerReachable(false);
+        }
     } finally {
         isRefreshingLockState = false;
         if (version !== lockVersion) {
@@ -598,7 +641,9 @@ const lockQuiz = () => {
     if (!isLockWatchActive || !isLockOnBlurEnabled.value || isSubmitted.value || isSubmitting.value || isLocked.value) {
         return;
     }
+    // Locked on this page right away, also offline: the server hears of it once it is reachable.
     isLocked.value = true;
+    answersWhenLeft = JSON.parse(JSON.stringify(answers.value));
     hasRequestedUnlock.value = false;
     unlockError.value = '';
     isLockConfirmed = false;
@@ -610,6 +655,7 @@ const lockQuiz = () => {
 
 const unlockQuiz = () => {
     isLocked.value = false;
+    answersWhenLeft = null;
     hasRequestedUnlock.value = false;
     unlockError.value = '';
 };
@@ -645,19 +691,54 @@ const probeLock = async () => {
 };
 
 /*
- * Reloading or closing the page also hides it. That is not leaving the exam: the server only notes
- * the moment, and locks the attempt if the page is not back within a few seconds.
+ * Reloading or closing the page also hides it. That alone is not leaving the exam: the server notes
+ * the moment, and the page that comes back tells how it was opened. Only a reload of this tab that
+ * is back within a few seconds does not count. The exam opened again after its tab was closed, or
+ * brought back from the browser history (another site in the same tab), locks it like a tab switch.
  */
 let isPageUnloading = false;
+let isUnloadStarting = false;
 let hasReportedUnload = false;
+
+/** How this page was opened: 'reload', 'navigate', 'back_forward', or 'unknown' (old browsers). */
+const navigationType = (): string => {
+    try {
+        const entry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+        if (entry?.type) {
+            return entry.type;
+        }
+        const legacyType = (performance as any).navigation?.type;
+        return ({ 0: 'navigate', 1: 'reload', 2: 'back_forward' } as Record<number, string>)[legacyType] ?? 'unknown';
+    } catch {
+        return 'unknown';
+    }
+};
+
+// Told to the server with every status check, so a reload is settled as one even on slow Wi-Fi.
+let returningAs: string = navigationType();
+
+const markUnloadStarting = () => {
+    isUnloadStarting = true;
+    // A cancelled navigation (a download link) leaves the page open: watch normally again shortly after.
+    setTimeout(() => {
+        isUnloadStarting = false;
+        hasReportedUnload = false;
+    }, 3000);
+};
 
 const markPageUnloading = () => {
     isPageUnloading = true;
-    // A cancelled navigation leaves the page open: watch normally again shortly after.
-    setTimeout(() => {
-        isPageUnloading = false;
-        hasReportedUnload = false;
-    }, 3000);
+    returningAs = 'back_forward';
+};
+
+/** Brought back from the browser history: the student went to another page in this tab. */
+const handlePageShow = (event: PageTransitionEvent) => {
+    if (!event.persisted) {
+        return;
+    }
+    isPageUnloading = false;
+    hasReportedUnload = false;
+    leaveExam();
 };
 
 const xsrfToken = () => decodeURIComponent(document.cookie.split('; ').find((cookie) => cookie.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? '');
@@ -667,22 +748,18 @@ const reportUnload = () => {
         return;
     }
     hasReportedUnload = true;
-    try {
-        // keepalive: the request still goes out while the page is being unloaded.
-        void fetch(`/forms/${props.quizForm.slug}/lock`, {
-            method: 'POST',
-            keepalive: true,
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-XSRF-TOKEN': xsrfToken(),
-            },
-            body: JSON.stringify({ session_token: props.session.token, reason: 'unload' }),
-        }).catch(() => {});
-    } catch {
-        // ignore
+    sendWithKeepalive(`/forms/${props.quizForm.slug}/lock`, { session_token: props.session.token, reason: 'unload' });
+};
+
+/** Lock the attempt (on this page at once, also offline), or ask the server when the lock seems off. */
+const leaveExam = () => {
+    if (!isLockWatchActive || isSubmitted.value || isSubmitting.value || isLocked.value) {
+        return;
+    }
+    if (isLockOnBlurEnabled.value) {
+        lockQuiz();
+    } else {
+        void probeLock();
     }
 };
 
@@ -695,11 +772,18 @@ const handleLeave = () => {
         reportUnload();
         return;
     }
-    if (isLockOnBlurEnabled.value) {
-        lockQuiz();
-    } else {
-        void probeLock();
+    if (isUnloadStarting) {
+        // Most likely a reload, but a cancelled one (a download link) leaves this page open: still
+        // here and hidden a moment later means the student left it.
+        reportUnload();
+        setTimeout(() => {
+            if (!isPageUnloading && document.visibilityState === 'hidden') {
+                leaveExam();
+            }
+        }, 1000);
+        return;
     }
+    leaveExam();
 };
 
 const handleBlur = () => {
@@ -744,7 +828,9 @@ const startLockWatch = () => {
     }
     isLockWatchActive = true;
     isExamRunning.value = true;
-    window.addEventListener('beforeunload', markPageUnloading);
+    window.addEventListener('beforeunload', markUnloadStarting);
+    window.addEventListener('pagehide', markPageUnloading);
+    window.addEventListener('pageshow', handlePageShow);
     window.addEventListener('blur', handleBlur);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     ['copy', 'cut', 'contextmenu', 'dragstart'].forEach((type) => document.addEventListener(type, blockQuestionCopy));
@@ -758,6 +844,11 @@ const startLockWatch = () => {
         isLocked.value = Boolean(props.session?.is_locked);
     }
 
+    // Loaded in the background (reloaded, then another tab opened while it loaded): not on the exam page.
+    if (document.visibilityState === 'hidden') {
+        handleLeave();
+    }
+
     void refreshLockState();
     scheduleLockStatePoll();
 };
@@ -765,7 +856,9 @@ const startLockWatch = () => {
 const stopLockWatch = () => {
     isLockWatchActive = false;
     isExamRunning.value = false;
-    window.removeEventListener('beforeunload', markPageUnloading);
+    window.removeEventListener('beforeunload', markUnloadStarting);
+    window.removeEventListener('pagehide', markPageUnloading);
+    window.removeEventListener('pageshow', handlePageShow);
     window.removeEventListener('blur', handleBlur);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     ['copy', 'cut', 'contextmenu', 'dragstart'].forEach((type) => document.removeEventListener(type, blockQuestionCopy));
@@ -994,6 +1087,7 @@ const examRules = computed<string[]>(() => {
 onMounted(() => {
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    window.addEventListener('pagehide', sendPendingWorkOnPageHide);
     document.addEventListener('visibilitychange', flushDraftWhenHidden);
     serverDraftRetryInterval = setInterval(() => {
         if (hasUnsyncedDraft && !serverDraftTimer) {
@@ -1009,6 +1103,10 @@ onMounted(() => {
 onUnmounted(() => {
     window.removeEventListener('online', updateOnlineStatus);
     window.removeEventListener('offline', updateOnlineStatus);
+    window.removeEventListener('pagehide', sendPendingWorkOnPageHide);
+    if (submissionRetryTimer) {
+        clearTimeout(submissionRetryTimer);
+    }
     document.removeEventListener('visibilitychange', flushDraftWhenHidden);
     if (serverDraftRetryInterval) {
         clearInterval(serverDraftRetryInterval);
@@ -1480,6 +1578,10 @@ const sendAnswers = async (isTimeout: boolean) => {
     isSubmitting.value = true;
     submissionError.value = '';
     pendingSubmission.value = { isTimeout, autoRetry: true };
+    if (submissionRetryTimer) {
+        clearTimeout(submissionRetryTimer);
+        submissionRetryTimer = null;
+    }
     if (serverDraftTimer) {
         clearTimeout(serverDraftTimer);
         serverDraftTimer = null;
@@ -1488,21 +1590,10 @@ const sendAnswers = async (isTimeout: boolean) => {
     try {
         for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
             try {
-                await axios.post(
-                    props.quizForm.submitUrl,
-                    {
-                        email: email.value || null,
-                        ...identityPayload(),
-                        answers: answers.value,
-                        respondent_identifier: respondentIdentifier,
-                        session_token: props.session?.token ?? null,
-                        is_timeout: isTimeout,
-                    },
-                    {
-                        headers: { Accept: 'application/json' },
-                        timeout: SUBMIT_TIMEOUT_MS,
-                    },
-                );
+                await axios.post(props.quizForm.submitUrl, submissionPayload(isTimeout), {
+                    headers: { Accept: 'application/json' },
+                    timeout: SUBMIT_TIMEOUT_MS,
+                });
                 markServerReachable(true);
                 markSubmitted();
                 return;
@@ -1546,11 +1637,82 @@ const sendAnswers = async (isTimeout: boolean) => {
         }
 
         submissionError.value = isTimeout
-            ? 'Waktu pengerjaan telah habis, tetapi jawaban belum terkirim karena kendala jaringan. Jawaban tetap tersimpan dan akan dikirim otomatis saat koneksi pulih, atau klik tombol "Coba Kirim Ulang Jawaban" di bawah.'
-            : 'Koneksi intranet terputus atau lambat saat mengirim jawaban. Tenang, jawaban Anda tetap tersimpan aman dan akan dikirim otomatis saat koneksi pulih, atau klik tombol "Coba Kirim Ulang Jawaban Sekarang" di bawah.';
+            ? 'Waktu pengerjaan telah habis, tetapi jawaban belum terkirim karena kendala jaringan. Jawaban tetap tersimpan dan terus dikirim ulang otomatis sampai berhasil, atau klik tombol "Coba Kirim Ulang Jawaban" di bawah.'
+            : 'Koneksi intranet terputus atau lambat saat mengirim jawaban. Tenang, jawaban Anda tetap tersimpan aman dan terus dikirim ulang otomatis sampai berhasil, atau klik tombol "Coba Kirim Ulang Jawaban Sekarang" di bawah.';
+        scheduleSubmissionRetry();
     } finally {
         submissionNotice.value = '';
         isSubmitting.value = false;
+    }
+};
+
+let submissionRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Keep trying a submission that did not get through (weak Wi-Fi, a busy or restarting server) until it does. */
+const scheduleSubmissionRetry = () => {
+    if (submissionRetryTimer) {
+        clearTimeout(submissionRetryTimer);
+    }
+    submissionRetryTimer = setTimeout(() => {
+        submissionRetryTimer = null;
+        if (pendingSubmission.value?.autoRetry && !isSubmitted.value && !isSubmitting.value) {
+            void sendAnswers(pendingSubmission.value.isTimeout);
+        }
+    }, SUBMIT_RETRY_INTERVAL_MS);
+};
+
+/** The body of a submission, the same for every try (a repeated one is recognised by its session). */
+const submissionPayload = (isTimeout: boolean) => ({
+    email: email.value || null,
+    ...identityPayload(),
+    answers: answers.value,
+    respondent_identifier: respondentIdentifier,
+    session_token: props.session?.token ?? null,
+    is_timeout: isTimeout,
+});
+
+/** A request that still goes out while the page is being closed. */
+const sendWithKeepalive = (url: string, body: Record<string, unknown>) => {
+    const json = JSON.stringify(body);
+    if (json.length > KEEPALIVE_MAX_BYTES) {
+        return;
+    }
+    try {
+        void fetch(url, {
+            method: 'POST',
+            keepalive: true,
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': xsrfToken(),
+            },
+            body: json,
+        }).catch(() => {});
+    } catch {
+        // ignore
+    }
+};
+
+/*
+ * The page is being closed or reloaded: a submission that has not got through yet is sent once more,
+ * and answers not yet saved on the server are saved, with requests that outlive the page.
+ */
+const sendPendingWorkOnPageHide = () => {
+    if (isSubmitted.value) {
+        return;
+    }
+    if (pendingSubmission.value) {
+        sendWithKeepalive(props.quizForm.submitUrl, submissionPayload(pendingSubmission.value.isTimeout));
+        return;
+    }
+    if (hasUnsyncedDraft && canSyncDraftToServer() && !isLocked.value) {
+        sendWithKeepalive(`/forms/${props.quizForm.slug}/draft`, {
+            session_token: props.session?.token,
+            respondent_identifier: respondentIdentifier,
+            answers: answers.value,
+        });
     }
 };
 
@@ -1584,6 +1746,8 @@ const retrySubmission = () => {
  * Called when the server answers again after an outage: push everything that is still pending.
  */
 function onConnectionRestored() {
+    // A lock made while offline reaches the server first.
+    void refreshLockState();
     if (pendingSubmission.value?.autoRetry && !isSubmitted.value && !isSubmitting.value) {
         sendAnswers(pendingSubmission.value.isTimeout);
         return;
@@ -1603,6 +1767,66 @@ const submitAnotherResponse = () => {
 
 <template>
     <Head :title="quizForm.title" />
+
+    <!-- Connection notice: a toast that never blocks answering (below the timer, at the bottom on large screens).
+         The lock screen has its own note. -->
+    <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="translate-y-2 opacity-0"
+    >
+        <div
+            v-if="isConnectionLost && !isConnectionToastCollapsed && !isLocked"
+            role="status"
+            aria-live="polite"
+            class="fixed inset-x-4 top-14 z-[110] mx-auto flex max-w-md items-start gap-3 rounded-2xl border border-amber-200 bg-white p-3.5 text-left shadow-[0_12px_32px_rgba(15,23,42,0.18)] sm:top-28 lg:bottom-6 lg:top-auto"
+        >
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <WifiOff class="h-5 w-5" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-black text-slate-900">{{ isOnline ? 'Server ujian tidak terjangkau' : 'Koneksi terputus' }}</p>
+                <p class="mt-0.5 text-xs leading-relaxed text-slate-600">
+                    Tetap kerjakan soal. Jawaban tersimpan di perangkat ini dan dikirim otomatis begitu koneksi pulih.
+                </p>
+            </div>
+            <button
+                type="button"
+                class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Kecilkan pemberitahuan"
+                @click="isConnectionToastCollapsed = true"
+            >
+                <X class="h-4 w-4" />
+            </button>
+        </div>
+    </Transition>
+    <button
+        v-if="isConnectionLost && isConnectionToastCollapsed && !isLocked"
+        type="button"
+        class="fixed left-1/2 top-14 z-[110] inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg sm:top-28 lg:bottom-6 lg:top-auto"
+        @click="isConnectionToastCollapsed = false"
+    >
+        <WifiOff class="h-3.5 w-3.5" /> Offline
+    </button>
+    <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        leave-active-class="transition duration-300 ease-in"
+        leave-to-class="translate-y-2 opacity-0"
+    >
+        <div
+            v-if="isReconnectedToastVisible && !isConnectionLost"
+            role="status"
+            aria-live="polite"
+            class="fixed inset-x-4 top-14 z-[110] mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-3.5 text-left shadow-[0_12px_32px_rgba(15,23,42,0.18)] sm:top-28 lg:bottom-6 lg:top-auto"
+        >
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Wifi class="h-5 w-5" />
+            </div>
+            <p class="text-sm font-bold text-slate-900">Koneksi tersambung kembali. Jawaban dikirim ke server.</p>
+        </div>
+    </Transition>
 
     <!-- Countdown timer: a slim bar across the top on phones, a floating card on larger screens -->
     <div
@@ -1644,16 +1868,6 @@ const submitAnotherResponse = () => {
             isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
     >
-        <!-- Offline Intranet Warning Banner -->
-        <div
-            v-if="!isOnline || !isServerReachable"
-            class="sticky top-0 z-50 flex items-center justify-center gap-2 bg-amber-500 px-4 py-2.5 text-center text-xs sm:text-sm font-bold text-white shadow-md transition-all"
-        >
-            <AlertCircle class="h-4 w-4 shrink-0" />
-            <span v-if="!isOnline">Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
-            <span v-else>Server ujian sedang tidak terjangkau. Jawaban tetap tersimpan di perangkat ini dan akan dikirim otomatis saat koneksi pulih.</span>
-        </div>
-
         <!-- Access Restricted State (Cohort Restriction) -->
         <section v-if="accessRestricted" class="mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white shadow-xl overflow-hidden my-8">
             <div class="h-3 bg-amber-500"></div>
@@ -2598,13 +2812,16 @@ const submitAnotherResponse = () => {
                 </div>
 
                 <div v-else class="space-y-3">
-                    <p class="text-xs leading-relaxed text-slate-400">
+                    <p v-if="isConnectionLost" class="text-xs leading-relaxed text-amber-300">
+                        Koneksi terputus. Kunci tercatat di perangkat ini dan dilaporkan ke guru / pengawas begitu koneksi pulih.
+                    </p>
+                    <p v-else class="text-xs leading-relaxed text-slate-400">
                         Nama Anda sudah muncul di daftar siswa terkunci milik guru / pengawas. Tekan tombol di bawah agar guru tahu Anda menunggu.
                     </p>
                     <button
                         type="button"
                         class="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-indigo-500 disabled:opacity-60"
-                        :disabled="isRequestingUnlock"
+                        :disabled="isRequestingUnlock || isConnectionLost"
                         @click="requestUnlock"
                     >
                         <RefreshCw v-if="isRequestingUnlock" class="h-4 w-4 animate-spin" />

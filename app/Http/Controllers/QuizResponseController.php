@@ -113,7 +113,8 @@ class QuizResponseController extends Controller
             }
         }
 
-        // Back after the page was closed or reloaded: quickly is a reload, later locks the attempt.
+        // Back after the page was closed or reloaded: away too long locks the attempt. Otherwise the
+        // page tells on its first status check whether it is a reload of the same tab.
         $quizSession->settleLeave($quizForm, $request->ip());
 
         // Until the exam has started the questions stay on the server, so they cannot be read
@@ -785,13 +786,14 @@ class QuizResponseController extends Controller
     {
         $request->validate([
             'session_token' => ['required', 'string', 'max:100'],
+            'returning' => ['nullable', 'string', 'max:20'],
         ]);
 
         $session = $this->sessionOfRequest($request, $quizForm);
 
         abort_if($session === null, 404);
 
-        $session->settleLeave($quizForm, $request->ip());
+        $session->settleLeave($quizForm, $request->ip(), $request->input('returning'));
         $session->markSeen();
 
         return $this->lockState($quizForm, $session);

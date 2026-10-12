@@ -159,7 +159,7 @@ class QuizForm extends Model
         $unlocked = $this->sessions()
             ->where('is_locked', true)
             ->whereNull('submitted_at')
-            ->update(['is_locked' => false, 'unlocked_at' => now()]);
+            ->update(['is_locked' => false, 'unlocked_at' => now(), 'left_at' => null]);
 
         UnlockRequest::query()
             ->whereBelongsTo($this)

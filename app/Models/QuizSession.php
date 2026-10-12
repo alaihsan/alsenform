@@ -71,6 +71,7 @@ class QuizSession extends Model
             'locked_at' => now(),
             'blur_count' => ($this->blur_count ?? 0) + 1,
             'blur_logs' => $logs,
+            'left_at' => null,
         ]);
     }
 
@@ -90,24 +91,42 @@ class QuizSession extends Model
     }
 
     /**
-     * Seconds a closed or reloaded exam page may be away before that counts as leaving the exam.
+     * Seconds a reloaded exam page may take to load again before that counts as leaving the exam.
      */
-    public const RELOAD_GRACE_SECONDS = 15;
+    public const RELOAD_GRACE_SECONDS = 20;
 
     /**
-     * The exam page came back after it was closed or reloaded: back quickly is a reload, away
-     * longer (another site in the same tab, the tab closed) locks the attempt like a tab switch.
+     * How a returning exam page may have been opened without leaving the exam: a reload of the
+     * same tab, or a browser too old to tell.
      */
-    public function settleLeave(QuizForm $quizForm, ?string $ip = null): void
+    public const RELOAD_NAVIGATIONS = ['reload', 'unknown'];
+
+    /**
+     * Settle a page that was closed or reloaded. Only a reload of the same tab that is back within
+     * a few seconds is not leaving the exam. Away longer, the exam opened anew (the tab was closed),
+     * or brought back from the browser history (another site in the same tab) locks the attempt
+     * like a tab switch.
+     *
+     * $returning is how the returning page was opened, told by that page; null for any other
+     * request (the page load itself, a poll), which only settles a page that stays away too long.
+     */
+    public function settleLeave(QuizForm $quizForm, ?string $ip = null, ?string $returning = null): void
     {
         if ($this->left_at === null) {
             return;
         }
 
-        $wasAway = $this->left_at->lt(now()->subSeconds(self::RELOAD_GRACE_SECONDS));
+        $wasAwayTooLong = $this->left_at->lt(now()->subSeconds(self::RELOAD_GRACE_SECONDS));
+
+        if ($returning === null && ! $wasAwayTooLong) {
+            return;
+        }
+
         $this->forceFill(['left_at' => null])->saveQuietly();
 
-        if ($wasAway && $quizForm->locksOnBlur() && $this->started_at !== null && $this->submitted_at === null && ! $this->is_locked) {
+        $leftTheExam = $returning === null || ! in_array($returning, self::RELOAD_NAVIGATIONS, true);
+
+        if ($leftTheExam && $quizForm->locksOnBlur() && $this->started_at !== null && $this->submitted_at === null && ! $this->is_locked) {
             $this->recordBlurEvent($ip);
         }
     }
@@ -120,6 +139,7 @@ class QuizSession extends Model
         $this->update([
             'is_locked' => false,
             'unlocked_at' => now(),
+            'left_at' => null,
         ]);
     }
 
