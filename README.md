@@ -104,6 +104,7 @@ Fitur editor lainnya:
 - Nilai akhir selalu dalam rentang **0–100**: jumlah poin benar dibagi poin maksimal soal yang dinilai otomatis.
 - **Kunci jawaban bisa diperbaiki setelah ujian.** Nilai seluruh murid langsung dihitung ulang dari kunci yang baru, termasuk di berkas Excel.
 - Rekap di aplikasi menampilkan poin dan nilai setiap murid serta ringkasan jawaban per soal. Rata-rata, KKM, dan status tuntas ada di berkas Excel.
+- Tab **Responses** menampilkan jumlah murid yang sudah mengirim jawaban (tiap murid dihitung sekali) dan yang sedang mengerjakan. Angkanya diperbarui langsung setiap 5 detik, dan rekap nilai ikut bertambah tanpa memuat ulang halaman.
 - **Analisis butir soal** di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik. Analisis baru dapat diandalkan setelah minimal 10 murid mengirim jawaban.
 
 ### Laporan aktivitas

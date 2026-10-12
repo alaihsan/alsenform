@@ -237,6 +237,8 @@ class QuizFormPayloads
 
         return [
             'total' => $responses->count(),
+            'students' => $quizForm->submittedStudentCount(),
+            'progressUrl' => route('forms.progress', $quizForm),
             'maxScore' => $maxScore,
             'exportUrl' => route('forms.responses.export', $quizForm),
             'latest' => $responses->take(5)->map(fn (QuizResponse $response): array => [

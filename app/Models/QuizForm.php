@@ -150,6 +150,31 @@ class QuizForm extends Model
     }
 
     /**
+     * How many students handed in at least once: accounts counted by account, guests by their device.
+     */
+    public function submittedStudentCount(): int
+    {
+        return $this->responses()->whereNotNull('user_id')->distinct()->count('user_id')
+            + $this->responses()->whereNull('user_id')->whereNotNull('respondent_identifier')->distinct()->count('respondent_identifier')
+            + $this->responses()->whereNull('user_id')->whereNull('respondent_identifier')->count();
+    }
+
+    /**
+     * How many students have the exam open right now: a started attempt, not handed in, whose page
+     * was in touch with the server within the last minute.
+     */
+    public function workingStudentCount(): int
+    {
+        return $this->sessions()
+            ->whereNotNull('started_at')
+            ->whereNull('submitted_at')
+            ->where(fn ($query) => $query
+                ->where('last_seen_at', '>=', now()->subMinute())
+                ->orWhere('started_at', '>=', now()->subMinute()))
+            ->count();
+    }
+
+    /**
      * Unlock every locked attempt still in progress and close the pending unlock requests.
      *
      * @return int The number of attempts unlocked.

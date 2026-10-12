@@ -432,11 +432,16 @@ let unlockRequestsTick = 0;
 onMounted(() => {
     resizeAllTextareas();
     fetchUnlockRequests();
+    fetchExamProgress();
     // Every 5 s on the Keamanan tab; elsewhere every 15 s while the lock is on, for the tab's count.
+    // The number of students who handed in: every 5 s on the Responses tab, else every 15 s.
     unlockRequestsInterval = setInterval(() => {
         unlockRequestsTick++;
         if (activeTab.value === 'keamanan' || (form.settings.lockOnBlur && isPublished.value && unlockRequestsTick % 3 === 0)) {
             fetchUnlockRequests();
+        }
+        if (activeTab.value === 'responses' || (isPublished.value && unlockRequestsTick % 3 === 0)) {
+            fetchExamProgress();
         }
     }, 5000);
 });
@@ -450,6 +455,9 @@ onUnmounted(() => {
 watch(activeTab, (newTab) => {
     if (newTab === 'keamanan') {
         fetchUnlockRequests();
+    }
+    if (newTab === 'responses') {
+        fetchExamProgress();
     }
     if (newTab === 'questions') {
         resizeAllTextareas();
@@ -471,6 +479,44 @@ const questionTypeIcon = (type: QuestionType) => questionTypes.find((questionTyp
 
 const activeQuestion = computed(() => form.questions.find((question: Question) => question.id === activeQuestionId.value) ?? form.questions[0]);
 const responseCount = computed(() => props.quizForm?.responses?.total ?? 0);
+
+/*
+ * Live progress while the exam runs: students who handed in (each once, however many attempts),
+ * answers received, and students with the exam open now. New answers refresh the results shown.
+ */
+const examProgress = ref({
+    submitted: props.quizForm?.responses?.students ?? 0,
+    responses: props.quizForm?.responses?.total ?? 0,
+    working: 0,
+});
+let isFetchingExamProgress = false;
+
+const fetchExamProgress = async () => {
+    const url = props.quizForm?.responses?.progressUrl;
+    if (!url || isFetchingExamProgress) {
+        return;
+    }
+    isFetchingExamProgress = true;
+    try {
+        const response = await axios.get(url);
+        examProgress.value = response.data;
+        // Not while an edit is being saved: that request brings the results along anyway.
+        if (response.data.responses !== responseCount.value && activeTab.value === 'responses' && !isSaveInFlight) {
+            router.reload({ only: ['quizForm'] });
+        }
+    } catch {
+        // The next poll tries again.
+    } finally {
+        isFetchingExamProgress = false;
+    }
+};
+
+watch(
+    () => [props.quizForm?.responses?.total, props.quizForm?.responses?.students],
+    ([total, students]) => {
+        examProgress.value = { ...examProgress.value, responses: total ?? 0, submitted: students ?? 0 };
+    },
+);
 const shareUrl = computed(() => publicUrl.value);
 const responseQuestions = computed(() => props.quizForm?.responses?.questions ?? []);
 const latestResponses = computed(() => props.quizForm?.responses?.latest ?? []);
@@ -1943,6 +1989,12 @@ watch(
                 >
                     {{ tab === 'keamanan' ? 'keamanan' : tab }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span
                     ><span
+                        v-if="tab === 'responses' && (isPublished || examProgress.submitted > 0)"
+                        class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[11px] font-bold text-white"
+                        :title="`${examProgress.submitted} siswa sudah submit`"
+                        :aria-label="`${examProgress.submitted} siswa sudah submit`"
+                        >{{ examProgress.submitted }}</span
+                    ><span
                         v-if="tab === 'keamanan' && lockedStudentCount > 0"
                         class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold text-white"
                         :title="`${lockedStudentCount} siswa terkunci`"
@@ -3129,8 +3181,21 @@ watch(
 
                         <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                             <div class="rounded-2xl bg-slate-50 p-5">
-                                <p class="text-sm font-bold text-slate-500">Total responses</p>
-                                <p class="mt-2 text-4xl font-black text-indigo-600">{{ responseCount }}</p>
+                                <p class="flex items-center gap-2 text-sm font-bold text-slate-500">
+                                    Siswa sudah submit
+                                    <span
+                                        v-if="isPublished"
+                                        class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase text-emerald-700"
+                                        title="Diperbarui otomatis setiap 5 detik"
+                                        ><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>Live</span
+                                    >
+                                </p>
+                                <p class="mt-2 text-4xl font-black text-indigo-600">{{ examProgress.submitted }}</p>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">
+                                    {{ examProgress.responses }} jawaban masuk<span v-if="examProgress.working">
+                                        · {{ examProgress.working }} sedang mengerjakan</span
+                                    >
+                                </p>
                             </div>
                             <div class="rounded-2xl bg-slate-50 p-5">
                                 <p class="text-sm font-bold text-slate-500">Accepting</p>

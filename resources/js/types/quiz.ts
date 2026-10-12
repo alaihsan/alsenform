@@ -80,6 +80,9 @@ export type QuizFormPayload = {
     };
     responses: {
         total: number;
+        /** Students who handed in at least once (each counted once). */
+        students?: number;
+        progressUrl?: string;
         maxScore?: number;
         exportUrl?: string;
         latest: {
