@@ -254,7 +254,8 @@ test('issue 6: binds user_id, calculates score on server, and enforces single-re
         'answers' => [999 => 'Hacked Option'],
     ])->assertSessionHasErrors(['answers.999']);
 
-    // 2. Valid first submission succeeds and records score and user_id
+    // 2. Valid first submission (of the exam started on the exam page) succeeds and records score and user_id
+    startedAttempt($form, $student);
     $this->actingAs($student)->post(route('forms.responses.store', $form->slug), [
         'answers' => [1 => 'Paris'],
     ])->assertRedirect(route('forms.public', $form->slug));
@@ -297,14 +298,18 @@ test('issue 7: timeout allows partial submission even with unanswered required q
         ],
     ]);
 
+    $token = startedAttempt($form)->session_token;
+
     // Submitting normally without Q2 fails required validation
     $this->post(route('forms.responses.store', $form->slug), [
+        'session_token' => $token,
         'answers' => [1 => 'Hello'],
         'is_timeout' => false,
     ])->assertSessionHasErrors(['answers.2']);
 
     // Submitting with is_timeout = true succeeds as partial submission
     $resp = $this->postJson(route('forms.responses.store', $form->slug), [
+        'session_token' => $token,
         'answers' => [1 => 'Hello'],
         'is_timeout' => true,
     ]);

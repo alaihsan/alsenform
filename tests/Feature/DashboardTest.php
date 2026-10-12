@@ -323,6 +323,7 @@ test('public users can submit quiz responses', function () {
 
     $this->post(route('forms.responses.store', ['quizForm' => $quizForm->slug]), [
         'email' => 'respondent@example.com',
+        'session_token' => startedAttempt($quizForm)->session_token,
         'answers' => [
             1 => 'Blue',
         ],

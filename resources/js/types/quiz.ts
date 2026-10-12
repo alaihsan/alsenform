@@ -39,10 +39,22 @@ export type QuizFormPayload = {
     isPublished?: boolean;
     /** Fingerprint of the saved content; sent back with each save to detect outdated copies. */
     version?: string;
+    /** Labels of each question (from the question bank), by question id. */
+    questionLabels?: Record<string, { subject?: string | null; grade?: string | null; topic?: string | null; difficulty?: string | null }>;
+    labelSuggestions?: { subjects: string[]; grades: string[]; topics: string[] };
+    labelsUrl?: string;
     settings: {
         collectEmail: boolean;
         showProgress: boolean;
         shuffleQuestions: boolean;
+        shuffleOptions?: boolean;
+        /** A random selection of the questions for each student (see App\\Support\\ExamLayout). */
+        questionDraw?: {
+            enabled: boolean;
+            mode: 'count' | 'difficulty';
+            count: number;
+            perDifficulty: { mudah: number; sedang: number; sulit: number };
+        };
         isQuiz?: boolean;
         emailCollectionMode?: 'none' | 'verified' | 'responder';
         sendResponseCopy?: 'off' | 'request' | 'always';
@@ -88,7 +100,11 @@ export type QuizFormPayload = {
             kelas: string;
             email: string;
             score: number;
+            /** The points this student could earn: their own when questions are drawn per student. */
+            maxScore?: number;
             percentage: number;
+            /** Answers that arrived after the time ran out (a page offline at the end). */
+            lateMinutes?: number | null;
             is_timeout: boolean;
             /** Handed in by the server: the time ran out while the exam page was closed or offline. */
             is_auto_submitted?: boolean;

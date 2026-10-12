@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\QuizForm;
 use App\Models\QuizSession;
+use App\Support\ExamLayout;
 use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,7 +34,7 @@ class StoreQuizResponseRequest extends FormRequest
             'session_token' => ['nullable', 'string', 'max:100'],
             'is_timeout' => ['nullable', 'boolean'],
             // When the time ran out the answers may be empty: nothing was answered yet.
-            'answers' => [$this->boolean('is_timeout') ? 'present' : 'required', 'array'],
+            'answers' => [$this->boolean('is_timeout') ? 'present' : 'required', 'array', 'max:500'],
             'answers.*' => ['nullable'],
             // A guest's name, class and email (the fields the teacher picked). Not required again
             // when the exam session holds them already, nor when the time ran out.
@@ -82,6 +83,20 @@ class StoreQuizResponseRequest extends FormRequest
             $answers = $this->input('answers', []);
             $isTimeout = $this->boolean('is_timeout');
 
+            if (! is_array($answers)) {
+                return;
+            }
+
+            $encoded = json_encode($answers, 0, SaveQuizDraftRequest::MAX_DEPTH);
+            if ($encoded === false || strlen($encoded) > SaveQuizDraftRequest::MAX_PAYLOAD_BYTES) {
+                $validator->errors()->add('answers', 'Jawaban terlalu besar.');
+
+                return;
+            }
+
+            // With a random selection per student, only the questions this student got are required.
+            $assignedIds = app(ExamLayout::class)->assignedIds($quizForm, $this->examSession($quizForm)?->layout);
+
             // Validate that answered question IDs belong to this quiz
             foreach (array_keys($answers) as $qId) {
                 if (! in_array($qId, $validQuestionIds)) {
@@ -96,6 +111,10 @@ class StoreQuizResponseRequest extends FormRequest
 
             // Validate required questions
             foreach ($formQuestions as $q) {
+                if ($assignedIds !== null && ! in_array((string) ($q['id'] ?? ''), $assignedIds, true)) {
+                    continue;
+                }
+
                 if (! empty($q['required'])) {
                     $qid = $q['id'];
                     $ans = $answers[$qid] ?? null;

@@ -17,6 +17,7 @@ type BankItem = {
     source: { title: string; trashed: boolean } | null;
     updatedAt: string | null;
     inThisExam: boolean;
+    labels?: { subject: string | null; grade: string | null; topic: string | null; difficulty: string | null };
 };
 
 const props = defineProps<{
@@ -47,6 +48,10 @@ const typeLabel = (type: string) => TYPE_LABELS[type] ?? type;
 const search = ref('');
 const typeFilter = ref('');
 const formFilter = ref<number | ''>('');
+const difficultyFilter = ref('');
+const subjectFilter = ref('');
+const subjects = ref<string[]>([]);
+const DIFFICULTY_LABELS: Record<string, string> = { mudah: 'Mudah', sedang: 'Sedang', sulit: 'Sulit' };
 const items = ref<BankItem[]>([]);
 const total = ref(0);
 const currentPage = ref(0);
@@ -96,6 +101,8 @@ const load = async (page = 1) => {
                 search: search.value.trim() || undefined,
                 type: typeFilter.value || undefined,
                 form: formFilter.value || undefined,
+                difficulty: difficultyFilter.value || undefined,
+                subject: subjectFilter.value || undefined,
                 exam: props.examId,
                 page,
                 sync: hasSynced ? undefined : 1,
@@ -112,6 +119,7 @@ const load = async (page = 1) => {
         hasMore.value = response.data.hasMore;
         types.value = response.data.types ?? [];
         forms.value = response.data.forms ?? [];
+        subjects.value = response.data.suggestions?.subjects ?? [];
     } catch {
         if (request === requestCounter) {
             loadError.value = 'Bank soal tidak dapat dimuat. Periksa koneksi lalu coba lagi.';
@@ -125,7 +133,7 @@ const load = async (page = 1) => {
 
 const searchSoon = useDebounceFn(() => load(1), 300);
 watch(search, () => searchSoon());
-watch([typeFilter, formFilter], () => load(1));
+watch([typeFilter, formFilter, difficultyFilter, subjectFilter], () => load(1));
 
 const addSelected = async () => {
     if (selected.value.size === 0 || isAdding.value) {
@@ -188,6 +196,25 @@ onMounted(() => load(1));
             >
                 <option value="">Semua ujian</option>
                 <option v-for="exam in forms" :key="exam.id" :value="exam.id">{{ exam.title }}</option>
+            </select>
+            <select
+                v-model="difficultyFilter"
+                aria-label="Tingkat kesulitan"
+                class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-400"
+            >
+                <option value="">Semua kesulitan</option>
+                <option value="mudah">Mudah</option>
+                <option value="sedang">Sedang</option>
+                <option value="sulit">Sulit</option>
+                <option value="none">Belum dilabeli</option>
+            </select>
+            <select
+                v-model="subjectFilter"
+                aria-label="Mapel"
+                class="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-indigo-400"
+            >
+                <option value="">Semua mapel</option>
+                <option v-for="subject in subjects" :key="subject" :value="subject">{{ subject }}</option>
             </select>
         </div>
 
@@ -260,6 +287,17 @@ onMounted(() => load(1));
                                 >
                                     <ImageIcon class="h-3 w-3" /> {{ item.mediaCount }}
                                 </span>
+                                <span
+                                    v-if="item.labels?.difficulty"
+                                    class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700"
+                                    >{{ DIFFICULTY_LABELS[item.labels.difficulty] ?? item.labels.difficulty }}</span
+                                >
+                                <span v-if="item.labels?.subject" class="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">{{
+                                    item.labels.subject
+                                }}</span>
+                                <span v-if="item.labels?.topic" class="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold text-teal-700">{{
+                                    item.labels.topic
+                                }}</span>
                                 <span v-if="item.inThisExam" class="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
                                     >Sudah ada di ujian ini</span
                                 >

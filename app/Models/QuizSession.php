@@ -31,6 +31,8 @@ class QuizSession extends Model
         'submitted_at',
         'draft_answers',
         'draft_saved_at',
+        'layout',
+        'last_seen_at',
     ];
 
     /**
@@ -48,6 +50,8 @@ class QuizSession extends Model
             'blur_count' => 'integer',
             'blur_logs' => 'array',
             'draft_answers' => 'array',
+            'layout' => 'array',
+            'last_seen_at' => 'datetime',
             'draft_saved_at' => 'datetime',
         ];
     }
@@ -66,6 +70,21 @@ class QuizSession extends Model
             'blur_count' => ($this->blur_count ?? 0) + 1,
             'blur_logs' => $logs,
         ]);
+    }
+
+    /**
+     * Note that the exam page is in touch with the server (at most every 10 seconds). Not after
+     * the time ran out: it tells whether the page was online at the end, not when it came back.
+     */
+    public function markSeen(): void
+    {
+        if ($this->expires_at !== null && now()->gt($this->expires_at->copy()->addSeconds(60))) {
+            return;
+        }
+
+        if ($this->last_seen_at === null || $this->last_seen_at->lt(now()->subSeconds(10))) {
+            $this->forceFill(['last_seen_at' => now()])->saveQuietly();
+        }
     }
 
     /**
@@ -92,11 +111,12 @@ class QuizSession extends Model
      * The answers saved on the server (draft, or the copy taken when the attempt was locked) to
      * questions the exam still has.
      *
+     * @param  list<string>|null  $onlyQuestionIds  The questions of the attempt, when it got a selection.
      * @return array<int|string, mixed>
      */
-    public function savedAnswersFor(QuizForm $quizForm): array
+    public function savedAnswersFor(QuizForm $quizForm, ?array $onlyQuestionIds = null): array
     {
-        $questionIds = array_map('strval', array_column(is_array($quizForm->questions) ? $quizForm->questions : [], 'id'));
+        $questionIds = $onlyQuestionIds ?? array_map('strval', array_column(is_array($quizForm->questions) ? $quizForm->questions : [], 'id'));
 
         return array_filter(
             is_array($this->draft_answers) ? $this->draft_answers : [],

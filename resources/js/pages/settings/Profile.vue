@@ -132,9 +132,9 @@ const prefs = user.quiz_preferences || {};
 const prefForm = useForm({
     default_kkm: prefs.default_kkm ?? 75,
     default_duration: prefs.default_duration ?? 60,
-    default_shuffle_questions: prefs.default_shuffle_questions ?? true,
-    default_shuffle_options: prefs.default_shuffle_options ?? true,
-    default_anti_cheat_blur: prefs.default_anti_cheat_blur ?? true,
+    default_shuffle_questions: prefs.default_shuffle_questions ?? false,
+    default_shuffle_options: prefs.default_shuffle_options ?? false,
+    default_anti_cheat_blur: prefs.default_anti_cheat_blur ?? false,
     default_school_name: prefs.default_school_name ?? '',
     default_arabic_font: prefs.default_arabic_font ?? 'Amiri Quran',
 });

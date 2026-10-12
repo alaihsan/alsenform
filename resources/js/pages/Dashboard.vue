@@ -31,6 +31,7 @@ import {
     History,
     Key,
     LayoutDashboard,
+    Library,
     List,
     LogOut,
     MessageSquare,
@@ -917,6 +918,27 @@ function closeDonationModal(): void {
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
                                             >Laporan</span
+                                        >
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- Bank soal: semua soal yang pernah ditulis guru (Guru / Admin) -->
+                                <DropdownMenuItem
+                                    v-if="user?.is_admin || user?.role === 'guru'"
+                                    :as-child="true"
+                                    class="cursor-pointer p-0 focus:bg-transparent"
+                                >
+                                    <Link
+                                        :href="route('question-bank.page')"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
+                                    >
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 transition-all group-hover:bg-amber-600 group-hover:text-white"
+                                        >
+                                            <Library class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Bank Soal</span
                                         >
                                     </Link>
                                 </DropdownMenuItem>

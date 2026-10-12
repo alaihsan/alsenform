@@ -4,6 +4,7 @@ use App\Models\QuestionBankItem;
 use App\Models\QuizForm;
 use App\Models\User;
 use App\Services\QuestionBank;
+use Inertia\Testing\AssertableInertia;
 
 /**
  * @param  array<string, mixed>  $attributes
@@ -222,4 +223,155 @@ test('bringing the bank up to date again leaves unchanged questions alone', func
     $this->actingAs($this->teacher)
         ->getJson(route('question-bank.index', ['exam' => $this->exam->id]))
         ->assertJsonPath('items.0.inThisExam', true);
+});
+
+test('labels are given to a question and every copy of it, and only the labels sent change', function () {
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?'), bankQuestion(2, 'Lambang negara?')]);
+    $copy = QuizForm::factory()->for($this->teacher)->create();
+    saveExam($copy, [bankQuestion(5, 'Ibu kota Indonesia?')]);
+    $item = QuestionBankItem::query()->where('quiz_form_id', $this->exam->id)->where('source_question_id', '1')->sole();
+
+    $this->actingAs($this->teacher)
+        ->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'subject' => ' IPS ', 'grade' => '8', 'topic' => 'Wawasan Nusantara', 'difficulty' => 'mudah'])
+        ->assertOk()
+        ->assertJsonPath('changed', 2);
+
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'difficulty' => 'sulit'])->assertOk();
+
+    expect(QuestionBankItem::query()->where('search_text', 'like', '%ibu kota%')->get()->map->only(QuestionBank::LABELS)->unique()->values()->all())
+        ->toBe([['subject' => 'IPS', 'grade' => '8', 'topic' => 'Wawasan Nusantara', 'difficulty' => 'sulit']])
+        ->and(QuestionBankItem::query()->where('source_question_id', '2')->sole()->difficulty)->toBeNull();
+
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'difficulty' => 'gampang'])->assertUnprocessable();
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'topic' => ''])->assertOk();
+
+    expect($item->refresh()->topic)->toBeNull()->and($item->subject)->toBe('IPS');
+});
+
+test('a labelled question keeps its labels when edited, and brings them along when reused', function () {
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?')]);
+    $item = QuestionBankItem::query()->sole();
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'subject' => 'IPS', 'difficulty' => 'sedang']);
+
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota negara Indonesia adalah?')]);
+    expect($item->refresh())->subject->toBe('IPS')->difficulty->toBe('sedang');
+
+    // Reused in another exam (from the bank): the new copy has the same labels.
+    $question = $this->actingAs($this->teacher)->postJson(route('question-bank.questions'), ['ids' => [$item->id]])->json('questions.0');
+    $nextExam = QuizForm::factory()->for($this->teacher)->create();
+    saveExam($nextExam, [['id' => 9, ...$question]]);
+
+    expect(QuestionBankItem::query()->where('quiz_form_id', $nextExam->id)->sole())
+        ->subject->toBe('IPS')
+        ->difficulty->toBe('sedang');
+});
+
+test('the bank is filtered by labels and archived questions are set aside', function () {
+    saveExam($this->exam, [
+        bankQuestion(1, 'Soal mudah IPA'),
+        bankQuestion(2, 'Soal sulit IPA'),
+        bankQuestion(3, 'Soal tanpa label'),
+    ]);
+    $items = QuestionBankItem::query()->orderBy('source_question_id')->get();
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$items[0]->id], 'subject' => 'IPA', 'difficulty' => 'mudah']);
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [$items[1]->id], 'subject' => 'IPA', 'difficulty' => 'sulit']);
+
+    $titles = fn (array $query) => collect($this->actingAs($this->teacher)->getJson(route('question-bank.index', $query))->json('items'))->pluck('title')->sort()->values()->all();
+
+    expect($titles(['difficulty' => 'mudah']))->toBe(['Soal mudah IPA'])
+        ->and($titles(['subject' => 'IPA']))->toBe(['Soal mudah IPA', 'Soal sulit IPA'])
+        ->and($titles(['difficulty' => 'none']))->toBe(['Soal tanpa label']);
+
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.archive'), ['ids' => [$items[2]->id], 'archived' => true])->assertOk();
+
+    expect($titles([]))->toBe(['Soal mudah IPA', 'Soal sulit IPA'])
+        ->and($titles(['archived' => 1]))->toBe(['Soal tanpa label']);
+
+    // Saving the exam again does not bring an archived question back.
+    saveExam($this->exam, [bankQuestion(1, 'Soal mudah IPA'), bankQuestion(2, 'Soal sulit IPA'), bankQuestion(3, 'Soal tanpa label')]);
+    expect($titles([]))->toBe(['Soal mudah IPA', 'Soal sulit IPA']);
+
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.archive'), ['ids' => [$items[2]->id], 'archived' => false])->assertOk();
+    expect($titles([]))->toHaveCount(3)
+        ->and($this->actingAs($this->teacher)->getJson(route('question-bank.index'))->json('suggestions.subjects'))->toBe(['IPA']);
+});
+
+test('a teacher cannot label or archive the questions of another teacher', function () {
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?')]);
+    $item = QuestionBankItem::query()->sole();
+    $intruder = User::factory()->create(['role' => 'guru']);
+
+    $this->actingAs($intruder)->patchJson(route('question-bank.labels'), ['ids' => [$item->id], 'difficulty' => 'sulit'])->assertJsonPath('changed', 0);
+    $this->actingAs($intruder)->patchJson(route('question-bank.archive'), ['ids' => [$item->id], 'archived' => true])->assertJsonPath('changed', 0);
+
+    expect($item->refresh())->difficulty->toBeNull()->archived_at->toBeNull();
+});
+
+test('a question is labelled from the editor, also by a collaborator, and the editor shows the labels', function () {
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?'), bankQuestion(2, 'Untitled Question')]);
+    $collaborator = User::factory()->create(['role' => 'guru']);
+    $this->exam->collaborators()->attach($collaborator->id, ['role' => 'editor']);
+    $url = fn (string $questionId) => route('forms.questions.labels', ['quizForm' => $this->exam->id, 'questionId' => $questionId]);
+
+    $this->actingAs($collaborator)
+        ->patchJson($url('1'), ['difficulty' => 'sedang', 'topic' => 'Ibu kota'])
+        ->assertOk()
+        ->assertJsonPath('labels.difficulty', 'sedang');
+
+    // A new, still empty question is not in the bank yet.
+    $this->actingAs($this->teacher)->patchJson($url('2'), ['difficulty' => 'mudah'])->assertUnprocessable();
+    $this->actingAs(User::factory()->create(['role' => 'guru']))->patchJson($url('1'), ['difficulty' => 'mudah'])->assertForbidden();
+
+    expect(QuestionBankItem::query()->sole()->user_id)->toBe($this->teacher->id);
+
+    $this->actingAs($this->teacher)
+        ->get(route('forms.edit', $this->exam->slug))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('quizForm.questionLabels.1.difficulty', 'sedang')
+            ->where('quizForm.questionLabels.1.topic', 'Ibu kota')
+            ->where('quizForm.labelSuggestions.topics', ['Ibu kota']));
+});
+
+test('labels never reach the students', function () {
+    $this->exam->update(['published_at' => now()]);
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?')]);
+    $this->actingAs($this->teacher)->patchJson(route('question-bank.labels'), ['ids' => [QuestionBankItem::query()->sole()->id], 'difficulty' => 'mudah', 'topic' => 'Kunci rahasia']);
+    $this->exam->update(['published_at' => now()]);
+    $student = User::factory()->create(['role' => 'siswa']);
+
+    $token = $this->actingAs($student)->get(route('forms.public', $this->exam->slug))->inertiaProps('session.token');
+    $start = $this->actingAs($student)->postJson(route('forms.responses.start', $this->exam->slug), ['session_token' => $token]);
+
+    expect($start->getContent())->not->toContain('Kunci rahasia')->not->toContain('mudah')
+        ->and($start->json('questions.0'))->not->toHaveKey('answer');
+});
+
+test('a new exam is made from the chosen bank questions', function () {
+    saveExam($this->exam, [bankQuestion(1, 'Ibu kota Indonesia?'), bankQuestion(2, 'Lambang negara?', ['answer' => 1])]);
+    $items = QuestionBankItem::query()->orderBy('source_question_id')->get();
+    $foreign = QuestionBankItem::factory()->for(User::factory()->create(['role' => 'guru']))->create();
+
+    $response = $this->actingAs($this->teacher)->post(route('question-bank.exam'), [
+        'ids' => [$items[1]->id, $foreign->id, $items[0]->id],
+        'title' => 'Remedial IPS',
+    ]);
+
+    $exam = QuizForm::query()->where('title', 'Remedial IPS')->sole();
+    $response->assertRedirect(route('forms.edit', $exam->slug));
+
+    expect($exam->user_id)->toBe($this->teacher->id)
+        ->and($exam->published_at)->toBeNull()
+        ->and(array_column($exam->questions, 'title'))->toBe(['Lambang negara?', 'Ibu kota Indonesia?'])
+        ->and(array_column($exam->questions, 'id'))->toBe([1, 2])
+        ->and($exam->questions[0]['answer'])->toBe(1);
+
+    $this->actingAs(User::factory()->create(['role' => 'siswa']))->post(route('question-bank.exam'), ['ids' => [$items[0]->id]])->assertForbidden();
+});
+
+test('the bank page opens for teachers only', function () {
+    $this->actingAs($this->teacher)->get(route('question-bank.page'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('QuestionBank/Index'));
+
+    $this->actingAs(User::factory()->create(['role' => 'siswa']))->get(route('question-bank.page'))->assertForbidden();
 });

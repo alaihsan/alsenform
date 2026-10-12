@@ -24,6 +24,14 @@ function openExam(QuizForm $quizForm): string
         ->inertiaProps('session.token');
 }
 
+/**
+ * Press "Kerjakan Sekarang": the timer starts and the answers can be handed in.
+ */
+function startExam(QuizForm $quizForm, string $token): void
+{
+    test()->postJson(route('forms.responses.start', $quizForm->slug), ['session_token' => $token])->assertOk();
+}
+
 test('draft answers saved on the server are restored after the server ip changes', function () {
     $this->actingAs($this->student);
     $token = openExam($this->quizForm);
@@ -80,6 +88,7 @@ test('drafts cannot be written with an unknown token or into another students se
 test('the server draft is cleared once the answers are submitted', function () {
     $this->actingAs($this->student);
     $token = openExam($this->quizForm);
+    startExam($this->quizForm, $token);
 
     $this->postJson(route('forms.responses.draft', $this->quizForm->slug), [
         'session_token' => $token,
@@ -142,6 +151,7 @@ test('on a shared lab computer another student never inherits the previous exam 
 test('a late draft request after submission is rejected and never restored', function () {
     $this->actingAs($this->student);
     $token = openExam($this->quizForm);
+    startExam($this->quizForm, $token);
 
     $this->postJson(route('forms.responses.store', $this->quizForm->slug), [
         'session_token' => $token,

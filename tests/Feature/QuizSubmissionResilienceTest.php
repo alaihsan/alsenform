@@ -31,12 +31,14 @@ test('a whole class behind one ip address (expose / nat) can submit at the same 
     $quizForm = publishedQuiz();
 
     foreach (range(1, 30) as $student) {
+        $attempt = startedAttempt($quizForm, attributes: ['respondent_identifier' => "anon_student_{$student}"]);
+
         // Every browser carries the encrypted respondent cookie issued when the quiz page was opened.
         $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.1'])
             ->withCredentials()
             ->withCookie('alsen_resp_id', "anon_student_{$student}")
             ->postJson(route('forms.responses.store', $quizForm->slug), [
-                'respondent_identifier' => "resp_student_{$student}",
+                'session_token' => $attempt->session_token,
                 'answers' => [1 => 'Option 1'],
             ])
             ->assertOk();
@@ -47,16 +49,18 @@ test('a whole class behind one ip address (expose / nat) can submit at the same 
 
 test('a single respondent is still rate limited', function () {
     $quizForm = publishedQuiz();
+    $token = startedAttempt($quizForm)->session_token;
 
+    // The first request hands in, the next ones are retries of the same attempt.
     foreach (range(1, 20) as $attempt) {
         $this->postJson(route('forms.responses.store', $quizForm->slug), [
-            'respondent_identifier' => 'resp_spammer',
+            'session_token' => $token,
             'answers' => [1 => 'Option 1'],
         ])->assertOk();
     }
 
     $this->postJson(route('forms.responses.store', $quizForm->slug), [
-        'respondent_identifier' => 'resp_spammer',
+        'session_token' => $token,
         'answers' => [1 => 'Option 1'],
     ])->assertTooManyRequests();
 });

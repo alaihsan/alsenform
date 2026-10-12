@@ -7,6 +7,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Support\ActivityRecorder;
+use App\Support\ExamLayout;
 use App\Support\QuizScoring;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class SubmitExpiredAttempts
     public function __construct(
         protected QuizScoring $scoring = new QuizScoring,
         protected ActivityRecorder $activityRecorder = new ActivityRecorder,
+        protected ExamLayout $examLayout = new ExamLayout,
     ) {}
 
     /**
@@ -110,7 +112,8 @@ class SubmitExpiredAttempts
 
             $wasLocked = $attempt->isEffectivelyLocked($quizForm);
             $questions = is_array($quizForm->questions) ? $quizForm->questions : [];
-            $answers = $attempt->savedAnswersFor($quizForm);
+            $assignedIds = $this->examLayout->assignedIds($quizForm, $attempt->layout);
+            $answers = $attempt->savedAnswersFor($quizForm, $assignedIds);
             $isAccount = $attempt->user_id !== null;
 
             $response = new QuizResponse([
@@ -122,6 +125,7 @@ class SubmitExpiredAttempts
                 'respondent_class' => $isAccount ? null : $attempt->respondent_class,
                 'email' => $attempt->respondent_email ?? $session->user?->email,
                 'answers' => $answers,
+                'question_ids' => $assignedIds,
                 'score' => $this->scoring->score($questions, $answers),
                 'is_timeout' => true,
                 'is_auto_submitted' => true,
@@ -130,10 +134,10 @@ class SubmitExpiredAttempts
             $response->created_at = $attempt->expires_at;
             $response->save();
 
+            // draft_saved_at stays: it tells later whether the page was in touch until the end.
             $attempt->update([
                 'submitted_at' => now(),
                 'draft_answers' => null,
-                'draft_saved_at' => null,
             ]);
 
             $this->activityRecorder->record(

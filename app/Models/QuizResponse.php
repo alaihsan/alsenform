@@ -21,9 +21,11 @@ class QuizResponse extends Model
         'respondent_class',
         'email',
         'answers',
+        'question_ids',
         'score',
         'is_timeout',
         'is_auto_submitted',
+        'late_seconds',
         'ip_address',
         'user_agent',
     ];
@@ -35,6 +37,8 @@ class QuizResponse extends Model
     {
         return [
             'answers' => 'array',
+            'question_ids' => 'array',
+            'late_seconds' => 'integer',
             'score' => 'integer',
             'is_timeout' => 'boolean',
             'is_auto_submitted' => 'boolean',

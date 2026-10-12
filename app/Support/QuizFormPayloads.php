@@ -7,6 +7,7 @@ use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Services\QuestionBank;
 use Illuminate\Support\Collection;
 
 class QuizFormPayloads
@@ -45,6 +46,10 @@ class QuizFormPayloads
             'questions' => $this->mediaUrl->normalizeQuestions($quizForm->questions),
             'settings' => $quizForm->settings,
             'version' => $quizForm->contentVersion(),
+            // Labels of each question (kept in the question bank) and suggestions while labelling.
+            'questionLabels' => (object) rescue(fn (): array => app(QuestionBank::class)->labelsForExam($quizForm), [], report: false),
+            'labelSuggestions' => rescue(fn (): array => app(QuestionBank::class)->labelSuggestions($quizForm->user), ['subjects' => [], 'grades' => [], 'topics' => []], report: false),
+            'labelsUrl' => route('forms.questions.labels', ['quizForm' => $quizForm->id, 'questionId' => '__question__']),
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
@@ -185,7 +190,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'answers', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
@@ -201,7 +206,11 @@ class QuizFormPayloads
 
         $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore, $guestNameCounts): array {
             $score = is_array($response->answers) ? $scoring->score($formQuestions, $response->answers) : (int) ($response->score ?? 0);
-            $percentage = $scoring->grade($score, $maxScore);
+            // With questions drawn per student, the maximum is that of the questions they got.
+            $responseMax = $response->question_ids !== null
+                ? $scoring->maxPoints($scoring->questionsGiven($formQuestions, $response->question_ids))
+                : $maxScore;
+            $percentage = $scoring->grade($score, $responseMax);
             $isGuest = $response->user_id === null;
 
             return [
@@ -214,7 +223,9 @@ class QuizFormPayloads
                 'kelas' => $response->user?->kelas ?? $response->respondent_class ?? '-',
                 'email' => $response->email ?? $response->user?->email ?? '-',
                 'score' => $score,
+                'maxScore' => $responseMax,
                 'percentage' => $percentage,
+                'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                 'is_timeout' => (bool) $response->is_timeout,
                 // Handed in by the server: the time ran out while the exam page was closed or offline.
                 'is_auto_submitted' => (bool) $response->is_auto_submitted,

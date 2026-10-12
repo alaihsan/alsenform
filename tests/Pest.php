@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\QuizForm;
+use App\Models\QuizSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /*
@@ -44,7 +48,20 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * An exam attempt started on the exam page (timer running), as the page opens and starts it.
+ * Exams are handed in from such an attempt, with its session token.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function startedAttempt(QuizForm $quizForm, ?User $user = null, array $attributes = []): QuizSession
 {
-    // ..
+    return QuizSession::query()->create(array_merge([
+        'quiz_form_id' => $quizForm->id,
+        'user_id' => $user?->id,
+        'respondent_identifier' => $user ? 'user_'.$user->id : 'anon_'.Str::random(16),
+        'session_token' => Str::random(40),
+        'started_at' => now(),
+        'is_locked' => false,
+    ], $attributes));
 }

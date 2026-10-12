@@ -783,14 +783,9 @@ const beginExam = (questions: Question[]) => {
     }
     hasExamBegun = true;
 
-    const qs = [...questions];
-    if (props.quizForm.settings.shuffleQuestions) {
-        for (let i = qs.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [qs[i], qs[j]] = [qs[j], qs[i]];
-        }
-    }
-    displayQuestions.value = qs;
+    // The server hands out this student's questions in their order (shuffled, drawn) with the
+    // choices in their order: the same on every reload and device.
+    displayQuestions.value = [...questions];
 
     // Restore draft answers saved on this device or on the server
     restoreDraft();

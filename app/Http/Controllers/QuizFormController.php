@@ -47,11 +47,7 @@ class QuizFormController extends Controller
                     'media' => [],
                 ],
             ],
-            'settings' => [
-                'collectEmail' => false,
-                'showProgress' => true,
-                'shuffleQuestions' => false,
-            ],
+            'settings' => QuizForm::defaultSettingsFor($request->user()),
         ]);
 
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);

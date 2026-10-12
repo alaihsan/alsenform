@@ -11,6 +11,7 @@ use App\Models\QuizSession;
 use App\Models\UnlockRequest;
 use App\Models\User;
 use App\Support\ActivityRecorder;
+use App\Support\ExamLayout;
 use App\Support\MediaUrl;
 use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
@@ -26,7 +27,7 @@ use Inertia\Response;
 
 class QuizResponseController extends Controller
 {
-    public function show(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl): Response|RedirectResponse
+    public function show(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl, ExamLayout $examLayout): Response|RedirectResponse
     {
         abort_unless($quizForm->published_at || auth()->user()?->is($quizForm->user), 404);
 
@@ -91,13 +92,17 @@ class QuizResponseController extends Controller
             }
         }
 
-        $sanitizedQuestions = $this->sanitizedQuestions($quizForm, $mediaUrl);
         $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
         $requiresStartConfirmation = $this->requiresStartConfirmation($quizForm);
 
         // Server-side QuizSession management. The session is opened here, but for an exam the
-        // timer only starts once the student confirms the rules (see start()).
+        // timer only starts once the student confirms the rules (see start()). After an attempt
+        // was handed in (more than one allowed), the next one is a new attempt with its own timer.
         $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
+
+        if ($quizSession?->submitted_at !== null) {
+            $quizSession = null;
+        }
 
         if (! $quizSession) {
             $quizSession = $this->openExamSession($quizForm, $user, $respondentIdentifier, $requiresStartConfirmation, $timeLimitMinutes);
@@ -111,6 +116,10 @@ class QuizResponseController extends Controller
         // Until the exam has started the questions stay on the server, so they cannot be read
         // (from the page source) before the timer runs.
         $hasStarted = $quizSession->started_at !== null;
+
+        // The questions of this student (all, or a draw) in their order, with their choices shuffled.
+        $layout = $examLayout->ensure($quizForm, $quizSession);
+        $sanitizedQuestions = $this->sanitizedQuestions($quizForm, $mediaUrl, $layout);
 
         if (! $user) {
             cookie()->queue('alsen_resp_id', $respondentIdentifier, 60 * 24 * 30);
@@ -162,7 +171,7 @@ class QuizResponseController extends Controller
      * the timer begins now and the questions are handed out from this moment on.
      * Repeating the request (a retry on weak Wi-Fi) keeps the original start time.
      */
-    public function start(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl): JsonResponse
+    public function start(Request $request, QuizForm $quizForm, MediaUrl $mediaUrl, ExamLayout $examLayout): JsonResponse
     {
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
@@ -190,6 +199,9 @@ class QuizResponseController extends Controller
         }
 
         if ($session->started_at === null) {
+            // The questions are fixed now, with the settings of the moment the student starts.
+            $examLayout->ensure($quizForm, $session);
+
             // Guests give their name, class and email before the timer starts; they cannot be
             // changed afterwards. (A retry of a started exam keeps what was given.)
             $identity = app(RespondentIdentity::class);
@@ -215,7 +227,7 @@ class QuizResponseController extends Controller
         }
 
         return response()->json([
-            'questions' => $this->sanitizedQuestions($quizForm, $mediaUrl),
+            'questions' => $this->sanitizedQuestions($quizForm, $mediaUrl, $examLayout->ensure($quizForm, $session)),
             'session' => [
                 'started_at' => $session->started_at?->toISOString(),
                 'expires_at' => $session->expires_at?->toISOString(),
@@ -227,7 +239,7 @@ class QuizResponseController extends Controller
         ]);
     }
 
-    public function store(StoreQuizResponseRequest $request, QuizForm $quizForm): RedirectResponse|JsonResponse
+    public function store(StoreQuizResponseRequest $request, QuizForm $quizForm, ExamLayout $examLayout): RedirectResponse|JsonResponse
     {
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
@@ -237,39 +249,41 @@ class QuizResponseController extends Controller
 
         $validated = $request->validated();
         $user = $request->user();
-        $respondentIdentifier = $validated['respondent_identifier'] ?? ($user ? 'user_'.$user->id : null);
         $isTimeout = $request->boolean('is_timeout');
+        $isExam = $this->requiresStartConfirmation($quizForm);
 
-        // Locate the exam session of this respondent
-        $session = $respondentIdentifier ? $this->findExamSession($quizForm, $user, $respondentIdentifier) : null;
+        $session = $this->attemptOfSubmission($request, $quizForm, $validated['session_token'] ?? null);
+        // The token proves the attempt is theirs, also when the login expired during a long exam.
+        $user ??= $session?->user_id !== null ? $session->user : null;
+        $respondentIdentifier = $session?->respondent_identifier
+            ?? ($user ? 'user_'.$user->id : $this->guestIdentifierOf($request, $validated['respondent_identifier'] ?? null));
 
-        // The server handed this attempt in when its time ran out, while the page was offline. What
-        // the page sends now is what the student had on the device then: its answers win, and the
-        // answers the server had saved stay where the device has none (another, empty device).
-        // A locked attempt keeps the answers it had when it was locked.
-        $autoSubmitted = $this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)
-            ? $this->autoSubmittedResponse($session)
-            : null;
-
-        if ($autoSubmitted !== null && $session->is_locked && $quizForm->locksOnBlur()) {
-            return $this->submissionSucceeded($request, $quizForm);
+        // An exam is handed in from an attempt that was started (with its timer) on the exam page,
+        // never by sending answers directly.
+        if ($isExam && ($session === null || $session->started_at === null)) {
+            abort(403, 'Ujian belum dimulai dari halaman ujian. Muat ulang halaman, lalu tekan "Kerjakan Sekarang".');
         }
 
-        if ($autoSubmitted !== null) {
-            $answers = array_replace(
-                is_array($autoSubmitted->answers) ? $autoSubmitted->answers : [],
-                array_filter($validated['answers'], fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== []),
-            );
+        if ($session !== null && $session->submitted_at !== null) {
+            $isSameAttempt = $this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null);
+            $autoSubmitted = $isSameAttempt ? $this->autoSubmittedResponse($session) : null;
 
-            $autoSubmitted->update([
-                'answers' => $answers,
-                'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
-                'is_auto_submitted' => false,
-                'ip_address' => $request->ip(),
-                'user_agent' => (string) $request->userAgent(),
-            ]);
+            if ($autoSubmitted !== null) {
+                $this->completeAutoSubmitted($request, $quizForm, $session, $autoSubmitted, $validated['answers'], $examLayout);
 
-            return $this->submissionSucceeded($request, $quizForm);
+                return $this->submissionSucceeded($request, $quizForm);
+            }
+
+            // On weak Wi-Fi the answers may have been saved while the response never reached the
+            // browser. A retry of that same attempt is a success, not a second response.
+            if ($isSameAttempt) {
+                return $this->submissionSucceeded($request, $quizForm);
+            }
+
+            // (One response per student is answered below with its own message.)
+            if ($isExam && empty($quizForm->settings['limitOneResponse'])) {
+                abort(403, 'Jawaban ujian ini sudah dikirim. Muat ulang halaman untuk melihat statusnya.');
+            }
         }
 
         // Check single response restriction
@@ -287,12 +301,6 @@ class QuizResponseController extends Controller
             }
 
             if ($hasSubmitted) {
-                // On weak Wi-Fi the answers may have been saved while the response never
-                // reached the browser. A retry of that same attempt is a success, not an error.
-                if ($this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)) {
-                    return $this->submissionSucceeded($request, $quizForm);
-                }
-
                 if ($request->wantsJson()) {
                     return response()->json([
                         'message' => 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.',
@@ -302,6 +310,8 @@ class QuizResponseController extends Controller
                 return back()->withErrors(['error' => 'Anda sudah pernah mengisi kuis ini.']);
             }
         }
+
+        $lateSeconds = null;
 
         if ($session) {
             if ($session->expires_at && now()->gt($session->expires_at->copy()->addSeconds(60))) {
@@ -313,15 +323,25 @@ class QuizResponseController extends Controller
             if ($session->isEffectivelyLocked($quizForm) && ! $this->timeIsUp($session)) {
                 abort(403, 'Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.');
             }
+
+            $lateSeconds = $this->secondsLate($session);
         }
 
         $wasLocked = $session?->isEffectivelyLocked($quizForm) ?? false;
+        $assignedIds = $session ? $examLayout->assignedIds($quizForm, $session->layout) : null;
 
-        // A locked attempt handed in at the end of the time counts the answers it had when it was
-        // locked: anything changed behind the lock screen is ignored.
-        $answers = $wasLocked && is_array($session->draft_answers)
-            ? $session->savedAnswersFor($quizForm)
-            : $validated['answers'];
+        // Which answers count:
+        // - a locked attempt counts the answers it had when it was locked (changes made behind the
+        //   lock screen are ignored);
+        // - answers arriving well after the time ran out from a page that was online until the end
+        //   (a stopped timer) count as saved when the time ran out; a page that was offline at the
+        //   end sends what it had, marked late for the teacher.
+        $countsSavedAnswers = $session !== null && is_array($session->draft_answers)
+            && ($wasLocked || ($lateSeconds !== null && $this->wasOnlineAtTheEnd($session)));
+
+        $answers = $countsSavedAnswers
+            ? $session->savedAnswersFor($quizForm, $assignedIds)
+            : $this->onlyAssigned($validated['answers'], $assignedIds);
 
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
@@ -334,14 +354,17 @@ class QuizResponseController extends Controller
 
         QuizResponse::query()->create([
             'quiz_form_id' => $quizForm->id,
+            'quiz_session_id' => $session?->id,
             'user_id' => $user?->id,
             'respondent_identifier' => $respondentIdentifier,
             'respondent_name' => $identity['respondent_name'],
             'respondent_class' => $identity['respondent_class'],
             'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
             'answers' => $answers,
+            'question_ids' => $assignedIds,
             'score' => $score,
             'is_timeout' => $isTimeout,
+            'late_seconds' => $countsSavedAnswers ? null : $lateSeconds,
             'ip_address' => $request->ip(),
             'user_agent' => (string) $request->userAgent(),
         ]);
@@ -349,7 +372,6 @@ class QuizResponseController extends Controller
         $session?->update([
             'submitted_at' => now(),
             'draft_answers' => null,
-            'draft_saved_at' => null,
             ...$identity,
         ]);
 
@@ -435,7 +457,7 @@ class QuizResponseController extends Controller
      *
      * @return list<array<string, mixed>>
      */
-    protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl): array
+    protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl, ?array $layout = null): array
     {
         return array_values(array_map(function ($question) {
             if (is_array($question)) {
@@ -443,7 +465,7 @@ class QuizResponseController extends Controller
             }
 
             return $question;
-        }, $mediaUrl->normalizeQuestions($quizForm->questions) ?? []));
+        }, $mediaUrl->normalizeQuestions(app(ExamLayout::class)->arrange($quizForm, $layout)) ?? []));
     }
 
     /**
@@ -474,6 +496,7 @@ class QuizResponseController extends Controller
                 fn ($query) => $query->where('user_id', $user->id),
                 fn ($query) => $query->whereNull('user_id')->where('respondent_identifier', $respondentIdentifier),
             )
+            ->latest('id')
             ->first();
     }
 
@@ -499,6 +522,124 @@ class QuizResponseController extends Controller
             && is_string($sessionToken)
             && $sessionToken !== ''
             && hash_equals((string) $session->session_token, $sessionToken);
+    }
+
+    /**
+     * Seconds after the time ran out (plus some room for a slow connection) that answers arrive,
+     * or null when they are on time.
+     */
+    public const LATE_AFTER_SECONDS = 120;
+
+    /**
+     * The attempt answers are handed in for: by its token (the exam page always sends it), else
+     * the signed-in account's latest attempt, else (an older page) the guest's by their cookie.
+     * A guest cannot name another respondent's attempt.
+     */
+    protected function attemptOfSubmission(Request $request, QuizForm $quizForm, ?string $token): ?QuizSession
+    {
+        if (is_string($token) && $token !== '') {
+            $session = QuizSession::query()
+                ->where('quiz_form_id', $quizForm->id)
+                ->where('session_token', $token)
+                ->first();
+
+            if ($session !== null) {
+                abort_if($session->user_id !== null && $request->user() !== null && $session->user_id !== $request->user()->id, 403);
+
+                return $session;
+            }
+        }
+
+        $user = $request->user();
+        $identifier = $user ? 'user_'.$user->id : $this->guestIdentifierOf($request, $request->input('respondent_identifier'));
+
+        return is_string($identifier) && $identifier !== '' ? $this->findExamSession($quizForm, $user, $identifier) : null;
+    }
+
+    /**
+     * A guest is the respondent of their (encrypted, unforgeable) cookie; the identifier a page
+     * sends only counts without that cookie (a survey opened with cookies blocked).
+     */
+    protected function guestIdentifierOf(Request $request, mixed $sentIdentifier): ?string
+    {
+        $cookie = $request->cookie('alsen_resp_id');
+
+        if (is_string($cookie) && str_starts_with($cookie, 'anon_')) {
+            return $cookie;
+        }
+
+        return is_string($sentIdentifier) && $sentIdentifier !== '' ? $sentIdentifier : null;
+    }
+
+    /**
+     * Seconds the answers arrive after the time ran out, or null when they are on time.
+     */
+    protected function secondsLate(QuizSession $session): ?int
+    {
+        if ($session->expires_at === null || now()->lte($session->expires_at->copy()->addSeconds(self::LATE_AFTER_SECONDS))) {
+            return null;
+        }
+
+        return (int) $session->expires_at->diffInSeconds(now(), true);
+    }
+
+    /**
+     * Whether the exam page was still in touch with the server when the time ran out. Such a page
+     * hands in by itself; answers it sends long afterwards were given after the time.
+     */
+    protected function wasOnlineAtTheEnd(QuizSession $session): bool
+    {
+        return $session->expires_at !== null
+            && $session->last_seen_at !== null
+            && $session->last_seen_at->gte($session->expires_at->copy()->subSeconds(45));
+    }
+
+    /**
+     * Only the answers to the questions the student was given.
+     *
+     * @param  array<int|string, mixed>  $answers
+     * @param  list<string>|null  $assignedIds
+     * @return array<int|string, mixed>
+     */
+    protected function onlyAssigned(array $answers, ?array $assignedIds): array
+    {
+        if ($assignedIds === null) {
+            return $answers;
+        }
+
+        return array_filter($answers, fn (int|string $questionId): bool => in_array((string) $questionId, $assignedIds, true), ARRAY_FILTER_USE_KEY);
+    }
+
+    /**
+     * The server handed this attempt in when its time ran out, while the page was away. A page that
+     * was offline at the end sends what the student had on the device then: those answers fill in
+     * the saved ones and are marked late. A page that stayed online until the end (it should have
+     * handed in itself), or a locked attempt, keeps what was saved.
+     *
+     * @param  array<int|string, mixed>  $deviceAnswers
+     */
+    protected function completeAutoSubmitted(Request $request, QuizForm $quizForm, QuizSession $session, QuizResponse $autoSubmitted, array $deviceAnswers, ExamLayout $examLayout): void
+    {
+        if (($session->is_locked && $quizForm->locksOnBlur()) || $this->wasOnlineAtTheEnd($session)) {
+            return;
+        }
+
+        $answers = array_replace(
+            is_array($autoSubmitted->answers) ? $autoSubmitted->answers : [],
+            array_filter(
+                $this->onlyAssigned($deviceAnswers, $examLayout->assignedIds($quizForm, $session->layout)),
+                fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== [],
+            ),
+        );
+
+        $autoSubmitted->update([
+            'answers' => $answers,
+            'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
+            'is_auto_submitted' => false,
+            'late_seconds' => $this->secondsLate($session),
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
     }
 
     /**
@@ -560,12 +701,19 @@ class QuizResponseController extends Controller
             return response()->json(['saved' => false, 'locked' => true]);
         }
 
+        // After the time ran out (and a minute for a slow connection) nothing more is saved.
+        if ($session->expires_at !== null && now()->gt($session->expires_at->copy()->addSeconds(60))) {
+            return response()->json(['saved' => false, 'expired' => true], 409);
+        }
+
+        $session->markSeen();
+
         if (! empty($quizForm->settings['disableRespondentAutosave'])) {
             return response()->json(['saved' => false]);
         }
 
         $session->update([
-            'draft_answers' => $validated['answers'],
+            'draft_answers' => $this->onlyAssigned($validated['answers'], app(ExamLayout::class)->assignedIds($quizForm, $session->layout)),
             'draft_saved_at' => now(),
         ]);
 
@@ -605,8 +753,13 @@ class QuizResponseController extends Controller
             // if the time runs out before the teacher unlocks. Not replaced by a repeated lock.
             $snapshot = $request->input('answers');
             if (! $wasLocked && is_array($snapshot) && SaveQuizDraftRequest::answersProblem($quizForm, $snapshot) === null) {
-                $session->update(['draft_answers' => $snapshot, 'draft_saved_at' => now()]);
+                $session->update([
+                    'draft_answers' => $this->onlyAssigned($snapshot, app(ExamLayout::class)->assignedIds($quizForm, $session->layout)),
+                    'draft_saved_at' => now(),
+                ]);
             }
+
+            $session->markSeen();
         }
 
         return $this->lockState($quizForm, $session);
@@ -625,6 +778,8 @@ class QuizResponseController extends Controller
         $session = $this->sessionOfRequest($request, $quizForm);
 
         abort_if($session === null, 404);
+
+        $session->markSeen();
 
         return $this->lockState($quizForm, $session);
     }

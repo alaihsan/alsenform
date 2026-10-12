@@ -61,6 +61,27 @@ class QuizScoring
     }
 
     /**
+     * The questions a response was given: all of them, or the selection drawn for that student
+     * (see ExamLayout), whose points alone make up the student's maximum.
+     *
+     * @param  array<int, mixed>  $questions
+     * @param  list<int|string>|null  $questionIds
+     * @return list<array<string, mixed>>
+     */
+    public function questionsGiven(array $questions, ?array $questionIds): array
+    {
+        $questions = array_values(array_filter($questions, 'is_array'));
+
+        if ($questionIds === null) {
+            return $questions;
+        }
+
+        $ids = array_map('strval', $questionIds);
+
+        return array_values(array_filter($questions, fn (array $question): bool => in_array((string) ($question['id'] ?? ''), $ids, true)));
+    }
+
+    /**
      * The grade on a 0–100 scale: points earned ÷ points that can be earned × 100, two decimals.
      */
     public function grade(int|float $points, int $maxPoints): float

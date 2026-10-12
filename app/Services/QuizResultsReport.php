@@ -64,7 +64,9 @@ class QuizResultsReport
             [XlsxWriter::cell(implode('   •   ', [
                 'Diekspor '.$this->now()->format('d/m/Y H:i').' '.$this->now()->format('T'),
                 $students->count().' peserta',
-                'Skor maksimal '.$maxScore,
+                $students->contains(fn (array $student): bool => $student['questionIds'] !== null)
+                    ? 'Soal diacak per siswa, skor maksimal mengikuti soal yang didapat'
+                    : 'Skor maksimal '.$maxScore,
                 'Rata-rata nilai '.$this->decimal($average),
                 'KKM '.$this->decimal($kkm),
                 "Tuntas {$passed} dari {$students->count()}",
@@ -84,11 +86,12 @@ class QuizResultsReport
                 XlsxWriter::cell($student['kelas'], 'textCenter'),
                 XlsxWriter::cell($student['email'], 'text'),
                 XlsxWriter::cell($student['score'], 'integer'),
-                XlsxWriter::cell($maxScore, 'integer'),
+                XlsxWriter::cell($student['maxScore'], 'integer'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
                 XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
                 XlsxWriter::cell(match (true) {
                     $student['isAutoSubmitted'] => 'Waktu habis (dikirim otomatis)',
+                    $student['lateMinutes'] !== null => "Waktu habis (terlambat {$student['lateMinutes']} menit)",
                     $student['isTimeout'] => 'Waktu habis',
                     default => 'Selesai',
                 }, 'textCenter'),
@@ -131,6 +134,7 @@ class QuizResultsReport
         ];
 
         $correctCounts = array_fill(0, count($questions), 0);
+        $givenCounts = array_fill(0, count($questions), 0);
         foreach ($students->values() as $index => $student) {
             $row = [
                 XlsxWriter::cell($index + 1, 'integer'),
@@ -141,6 +145,13 @@ class QuizResultsReport
             ];
 
             foreach ($questions as $questionIndex => $question) {
+                if ($student['questionIds'] !== null && ! in_array((string) $question['id'], $student['questionIds'], true)) {
+                    $row[] = XlsxWriter::cell('— (soal tidak didapat)', 'ungraded');
+
+                    continue;
+                }
+
+                $givenCounts[$questionIndex]++;
                 $answer = $student['answers'][$question['id']] ?? null;
                 $text = $this->answerText($question, $answer);
                 $isCorrect = $this->scoring->isCorrect($question, $answer);
@@ -169,8 +180,8 @@ class QuizResultsReport
                 $summary[] = XlsxWriter::cell(null, 'summaryLabel');
             }
             foreach ($questions as $questionIndex => $question) {
-                $summary[] = $this->scoring->isAutoScored($question)
-                    ? XlsxWriter::cell($correctCounts[$questionIndex] / $students->count(), 'summaryPercent')
+                $summary[] = $this->scoring->isAutoScored($question) && $givenCounts[$questionIndex] > 0
+                    ? XlsxWriter::cell($correctCounts[$questionIndex] / $givenCounts[$questionIndex], 'summaryPercent')
                     : XlsxWriter::cell('-', 'summaryPercent');
             }
             $rows[] = $summary;
@@ -203,10 +214,14 @@ class QuizResultsReport
 
         return $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'answers', 'created_at'])
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at'])
             ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone): array {
                 // Scored against the current answer keys, so a corrected key re-grades earlier answers.
                 $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
+                // With questions drawn per student, the maximum is that of the questions they got.
+                $studentMax = $response->question_ids !== null
+                    ? $this->scoring->maxPoints($this->scoring->questionsGiven($questions, $response->question_ids))
+                    : $maxScore;
 
                 return [
                     'nis' => $response->user?->nis ?: '-',
@@ -215,9 +230,12 @@ class QuizResultsReport
                     'kelas' => $response->user?->kelas ?: ($response->respondent_class ?: '-'),
                     'email' => $response->email ?: ($response->user?->email ?: '-'),
                     'score' => $score,
-                    'grade' => $this->scoring->grade($score, $maxScore),
+                    'maxScore' => $studentMax,
+                    'grade' => $this->scoring->grade($score, $studentMax),
+                    'questionIds' => $response->question_ids !== null ? array_map('strval', $response->question_ids) : null,
                     'isTimeout' => (bool) $response->is_timeout,
                     'isAutoSubmitted' => (bool) $response->is_auto_submitted,
+                    'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
                     'answers' => is_array($response->answers) ? $response->answers : [],
                 ];

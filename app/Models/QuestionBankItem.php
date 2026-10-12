@@ -21,8 +21,13 @@ class QuestionBankItem extends Model
         'source_question_id',
         'fingerprint',
         'type',
+        'subject',
+        'grade',
+        'topic',
+        'difficulty',
         'search_text',
         'question',
+        'archived_at',
     ];
 
     /**
@@ -32,6 +37,7 @@ class QuestionBankItem extends Model
     {
         return [
             'question' => 'array',
+            'archived_at' => 'datetime',
         ];
     }
 

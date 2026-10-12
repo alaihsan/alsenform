@@ -64,8 +64,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
+        Route::get('bank-soal', [QuestionBankController::class, 'page'])->name('question-bank.page');
         Route::get('question-bank', [QuestionBankController::class, 'index'])->name('question-bank.index');
         Route::post('question-bank/questions', [QuestionBankController::class, 'questions'])->name('question-bank.questions');
+        Route::patch('question-bank/labels', [QuestionBankController::class, 'labels'])->name('question-bank.labels');
+        Route::patch('question-bank/archive', [QuestionBankController::class, 'archive'])->name('question-bank.archive');
+        Route::post('question-bank/exam', [QuestionBankController::class, 'createExam'])->name('question-bank.exam');
+        Route::patch('forms/{quizForm}/questions/{questionId}/labels', [QuestionBankController::class, 'questionLabels'])->name('forms.questions.labels');
 
         // Laporan: logins and exam participation with device, browser and time
         Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');

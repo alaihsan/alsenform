@@ -18,7 +18,7 @@ function scoreFor(array $questions, array $answers): int
     ]);
 
     test()->postJson(route('forms.responses.store', $quizForm->slug), [
-        'respondent_identifier' => 'resp_'.uniqid(),
+        'session_token' => startedAttempt($quizForm)->session_token,
         'answers' => $answers,
     ])->assertOk();
 

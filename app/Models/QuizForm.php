@@ -115,6 +115,33 @@ class QuizForm extends Model
     }
 
     /**
+     * The settings of a new exam: the defaults the teacher saved in their profile (shuffling,
+     * the tab-switch lock, the duration) on top of the general ones.
+     *
+     * @return array<string, mixed>
+     */
+    public static function defaultSettingsFor(User $teacher): array
+    {
+        $preferences = is_array($teacher->quiz_preferences) ? $teacher->quiz_preferences : [];
+        $settings = [
+            'collectEmail' => false,
+            'showProgress' => true,
+            'shuffleQuestions' => (bool) ($preferences['default_shuffle_questions'] ?? false),
+            'shuffleOptions' => (bool) ($preferences['default_shuffle_options'] ?? false),
+        ];
+
+        if (array_key_exists('default_anti_cheat_blur', $preferences)) {
+            $settings['lockOnBlur'] = (bool) $preferences['default_anti_cheat_blur'];
+        }
+
+        if (is_numeric($preferences['default_duration'] ?? null) && (int) $preferences['default_duration'] > 0) {
+            $settings['timeLimit'] = (int) $preferences['default_duration'];
+        }
+
+        return $settings;
+    }
+
+    /**
      * Determine if an attempt is locked when the student leaves the exam tab or window.
      */
     public function locksOnBlur(): bool

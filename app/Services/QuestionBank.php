@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\QuestionBankItem;
 use App\Models\QuizForm;
 use App\Models\User;
+use App\Support\ExamLayout;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,14 @@ class QuestionBank
     public const PLACEHOLDER_TITLES = ['untitled question', 'paragraph question', 'short answer question'];
 
     public const PER_PAGE = 20;
+
+    /**
+     * Labels a teacher gives questions to find and draw them by: subject, class, chapter or
+     * learning goal (Tujuan Pembelajaran), and difficulty (see ExamLayout::DIFFICULTIES).
+     */
+    public const LABELS = ['subject', 'grade', 'topic', 'difficulty'];
+
+    protected const LABEL_LENGTHS = ['subject' => 100, 'grade' => 50, 'topic' => 150, 'difficulty' => 10];
 
     /**
      * Keep the questions of an exam in its owner's bank: new questions are added, edited ones
@@ -51,7 +60,7 @@ class QuestionBank
                 continue;
             }
 
-            $rows[] = [
+            $rows[$fingerprint.'|'.$sourceId] = [
                 'user_id' => $quizForm->user_id,
                 'quiz_form_id' => $quizForm->id,
                 'source_question_id' => $sourceId,
@@ -64,13 +73,183 @@ class QuestionBank
             ];
         }
 
-        if ($rows !== []) {
-            QuestionBankItem::query()->upsert(
-                $rows,
-                ['quiz_form_id', 'source_question_id'],
-                ['user_id', 'fingerprint', 'type', 'search_text', 'question', 'updated_at'],
-            );
+        if ($rows === []) {
+            return;
         }
+
+        // A question that is already in the bank (copied, or reused from the bank) brings its labels
+        // along. Questions already kept from this exam keep the labels they have.
+        $inherited = $this->labelsByFingerprint($quizForm->user_id, array_column($rows, 'fingerprint'));
+        $rows = array_values(array_map(
+            fn (array $row): array => $row + ($inherited[$row['fingerprint']] ?? array_fill_keys(self::LABELS, null)),
+            $rows,
+        ));
+
+        QuestionBankItem::query()->upsert(
+            $rows,
+            ['quiz_form_id', 'source_question_id'],
+            ['user_id', 'fingerprint', 'type', 'search_text', 'question', 'updated_at'],
+        );
+    }
+
+    /**
+     * Give the chosen questions labels. Only the labels given change (an empty one is cleared),
+     * on every copy of the same question in the teacher's bank.
+     *
+     * @param  list<int>  $ids
+     * @param  array<string, mixed>  $labels
+     * @return int The number of bank items changed.
+     */
+    public function setLabels(User $user, array $ids, array $labels): int
+    {
+        $values = $this->cleanLabels($labels);
+
+        if ($values === []) {
+            return 0;
+        }
+
+        return QuestionBankItem::query()
+            ->where('user_id', $user->id)
+            ->whereIn('fingerprint', $this->fingerprintsOfItems($user, $ids))
+            ->update($values);
+    }
+
+    /**
+     * Move the chosen questions to the archive (hidden from the bank and the import), or back.
+     *
+     * @param  list<int>  $ids
+     */
+    public function setArchived(User $user, array $ids, bool $archived): int
+    {
+        return QuestionBankItem::query()
+            ->where('user_id', $user->id)
+            ->whereIn('fingerprint', $this->fingerprintsOfItems($user, $ids))
+            ->update(['archived_at' => $archived ? Carbon::now() : null]);
+    }
+
+    /**
+     * The labels of the questions of an exam, by question id.
+     *
+     * @return array<string, array<string, string|null>>
+     */
+    public function labelsForExam(QuizForm $quizForm): array
+    {
+        return QuestionBankItem::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->get(['source_question_id', ...self::LABELS])
+            ->mapWithKeys(fn (QuestionBankItem $item): array => [$item->source_question_id => $item->only(self::LABELS)])
+            ->all();
+    }
+
+    /**
+     * Label one question of an exam (from the editor). Null when the question is not in the
+     * bank: an empty, new question, or one not saved yet.
+     *
+     * @param  array<string, mixed>  $labels
+     * @return array<string, string|null>|null
+     */
+    public function setLabelsOfQuestion(QuizForm $quizForm, string $questionId, array $labels): ?array
+    {
+        $find = fn (): ?QuestionBankItem => QuestionBankItem::query()
+            ->where('quiz_form_id', $quizForm->id)
+            ->where('source_question_id', $questionId)
+            ->first();
+
+        $item = $find();
+        if ($item === null) {
+            $this->sync($quizForm);
+            $item = $find();
+        }
+
+        if ($item === null) {
+            return null;
+        }
+
+        $this->setLabels($item->user, [$item->id], $labels);
+
+        return $item->refresh()->only(self::LABELS);
+    }
+
+    /**
+     * The subjects, classes and chapters a teacher used, to suggest while labelling.
+     *
+     * @return array{subjects: list<string>, grades: list<string>, topics: list<string>}
+     */
+    public function labelSuggestions(User $user): array
+    {
+        $values = fn (string $column): array => QuestionBankItem::query()
+            ->where('user_id', $user->id)
+            ->whereNotNull($column)
+            ->distinct()
+            ->orderBy($column)
+            ->limit(200)
+            ->pluck($column)
+            ->all();
+
+        return ['subjects' => $values('subject'), 'grades' => $values('grade'), 'topics' => $values('topic')];
+    }
+
+    /**
+     * Labels as given by the teacher, trimmed and checked. Only the keys that were given.
+     *
+     * @param  array<string, mixed>  $labels
+     * @return array<string, string|null>
+     */
+    protected function cleanLabels(array $labels): array
+    {
+        $values = [];
+
+        foreach (self::LABELS as $label) {
+            if (! array_key_exists($label, $labels)) {
+                continue;
+            }
+
+            $value = is_scalar($labels[$label]) ? trim((string) $labels[$label]) : '';
+
+            if ($label === 'difficulty') {
+                $value = mb_strtolower($value);
+                $values[$label] = in_array($value, ExamLayout::DIFFICULTIES, true) ? $value : null;
+
+                continue;
+            }
+
+            $values[$label] = $value === '' ? null : Str::limit($value, self::LABEL_LENGTHS[$label], '');
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return list<string>
+     */
+    protected function fingerprintsOfItems(User $user, array $ids): array
+    {
+        return QuestionBankItem::query()
+            ->where('user_id', $user->id)
+            ->whereIn('id', $ids)
+            ->distinct()
+            ->pluck('fingerprint')
+            ->all();
+    }
+
+    /**
+     * The labels a question already has elsewhere in the teacher's bank, by fingerprint.
+     *
+     * @param  list<string>  $fingerprints
+     * @return array<string, array<string, string|null>>
+     */
+    protected function labelsByFingerprint(int $userId, array $fingerprints): array
+    {
+        return QuestionBankItem::query()
+            ->where('user_id', $userId)
+            ->whereIn('fingerprint', array_values(array_unique($fingerprints)))
+            ->where(fn (Builder $query) => $query->whereNotNull('subject')->orWhereNotNull('grade')->orWhereNotNull('topic')->orWhereNotNull('difficulty'))
+            ->orderByDesc('updated_at')
+            ->get(['fingerprint', ...self::LABELS])
+            ->unique('fingerprint')
+            ->mapWithKeys(fn (QuestionBankItem $item): array => [$item->fingerprint => $item->only(self::LABELS)])
+            ->all();
     }
 
     /**
@@ -89,12 +268,13 @@ class QuestionBank
      * One page of the bank of a teacher. The same question kept from several exams (a copied exam,
      * a question reused from the bank) is listed once.
      *
-     * @param  array{search?: string|null, type?: string|null, form?: int|string|null, page?: int|string|null}  $filters
+     * @param  array<string, mixed>  $filters  search, type, form, subject, grade, topic, difficulty ("none": without), archived, page
      * @return LengthAwarePaginator<int, QuestionBankItem>
      */
     public function search(User $user, array $filters): LengthAwarePaginator
     {
         $formId = isset($filters['form']) && $filters['form'] !== '' ? (int) $filters['form'] : null;
+        $archived = filter_var($filters['archived'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         $latestOfEachQuestion = QuestionBankItem::query()
             ->selectRaw('MAX(id)')
@@ -105,14 +285,24 @@ class QuestionBank
         $query = QuestionBankItem::query()
             ->where('user_id', $user->id)
             ->whereIn('id', $latestOfEachQuestion)
+            ->when($archived, fn (Builder $query) => $query->whereNotNull('archived_at'), fn (Builder $query) => $query->whereNull('archived_at'))
             ->when(filled($filters['type'] ?? null), fn (Builder $query) => $query->where('type', $filters['type']));
+
+        foreach (['subject', 'grade', 'topic', 'difficulty'] as $label) {
+            $value = $filters[$label] ?? null;
+            if ($value === 'none') {
+                $query->whereNull($label);
+            } elseif (filled($value)) {
+                $query->where($label, $value);
+            }
+        }
 
         foreach ($this->searchWords((string) ($filters['search'] ?? '')) as $word) {
             $query->where('search_text', 'like', '%'.$word.'%');
         }
 
         return $query
-            ->with('quizForm:id,title,deleted_at')
+            ->with('quizForm:id,title,slug,deleted_at')
             ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->paginate(self::PER_PAGE, ['*'], 'page', max(1, (int) ($filters['page'] ?? 1)));
@@ -194,7 +384,7 @@ class QuestionBank
      * @param  list<string>  $fingerprintsInExam
      * @return array<string, mixed>
      */
-    public function present(QuestionBankItem $item, array $fingerprintsInExam = []): array
+    public function present(QuestionBankItem $item, array $fingerprintsInExam = [], bool $withQuestion = false): array
     {
         $question = $item->question ?? [];
         $options = array_values(array_filter(array_map(
@@ -219,6 +409,11 @@ class QuestionBank
             ] : null,
             'updatedAt' => $item->updated_at?->toISOString(),
             'inThisExam' => in_array($item->fingerprint, $fingerprintsInExam, true),
+            'labels' => $item->only(self::LABELS),
+            'archived' => $item->archived_at !== null,
+            'sourceUrl' => $item->quizForm !== null && ! $item->quizForm->trashed() ? route('forms.edit', ['quizForm' => $item->quizForm->slug]) : null,
+            // The whole question (answer key included) for the bank page preview; the teacher only.
+            'question' => $withQuestion ? $question : null,
         ];
     }
 

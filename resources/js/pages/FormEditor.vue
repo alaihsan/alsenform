@@ -5,6 +5,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
+import QuestionDrawSettings, { type QuestionDraw } from '@/components/form-editor/QuestionDrawSettings.vue';
+import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
@@ -116,6 +118,14 @@ const form = reactive({
         collectEmail: props.quizForm?.settings?.collectEmail ?? false,
         showProgress: props.quizForm?.settings?.showProgress ?? true,
         shuffleQuestions: props.quizForm?.settings?.shuffleQuestions ?? false,
+        shuffleOptions: props.quizForm?.settings?.shuffleOptions ?? false,
+        questionDraw: {
+            enabled: false,
+            mode: 'count',
+            count: 0,
+            ...(props.quizForm?.settings?.questionDraw ?? {}),
+            perDifficulty: { mudah: 0, sedang: 0, sulit: 0, ...(props.quizForm?.settings?.questionDraw?.perDifficulty ?? {}) },
+        } as QuestionDraw,
         isQuiz: props.quizForm?.settings?.isQuiz ?? true,
         emailCollectionMode: props.quizForm?.settings?.emailCollectionMode ?? (props.quizForm?.settings?.collectEmail ? 'responder' : 'none'),
         sendResponseCopy: props.quizForm?.settings?.sendResponseCopy ?? 'off',
@@ -475,8 +485,8 @@ const exportResponsesUrl = computed(
 const gradebook = computed(() => props.quizForm?.responses?.gradebook ?? []);
 
 const autoSubmittedHint = 'Waktu habis saat halaman ujian tertutup atau offline. Jawaban yang sudah tersimpan dikirim otomatis oleh sistem.';
-const responseStatusLabel = (item: { is_timeout: boolean; is_auto_submitted?: boolean }) =>
-    item.is_auto_submitted ? 'Otomatis' : item.is_timeout ? 'Timeout' : 'Selesai';
+const responseStatusLabel = (item: { is_timeout: boolean; is_auto_submitted?: boolean; lateMinutes?: number | null }) =>
+    item.is_auto_submitted ? 'Otomatis' : item.lateMinutes ? `Terlambat ${item.lateMinutes} mnt` : item.is_timeout ? 'Timeout' : 'Selesai';
 
 const filteredGradebook = computed(() => {
     if (!gradebookSearch.value.trim()) {
@@ -1211,6 +1221,39 @@ const handleDrop = (question: Question, event: DragEvent) => {
     }
     draggedQuestionId.value = null;
     draggableQuestionId.value = null;
+};
+
+/*
+ * Labels of the questions (kept in the question bank): subject, class, chapter and difficulty.
+ */
+const questionLabels = ref<Record<string, QuestionLabels>>({ ...((props.quizForm?.questionLabels as Record<string, QuestionLabels> | undefined) ?? {}) });
+const labelSuggestions = ref<LabelSuggestions>(props.quizForm?.labelSuggestions ?? { subjects: [], grades: [], topics: [] });
+const savingLabelsOf = ref<string | null>(null);
+const questionDifficulties = computed<Record<string, string | null | undefined>>(() =>
+    Object.fromEntries(Object.entries(questionLabels.value).map(([id, labels]) => [id, labels?.difficulty])),
+);
+const labelErrors = ref<Record<string, string>>({});
+
+const saveQuestionLabels = async (question: Question, labels: QuestionLabels) => {
+    if (!props.quizForm?.labelsUrl) {
+        return;
+    }
+    const key = String(question.id);
+    savingLabelsOf.value = key;
+    labelErrors.value = { ...labelErrors.value, [key]: '' };
+    try {
+        // The question must be in the bank (saved) first: flush a pending autosave.
+        if (hasUnsavedChanges.value) {
+            await new Promise<void>((resolve) => saveDraft(false, resolve));
+        }
+        const response = await axios.patch(props.quizForm.labelsUrl.replace('__question__', encodeURIComponent(key)), labels);
+        questionLabels.value = { ...questionLabels.value, [key]: response.data.labels };
+        statusMessage.value = 'Label soal disimpan';
+    } catch (error: any) {
+        labelErrors.value = { ...labelErrors.value, [key]: error.response?.data?.message || 'Label gagal disimpan. Coba lagi.' };
+    } finally {
+        savingLabelsOf.value = null;
+    }
 };
 
 /** Questions chosen in the "Bank Soal" tab: copies of earlier questions, added at the end. */
@@ -2926,6 +2969,14 @@ watch(
 
                                     <div class="border-t border-slate-200 pt-4 lg:col-span-2">
                                         <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 text-slate-600 sm:gap-5">
+                                            <QuestionLabelsEditor
+                                                :labels="questionLabels[String(question.id)]"
+                                                :suggestions="labelSuggestions"
+                                                :question-id="question.id"
+                                                :is-saving="savingLabelsOf === String(question.id)"
+                                                :error="labelErrors[String(question.id)] ?? ''"
+                                                @save="saveQuestionLabels(question, $event)"
+                                            />
                                             <button
                                                 type="button"
                                                 aria-label="Duplicate question"
@@ -3132,7 +3183,7 @@ watch(
                                         >
                                             {{ item.percentage }}
                                         </span>
-                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ maxScore }} poin</p>
+                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ item.maxScore ?? maxScore }} poin</p>
                                         <p
                                             :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']"
                                             :title="item.is_auto_submitted ? autoSubmittedHint : undefined"
@@ -3183,7 +3234,7 @@ watch(
                                             <td class="px-4 py-3">
                                                 <span class="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{{ item.kelas }}</span>
                                             </td>
-                                            <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ item.score }} / {{ maxScore }}</td>
+                                            <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ item.score }} / {{ item.maxScore ?? maxScore }}</td>
                                             <td class="px-4 py-3 text-center">
                                                 <span
                                                     :class="[
@@ -3628,6 +3679,34 @@ watch(
                                         </button>
                                     </div>
 
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <div>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Acak urutan pilihan jawaban</span>
+                                            <span class="mt-1 block text-sm text-slate-500">
+                                                Tiap siswa melihat pilihan A–E dalam urutan berbeda, tetap sama walau halaman dimuat ulang. Pilihan
+                                                seperti "Semua jawaban benar" atau "A dan C benar" membuat soal itu tidak diacak.
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            :aria-checked="Boolean(form.settings.shuffleOptions)"
+                                            aria-label="Acak urutan pilihan jawaban"
+                                            :class="[
+                                                'relative h-5 w-11 shrink-0 rounded-full transition',
+                                                form.settings.shuffleOptions ? 'bg-indigo-500' : 'bg-slate-300',
+                                            ]"
+                                            @click="toggleSetting('shuffleOptions')"
+                                        >
+                                            <span
+                                                :class="[
+                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                                    form.settings.shuffleOptions ? 'left-5' : '-left-1',
+                                                ]"
+                                            ></span>
+                                        </button>
+                                    </div>
+
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
                                         <div>
                                             <span class="block text-base font-normal text-slate-950 sm:text-xl">Pembagian Tampilan Soal</span>
@@ -3651,6 +3730,16 @@ watch(
                                             <option value="10">10 Soal per Halaman</option>
                                         </select>
                                     </div>
+
+                                    <QuestionDrawSettings
+                                        :draw="form.settings.questionDraw"
+                                        :question-ids="form.questions.map((question: Question) => question.id)"
+                                        :difficulties="questionDifficulties"
+                                        @update:draw="
+                                            form.settings.questionDraw = $event;
+                                            markSettingsChanged();
+                                        "
+                                    />
 
                                     <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">After submission</p>
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:pl-11">
