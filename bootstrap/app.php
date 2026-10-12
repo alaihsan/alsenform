@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\GzipResponseMiddleware;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequestClientHints;
 use App\Http\Middleware\StaticAssetCacheMiddleware;
 use App\Http\Middleware\TrustLocalProxies;
 use App\Support\ErrorPage;
@@ -31,6 +32,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             EnsurePasswordIsChanged::class,
+            RequestClientHints::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

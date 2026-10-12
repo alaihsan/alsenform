@@ -113,9 +113,11 @@ Fitur editor lainnya:
 Menu **Laporan** mencatat setiap login, logout, mulai ujian, dan kirim jawaban:
 
 - Jam kejadian dalam zona waktu sekolah (WIB secara bawaan).
-- Jenis perangkat (HP, tablet, komputer) dan model HP bila browser menyebutkannya, misalnya Samsung SM-A536E atau Xiaomi Redmi Note 11.
-- Sistem operasi dan nama browser lengkap dengan versinya, misalnya Android 13 dengan Samsung Internet 26, atau Windows 10/11 dengan Microsoft Edge 129.
-- Alamat IP di jaringan sekolah.
+- Jenis perangkat (HP, tablet, komputer) dan merek serta model HP, misalnya Samsung SM-A536E, OPPO CPH2591, atau Xiaomi Redmi Note 11.
+- Sistem operasi dan nama browser lengkap dengan versinya, misalnya Android 14 dengan Chrome 129.0.6668.100, atau Windows 11 dengan Microsoft Edge 129.0.2792.79.
+- Alamat IP perangkat di jaringan sekolah (juga saat server mendengarkan di IPv6).
+
+Chrome dan Edge menyembunyikan merek HP, versi Android/Windows, dan versi lengkap browser dari User-Agent. Aplikasi memintanya lewat User-Agent Client Hints, tetapi browser hanya mengirimnya lewat **HTTPS**. Di server LAN biasa (HTTP), data yang disembunyikan dicatat sebagai tidak diketahui, misalnya "HP Android (merek tidak dikirim browser)", tidak pernah ditebak. Browser lain seperti Samsung Internet, Mi Browser, Opera, dan browser di dalam aplikasi (WhatsApp) tetap menyebutkan modelnya. iPad yang membuka versi desktop, tablet Android dalam mode desktop, dan Brave tetap dikenali di HTTP maupun HTTPS.
 
 Data bisa disaring per tanggal, jenis aktivitas, ujian, peran, atau dicari berdasarkan nama, NIS, NIP, dan IP. Selama periode yang dipilih mencakup hari ini, halaman ini diperbarui otomatis tiap 30 detik, jadi bisa dipakai memantau murid yang sudah masuk saat ujian dimulai. Admin melihat semua aktivitas. Guru melihat login murid dan aktivitas di ujian miliknya.
 

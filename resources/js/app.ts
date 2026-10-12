@@ -7,6 +7,7 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ConnectionLostNotice from './components/ConnectionLostNotice.vue';
 import { initializeTheme } from './composables/useAppearance';
+import { setupDeviceHints } from './lib/deviceHints';
 
 // Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
@@ -39,3 +40,6 @@ createInertiaApp({
 
 // This will set light / dark mode on page load...
 initializeTheme();
+
+// The device each request comes from, for the activity report (see lib/deviceHints.ts).
+setupDeviceHints();

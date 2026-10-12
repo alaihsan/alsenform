@@ -26,6 +26,31 @@ afterEach(function () {
     Carbon::setTestNow();
 });
 
+test('a login over HTTPS is recorded with the model, versions and address the browser tells', function () {
+    $chrome = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36';
+
+    $this->withServerVariables(['REMOTE_ADDR' => '::ffff:192.168.1.23'])
+        ->post(route('login'), ['identifier' => '2024101', 'password' => 'password'], [
+            'User-Agent' => $chrome,
+            'Sec-CH-UA-Model' => '"CPH2591"',
+            'Sec-CH-UA-Platform' => '"Android"',
+            'Sec-CH-UA-Platform-Version' => '"14.0.0"',
+            'Sec-CH-UA-Full-Version-List' => '"Chromium";v="129.0.6668.100", "Google Chrome";v="129.0.6668.100", "Not=A?Brand";v="8.0.0.0"',
+        ])
+        ->assertRedirect(route('dashboard', absolute: false));
+
+    expect(ActivityLog::sole())
+        ->device->toBe('OPPO CPH2591')
+        ->device_type->toBe('mobile')
+        ->os->toBe('Android 14')
+        ->browser->toBe('Chrome 129.0.6668.100')
+        ->ip_address->toBe('192.168.1.23');
+});
+
+test('pages ask browsers for the client hints that name the device', function () {
+    $this->get(route('login'))->assertHeader('Accept-CH', 'Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List');
+});
+
 test('a login is recorded with the device, browser, address and time', function () {
     Carbon::setTestNow('2026-10-11 00:30:00');
 

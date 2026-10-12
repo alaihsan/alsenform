@@ -140,9 +140,11 @@ class SubmitExpiredAttempts
                 'draft_answers' => null,
             ]);
 
+            $startedOn = $this->startActivityOf($attempt);
+
             $this->activityRecorder->record(
                 ActivityLog::EXAM_SUBMITTED,
-                $this->deviceOf($attempt),
+                new Request,
                 $isAccount ? $session->user : null,
                 $quizForm,
                 respondentIdentifier: $attempt->respondent_identifier,
@@ -151,6 +153,7 @@ class SubmitExpiredAttempts
                 respondentClass: $attempt->respondent_class,
                 meta: array_filter(['timeout' => true, 'auto' => true, 'locked' => $wasLocked]),
                 occurredAt: $attempt->expires_at,
+                sameDeviceAs: $startedOn,
             );
 
             return true;
@@ -158,12 +161,12 @@ class SubmitExpiredAttempts
     }
 
     /**
-     * The device the exam was taken on (from its "Mulai ujian" activity), so the Laporan lists the
-     * handed in exam on that device rather than on an unknown one.
+     * The "Mulai ujian" activity of the attempt: the Laporan lists the exam handed in by the server
+     * on the device it was taken on, exactly as recorded then, rather than on an unknown one.
      */
-    protected function deviceOf(QuizSession $attempt): Request
+    protected function startActivityOf(QuizSession $attempt): ?ActivityLog
     {
-        $started = rescue(fn (): ?ActivityLog => ActivityLog::query()
+        return rescue(fn (): ?ActivityLog => ActivityLog::query()
             ->where('event', ActivityLog::EXAM_STARTED)
             ->where('quiz_form_id', $attempt->quiz_form_id)
             ->when(
@@ -172,12 +175,7 @@ class SubmitExpiredAttempts
                 fn (Builder $query) => $query->whereNull('user_id')->where('respondent_identifier', $attempt->respondent_identifier),
             )
             ->latest('id')
-            ->first(['ip_address', 'user_agent']), report: false);
-
-        return new Request(server: array_filter([
-            'REMOTE_ADDR' => $started?->ip_address,
-            'HTTP_USER_AGENT' => $started?->user_agent,
-        ]));
+            ->first(['ip_address', 'user_agent', 'device_type', 'device', 'os', 'browser']), report: false);
     }
 
     /**

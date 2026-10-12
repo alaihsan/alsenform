@@ -31,6 +31,7 @@ import {
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
+import { deviceHintsHeader } from '@/lib/deviceHints';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
 
@@ -1702,6 +1703,7 @@ const sendWithKeepalive = (url: string, body: Record<string, unknown>) => {
                 Accept: 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
                 'X-XSRF-TOKEN': xsrfToken(),
+                'X-Device-Hints': deviceHintsHeader(),
             },
             body: json,
         }).catch(() => {});
