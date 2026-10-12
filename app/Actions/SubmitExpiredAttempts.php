@@ -1,0 +1,212 @@
+<?php
+
+namespace App\Actions;
+
+use App\Models\ActivityLog;
+use App\Models\QuizForm;
+use App\Models\QuizResponse;
+use App\Models\QuizSession;
+use App\Support\ActivityRecorder;
+use App\Support\QuizScoring;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Throwable;
+
+/**
+ * Hands in the exams whose time ran out while the page was closed, offline or out of battery:
+ * the answers saved on the server so far are graded like an answer sheet handed in at the bell.
+ * An open exam page hands in by itself when the time runs out; the server waits a moment for it.
+ */
+class SubmitExpiredAttempts
+{
+    /**
+     * Seconds the exam page gets to hand in by itself after the time ran out.
+     */
+    public const GRACE_SECONDS = 60;
+
+    public function __construct(
+        protected QuizScoring $scoring = new QuizScoring,
+        protected ActivityRecorder $activityRecorder = new ActivityRecorder,
+    ) {}
+
+    /**
+     * Hand in every expired attempt, or those of one form.
+     *
+     * @return int The number of attempts handed in.
+     */
+    public function handle(?QuizForm $quizForm = null): int
+    {
+        $submitted = 0;
+
+        $this->expiredAttempts($quizForm)
+            ->with(['quizForm', 'user:id,email'])
+            ->chunkById(100, function (Collection $sessions) use (&$submitted): void {
+                foreach ($sessions as $session) {
+                    if ($this->submit($session)) {
+                        $submitted++;
+                    }
+                }
+            });
+
+        return $submitted;
+    }
+
+    /**
+     * Like handle(), for the pages that show results: a failure is reported, the page still opens.
+     */
+    public function handleQuietly(?QuizForm $quizForm = null): int
+    {
+        try {
+            return $this->handle($quizForm);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return 0;
+        }
+    }
+
+    /**
+     * Started attempts whose time ran out (plus the grace period) without the answers handed
+     * in. A teacher trying out their own exam is not graded.
+     *
+     * @return Builder<QuizSession>
+     */
+    public function expiredAttempts(?QuizForm $quizForm = null): Builder
+    {
+        return QuizSession::query()
+            ->whereNull('submitted_at')
+            ->whereNotNull('started_at')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', now()->subSeconds(self::GRACE_SECONDS))
+            ->when($quizForm, fn (Builder $query) => $query->where('quiz_form_id', $quizForm->id))
+            ->whereHas('quizForm', fn (Builder $query) => $query->where(fn (Builder $owner) => $owner
+                ->whereNull('quiz_sessions.user_id')
+                ->orWhereColumn('quiz_forms.user_id', '<>', 'quiz_sessions.user_id')));
+    }
+
+    /**
+     * Hand in one attempt with the answers saved on the server.
+     */
+    public function submit(QuizSession $session): bool
+    {
+        $quizForm = $session->quizForm;
+
+        return DB::transaction(function () use ($session, $quizForm): bool {
+            // Locked, so the exam page handing in at the same moment does not add a second response.
+            $attempt = QuizSession::query()->whereKey($session->id)->lockForUpdate()->first();
+
+            if ($attempt === null || $attempt->submitted_at !== null) {
+                return false;
+            }
+
+            // The answers already reached the server another way (an older version of the page).
+            if ($this->hasResponse($attempt)) {
+                $attempt->update(['submitted_at' => now()]);
+
+                return false;
+            }
+
+            $wasLocked = $attempt->isEffectivelyLocked($quizForm);
+            $questions = is_array($quizForm->questions) ? $quizForm->questions : [];
+            $answers = $this->savedAnswers($questions, $attempt->draft_answers);
+            $isAccount = $attempt->user_id !== null;
+
+            $response = new QuizResponse([
+                'quiz_form_id' => $quizForm->id,
+                'quiz_session_id' => $attempt->id,
+                'user_id' => $attempt->user_id,
+                'respondent_identifier' => $attempt->respondent_identifier,
+                'respondent_name' => $isAccount ? null : $attempt->respondent_name,
+                'respondent_class' => $isAccount ? null : $attempt->respondent_class,
+                'email' => $attempt->respondent_email ?? $session->user?->email,
+                'answers' => $answers,
+                'score' => $this->scoring->score($questions, $answers),
+                'is_timeout' => true,
+                'is_auto_submitted' => true,
+            ]);
+            // Handed in at the moment the time ran out.
+            $response->created_at = $attempt->expires_at;
+            $response->save();
+
+            $attempt->update([
+                'submitted_at' => now(),
+                'draft_answers' => null,
+                'draft_saved_at' => null,
+            ]);
+
+            $this->activityRecorder->record(
+                ActivityLog::EXAM_SUBMITTED,
+                $this->deviceOf($attempt),
+                $isAccount ? $session->user : null,
+                $quizForm,
+                respondentIdentifier: $attempt->respondent_identifier,
+                respondentEmail: $attempt->respondent_email,
+                respondentName: $attempt->respondent_name,
+                respondentClass: $attempt->respondent_class,
+                meta: array_filter(['timeout' => true, 'auto' => true, 'locked' => $wasLocked]),
+                occurredAt: $attempt->expires_at,
+            );
+
+            return true;
+        });
+    }
+
+    /**
+     * The device the exam was taken on (from its "Mulai ujian" activity), so the Laporan lists the
+     * handed in exam on that device rather than on an unknown one.
+     */
+    protected function deviceOf(QuizSession $attempt): Request
+    {
+        $started = rescue(fn (): ?ActivityLog => ActivityLog::query()
+            ->where('event', ActivityLog::EXAM_STARTED)
+            ->where('quiz_form_id', $attempt->quiz_form_id)
+            ->when(
+                $attempt->user_id !== null,
+                fn (Builder $query) => $query->where('user_id', $attempt->user_id),
+                fn (Builder $query) => $query->whereNull('user_id')->where('respondent_identifier', $attempt->respondent_identifier),
+            )
+            ->latest('id')
+            ->first(['ip_address', 'user_agent']), report: false);
+
+        return new Request(server: array_filter([
+            'REMOTE_ADDR' => $started?->ip_address,
+            'HTTP_USER_AGENT' => $started?->user_agent,
+        ]));
+    }
+
+    /**
+     * Determine if a response of this attempt was stored without closing the attempt.
+     */
+    protected function hasResponse(QuizSession $attempt): bool
+    {
+        return QuizResponse::query()
+            ->where('quiz_form_id', $attempt->quiz_form_id)
+            ->where(fn (Builder $query) => $query
+                ->where('quiz_session_id', $attempt->id)
+                ->orWhere(fn (Builder $sameRespondent) => $attempt->user_id !== null
+                    ? $sameRespondent->where('user_id', $attempt->user_id)
+                    : $sameRespondent->whereNull('user_id')->where('respondent_identifier', $attempt->respondent_identifier)))
+            ->where('created_at', '>=', $attempt->started_at)
+            ->exists();
+    }
+
+    /**
+     * The saved answers to questions the exam still has.
+     *
+     * @param  array<int, mixed>  $questions
+     * @param  array<int|string, mixed>|null  $draftAnswers
+     * @return array<int|string, mixed>
+     */
+    protected function savedAnswers(array $questions, ?array $draftAnswers): array
+    {
+        $questionIds = array_map('strval', array_column($questions, 'id'));
+
+        return array_filter(
+            $draftAnswers ?? [],
+            fn (int|string $questionId): bool => in_array((string) $questionId, $questionIds, true),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+}

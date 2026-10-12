@@ -243,6 +243,30 @@ class QuizResponseController extends Controller
         // Locate the exam session of this respondent
         $session = $respondentIdentifier ? $this->findExamSession($quizForm, $user, $respondentIdentifier) : null;
 
+        // The server handed this attempt in when its time ran out, while the page was offline. What
+        // the page sends now is what the student had on the device then: its answers win, and the
+        // answers the server had saved stay where the device has none (another, empty device).
+        $autoSubmitted = $this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)
+            ? $this->autoSubmittedResponse($session)
+            : null;
+
+        if ($autoSubmitted !== null) {
+            $answers = array_replace(
+                is_array($autoSubmitted->answers) ? $autoSubmitted->answers : [],
+                array_filter($validated['answers'], fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== []),
+            );
+
+            $autoSubmitted->update([
+                'answers' => $answers,
+                'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
+                'is_auto_submitted' => false,
+                'ip_address' => $request->ip(),
+                'user_agent' => (string) $request->userAgent(),
+            ]);
+
+            return $this->submissionSucceeded($request, $quizForm);
+        }
+
         // Check single response restriction
         if (! empty($quizForm->settings['limitOneResponse'])) {
             $hasSubmitted = false;
@@ -464,6 +488,21 @@ class QuizResponseController extends Controller
             && is_string($sessionToken)
             && $sessionToken !== ''
             && hash_equals((string) $session->session_token, $sessionToken);
+    }
+
+    /**
+     * The response the server handed in for this attempt when its time ran out. Null as well when
+     * the database was not migrated yet (no is_auto_submitted column): then nothing was handed in.
+     */
+    protected function autoSubmittedResponse(QuizSession $session): ?QuizResponse
+    {
+        return rescue(
+            fn (): ?QuizResponse => QuizResponse::query()
+                ->where('quiz_session_id', $session->id)
+                ->where('is_auto_submitted', true)
+                ->first(),
+            report: false,
+        );
     }
 
     /**

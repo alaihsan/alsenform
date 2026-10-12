@@ -202,6 +202,8 @@ class ActivityReport
             'ip' => $log->ip_address,
             'userAgent' => $log->user_agent,
             'note' => match (true) {
+                ($log->meta['auto'] ?? false) && ($log->meta['locked'] ?? false) => 'Dikirim otomatis: waktu habis saat terkunci',
+                (bool) ($log->meta['auto'] ?? false) => 'Dikirim otomatis: waktu habis, halaman tertutup',
                 ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',
                 (bool) ($log->meta['timeout'] ?? false) => 'Waktu habis',
                 default => null,

@@ -185,7 +185,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'answers', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'answers', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
@@ -216,6 +216,8 @@ class QuizFormPayloads
                 'score' => $score,
                 'percentage' => $percentage,
                 'is_timeout' => (bool) $response->is_timeout,
+                // Handed in by the server: the time ran out while the exam page was closed or offline.
+                'is_auto_submitted' => (bool) $response->is_auto_submitted,
                 'submittedAt' => $response->created_at->diffForHumans(),
                 'formattedDate' => $response->created_at->format('d/m/Y H:i'),
             ];

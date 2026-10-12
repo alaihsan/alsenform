@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\SubmitExpiredAttempts;
 use App\Http\Requests\StoreUnlockRequestRequest;
 use App\Http\Requests\VerifyUnlockCodeRequest;
 use App\Models\QuizForm;
@@ -16,9 +17,12 @@ class UnlockRequestController extends Controller
      * The attempts the teacher can unlock: every attempt that is or was locked, also when the
      * student never asked to be unlocked, plus unlock requests without an attempt.
      */
-    public function index(QuizForm $quizForm): JsonResponse
+    public function index(QuizForm $quizForm, SubmitExpiredAttempts $submitExpiredAttempts): JsonResponse
     {
         abort_unless($quizForm->canBeEditedBy(auth()->user()), 403);
+
+        // Polled while the teacher watches the exam: hand in the attempts whose time ran out.
+        $submitExpiredAttempts->handleQuietly($quizForm);
 
         $requests = UnlockRequest::query()
             ->whereBelongsTo($quizForm)

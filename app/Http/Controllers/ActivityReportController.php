@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\SubmitExpiredAttempts;
 use App\Models\ActivityLog;
 use App\Services\ActivityReport;
 use Illuminate\Http\Request;
@@ -14,8 +15,9 @@ class ActivityReportController extends Controller
     /**
      * The Laporan page: who logged in or took an exam, with device, browser and time.
      */
-    public function index(Request $request, ActivityReport $report): Response
+    public function index(Request $request, ActivityReport $report, SubmitExpiredAttempts $submitExpiredAttempts): Response
     {
+        $submitExpiredAttempts->handleQuietly();
         $viewer = $request->user();
         $filters = $report->filters($request, $viewer);
         $page = fn () => $report->paginate($viewer, $filters);
@@ -53,8 +55,9 @@ class ActivityReportController extends Controller
     /**
      * Download the activities matching the filters as an Excel workbook.
      */
-    public function export(Request $request, ActivityReport $report): BinaryFileResponse
+    public function export(Request $request, ActivityReport $report, SubmitExpiredAttempts $submitExpiredAttempts): BinaryFileResponse
     {
+        $submitExpiredAttempts->handleQuietly();
         $viewer = $request->user();
         $filters = $report->filters($request, $viewer);
 

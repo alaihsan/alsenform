@@ -2,10 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\SubmitExpiredAttempts;
 use App\Support\PendingMigrations;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 class ServeLanCommand extends Command
 {
@@ -37,6 +39,11 @@ class ServeLanCommand extends Command
      * How often (in seconds) the server checks whether its IP address changed.
      */
     protected float $networkCheckIntervalSeconds = 5.0;
+
+    /**
+     * How often (in seconds) the server hands in the exams whose time ran out.
+     */
+    protected float $autoSubmitIntervalSeconds = 60.0;
 
     /**
      * Execute the console command.
@@ -170,6 +177,7 @@ class ServeLanCommand extends Command
     /**
      * Keep the server in the foreground and announce the new student URLs whenever
      * the IP address of this machine changes (DHCP renewal, switching Wi-Fi, cable).
+     * Meanwhile, exams whose time ran out while the page was closed are handed in.
      *
      * @param  array<string, string>  $interfaces
      */
@@ -177,9 +185,16 @@ class ServeLanCommand extends Command
     {
         $knownAddresses = $this->addressList($interfaces);
         $lastCheckedAt = microtime(true);
+        // Right away first: exams may have run out while the server was off.
+        $lastAutoSubmitAt = 0.0;
 
         while ($process->isRunning()) {
             usleep((int) (min(0.5, $this->networkCheckIntervalSeconds) * 1_000_000));
+
+            if (microtime(true) - $lastAutoSubmitAt >= $this->autoSubmitIntervalSeconds) {
+                $lastAutoSubmitAt = microtime(true);
+                $this->submitExpiredExams();
+            }
 
             if (microtime(true) - $lastCheckedAt < $this->networkCheckIntervalSeconds) {
                 continue;
@@ -193,6 +208,24 @@ class ServeLanCommand extends Command
                 $knownAddresses = $currentAddresses;
                 $this->announceNetworkChange($currentInterfaces, $host, $port);
             }
+        }
+    }
+
+    /**
+     * Hand in the exams whose time ran out while the page was closed, offline or out of battery.
+     */
+    protected function submitExpiredExams(): void
+    {
+        try {
+            $submitted = app(SubmitExpiredAttempts::class)->handle();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return;
+        }
+
+        if ($submitted > 0) {
+            $this->output->writeln('<fg=green>✓ '.$submitted.' ujian yang waktunya habis dikirim otomatis ('.date('H:i:s').').</>');
         }
     }
 
@@ -302,7 +335,7 @@ class ServeLanCommand extends Command
             DB::connection()->getPdo();
 
             return true;
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $driver = (string) (config("database.connections.{$name}.driver") ?? $name);
             $this->error("Database {$driver} tidak dapat dihubungi: {$e->getMessage()}");
             $this->line('   Pastikan layanan PostgreSQL berjalan (Herd -> Services -> PostgreSQL, atau: brew services start postgresql@16)');

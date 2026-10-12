@@ -87,7 +87,11 @@ class QuizResultsReport
                 XlsxWriter::cell($maxScore, 'integer'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
                 XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
-                XlsxWriter::cell($student['isTimeout'] ? 'Waktu habis' : 'Selesai', 'textCenter'),
+                XlsxWriter::cell(match (true) {
+                    $student['isAutoSubmitted'] => 'Waktu habis (dikirim otomatis)',
+                    $student['isTimeout'] => 'Waktu habis',
+                    default => 'Selesai',
+                }, 'textCenter'),
                 XlsxWriter::cell($student['submittedAt'], 'datetime'),
             ];
         }
@@ -199,7 +203,7 @@ class QuizResultsReport
 
         return $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'answers', 'created_at'])
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'answers', 'created_at'])
             ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone): array {
                 // Scored against the current answer keys, so a corrected key re-grades earlier answers.
                 $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
@@ -213,6 +217,7 @@ class QuizResultsReport
                     'score' => $score,
                     'grade' => $this->scoring->grade($score, $maxScore),
                     'isTimeout' => (bool) $response->is_timeout,
+                    'isAutoSubmitted' => (bool) $response->is_auto_submitted,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
                     'answers' => is_array($response->answers) ? $response->answers : [],
                 ];

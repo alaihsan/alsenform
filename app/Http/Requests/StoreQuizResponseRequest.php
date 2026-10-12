@@ -32,7 +32,8 @@ class StoreQuizResponseRequest extends FormRequest
             'respondent_identifier' => ['nullable', 'string', 'max:100'],
             'session_token' => ['nullable', 'string', 'max:100'],
             'is_timeout' => ['nullable', 'boolean'],
-            'answers' => ['required', 'array'],
+            // When the time ran out the answers may be empty: nothing was answered yet.
+            'answers' => [$this->boolean('is_timeout') ? 'present' : 'required', 'array'],
             'answers.*' => ['nullable'],
             // A guest's name, class and email (the fields the teacher picked). Not required again
             // when the exam session holds them already, nor when the time ran out.

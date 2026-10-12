@@ -90,6 +90,8 @@ export type QuizFormPayload = {
             score: number;
             percentage: number;
             is_timeout: boolean;
+            /** Handed in by the server: the time ran out while the exam page was closed or offline. */
+            is_auto_submitted?: boolean;
             submittedAt: string;
             formattedDate: string;
         }[];

@@ -472,6 +472,10 @@ const exportResponsesUrl = computed(
 );
 const gradebook = computed(() => props.quizForm?.responses?.gradebook ?? []);
 
+const autoSubmittedHint = 'Waktu habis saat halaman ujian tertutup atau offline. Jawaban yang sudah tersimpan dikirim otomatis oleh sistem.';
+const responseStatusLabel = (item: { is_timeout: boolean; is_auto_submitted?: boolean }) =>
+    item.is_auto_submitted ? 'Otomatis' : item.is_timeout ? 'Timeout' : 'Selesai';
+
 const filteredGradebook = computed(() => {
     if (!gradebookSearch.value.trim()) {
         return gradebook.value;
@@ -3100,8 +3104,11 @@ watch(
                                             {{ item.percentage }}
                                         </span>
                                         <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ maxScore }} poin</p>
-                                        <p :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']">
-                                            {{ item.is_timeout ? 'Timeout' : 'Selesai' }}
+                                        <p
+                                            :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']"
+                                            :title="item.is_auto_submitted ? autoSubmittedHint : undefined"
+                                        >
+                                            {{ responseStatusLabel(item) }}
                                         </p>
                                     </div>
                                 </li>
@@ -3165,13 +3172,14 @@ watch(
                                             <td class="px-4 py-3">
                                                 <span
                                                     :class="[
-                                                        'rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
+                                                        'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
                                                         item.is_timeout
                                                             ? 'border border-rose-200 bg-rose-50 text-rose-700'
                                                             : 'border border-emerald-200 bg-emerald-50 text-emerald-700',
                                                     ]"
+                                                    :title="item.is_auto_submitted ? autoSubmittedHint : undefined"
                                                 >
-                                                    {{ item.is_timeout ? 'Timeout' : 'Selesai' }}
+                                                    {{ responseStatusLabel(item) }}
                                                 </span>
                                             </td>
                                             <td class="px-4 py-3 text-slate-400">{{ item.formattedDate }}</td>

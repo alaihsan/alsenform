@@ -14,6 +14,7 @@ class QuizResponse extends Model
 
     protected $fillable = [
         'quiz_form_id',
+        'quiz_session_id',
         'user_id',
         'respondent_identifier',
         'respondent_name',
@@ -22,6 +23,7 @@ class QuizResponse extends Model
         'answers',
         'score',
         'is_timeout',
+        'is_auto_submitted',
         'ip_address',
         'user_agent',
     ];
@@ -35,6 +37,7 @@ class QuizResponse extends Model
             'answers' => 'array',
             'score' => 'integer',
             'is_timeout' => 'boolean',
+            'is_auto_submitted' => 'boolean',
         ];
     }
 
@@ -46,5 +49,10 @@ class QuizResponse extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function quizSession(): BelongsTo
+    {
+        return $this->belongsTo(QuizSession::class);
     }
 }

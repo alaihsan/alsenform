@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,6 +24,7 @@ class ActivityRecorder
      * not migrated yet) is logged and never stops the login or the exam it describes.
      *
      * @param  array<string, mixed>  $meta
+     * @param  CarbonInterface|null  $occurredAt  When it happened, if not now.
      */
     public function record(
         string $event,
@@ -34,6 +36,7 @@ class ActivityRecorder
         ?string $respondentName = null,
         ?string $respondentClass = null,
         array $meta = [],
+        ?CarbonInterface $occurredAt = null,
     ): void {
         $agent = $this->userAgent->parse($request->userAgent());
 
@@ -54,7 +57,7 @@ class ActivityRecorder
                 'os' => $agent['os'] !== null ? Str::limit($agent['os'], 100, '') : null,
                 'browser' => $agent['browser'] !== null ? Str::limit($agent['browser'], 100, '') : null,
                 'meta' => $meta === [] ? null : $meta,
-                'created_at' => now(),
+                'created_at' => $occurredAt ?? now(),
             ]));
         } catch (Throwable $exception) {
             report($exception);

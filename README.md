@@ -71,6 +71,7 @@ Fitur editor lainnya:
 
 - Murid membaca ringkasan ujian (jumlah soal, soal wajib, total poin, durasi) lalu menekan **Kerjakan Sekarang**. Timer baru berjalan sejak tombol itu ditekan.
 - **Timer dijaga server.** Batas waktu dihitung di server, bukan dari jam HP murid. Saat waktu habis, jawaban yang sudah diisi terkirim otomatis.
+- **Tetap terkirim walau halaman tertutup.** Kalau HP mati, tab ditutup, atau Wi-Fi putus saat waktu habis, server mengirim sendiri jawaban yang sudah tersimpan semenit kemudian. Di rekap nilai statusnya "Otomatis". Bila perangkat murid tersambung lagi, jawaban di perangkat itu melengkapi jawaban yang terkirim.
 - **Jawaban tersimpan berlapis**: di perangkat murid dan di server. Kalau Wi-Fi putus, HP mati, atau murid pindah perangkat, jawaban bisa dilanjutkan setelah login lagi.
 - **Kirim ulang otomatis** saat koneksi lemah. Untuk ujian yang dibatasi satu kali pengisian, kiriman yang terulang dikenali sebagai kiriman yang sama.
 - Panel nomor soal dengan warna status, acak urutan soal, beberapa soal per halaman, dan indikator kemajuan.
@@ -81,7 +82,8 @@ Fitur editor lainnya:
 ### Pengawasan dan anti-curang
 
 - **Kunci saat pindah tab (lock on blur).** Begitu murid meninggalkan halaman ujian, sesinya dikunci di server dan setiap perpindahan dicatat beserta jamnya.
-- Murid yang terkunci mengirim **permintaan buka kunci**. Guru melihat permintaan itu di panel ujian, lengkap dengan jumlah pindah tab dan waktu terakhirnya, lalu menyetujuinya. Selama terkunci, jawaban tidak hilang dan waktu tetap berjalan.
+- Murid yang terkunci langsung muncul di tab **Keamanan & Kunci** milik guru, lengkap dengan jumlah pindah tab dan jamnya. Guru membuka kunci satu per satu atau sekaligus; halaman murid terbuka sendiri dalam beberapa detik. Selama terkunci, jawaban tidak hilang, waktu tetap berjalan, dan jawaban terkirim otomatis bila waktu habis.
+- Kunci bisa dinyalakan atau dimatikan **sebelum maupun selama ujian**. Murid yang sedang mengerjakan ikut berubah dalam ±15 detik; mematikannya membuka semua murid yang terkunci.
 - **Pembatasan peserta per kelompok (cohort)**: ujian hanya bisa dibuka oleh murid di kelas atau kelompok yang dipilih.
 - **Laporan aktivitas** (lihat di bawah) menunjukkan perangkat dan browser yang dipakai saat mulai dan mengirim ujian, jadi murid yang berganti perangkat di tengah ujian ikut terlihat.
 
@@ -256,6 +258,7 @@ Alamat untuk murid akan muncul di layar, misalnya `http://192.168.1.10:8000`. Pa
 | `php artisan lan:status` | Melihat status dan alamat server latar belakang |
 | `php artisan lan:stop` | Menghentikan server |
 | `php artisan exam:optimize --production` | Menyiapkan cache dan mode produksi sebelum ujian besar |
+| `php artisan exam:submit-expired` | Mengirim jawaban ujian yang waktunya habis tetapi belum terkirim. `lan:serve` menjalankannya tiap menit, dan ujian yang dibuka guru selalu diperiksa dulu, jadi biasanya tidak perlu dijalankan manual |
 
 Tips untuk hari ujian:
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\DuplicateQuizForm;
+use App\Actions\SubmitExpiredAttempts;
 use App\Http\Requests\MoveQuizFormToFolderRequest;
 use App\Http\Requests\UpdateQuizFormRequest;
 use App\Http\Requests\UploadQuizFormMediaRequest;
@@ -55,11 +56,14 @@ class QuizFormController extends Controller
         return to_route('forms.edit', ['quizForm' => $quizForm->slug]);
     }
 
-    public function edit(Request $request, QuizForm $quizForm, QuizFormPayloads $payloads): Response
+    public function edit(Request $request, QuizForm $quizForm, QuizFormPayloads $payloads, SubmitExpiredAttempts $submitExpiredAttempts): Response
     {
         Gate::authorize('update', $quizForm);
 
         $quizForm->touch();
+
+        // Students whose time ran out with the page closed are in the results as well.
+        $submitExpiredAttempts->handleQuietly($quizForm);
 
         return Inertia::render('FormEditor', [
             'template' => $quizForm->template,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\SubmitExpiredAttempts;
 use App\Models\QuizForm;
 use App\Services\QuizResultsReport;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -11,9 +12,11 @@ class QuizResponseExportController extends Controller
     /**
      * Download the quiz results (grade recap and every student's answers) as an Excel workbook.
      */
-    public function export(QuizForm $quizForm, QuizResultsReport $report): BinaryFileResponse
+    public function export(QuizForm $quizForm, QuizResultsReport $report, SubmitExpiredAttempts $submitExpiredAttempts): BinaryFileResponse
     {
         abort_unless($quizForm->canBeEditedBy(auth()->user()), 403);
+
+        $submitExpiredAttempts->handleQuietly($quizForm);
 
         $path = tempnam(sys_get_temp_dir(), 'alsen-report-');
         $report->save($quizForm, $path);
