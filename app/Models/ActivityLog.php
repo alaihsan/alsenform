@@ -55,6 +55,8 @@ class ActivityLog extends Model
         'quiz_form_id',
         'respondent_identifier',
         'respondent_email',
+        'respondent_name',
+        'respondent_class',
         'ip_address',
         'user_agent',
         'device_type',

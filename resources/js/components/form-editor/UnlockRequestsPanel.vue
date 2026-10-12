@@ -6,6 +6,8 @@ defineProps<{
         id: number;
         respondent_identifier: string;
         email: string | null;
+        name?: string | null;
+        kelas?: string | null;
         status: 'pending' | 'approved' | string;
         created_at: string;
         blur_count?: number;
@@ -40,7 +42,8 @@ defineEmits<{
                 <div v-for="req in unlockRequests" :key="req.id" class="flex items-center justify-between gap-4 p-5 transition-colors hover:bg-slate-50">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-base font-bold text-slate-800">{{ req.email ?? 'Responden Anonim' }}</span>
+                            <span class="text-base font-bold text-slate-800">{{ req.name ?? req.email ?? 'Responden Anonim' }}</span>
+                            <span v-if="req.kelas" class="rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{{ req.kelas }}</span>
                             <span
                                 :class="[
                                     'rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider',

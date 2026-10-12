@@ -24,6 +24,7 @@ class UnlockRequestController extends Controller
         $sessions = QuizSession::query()
             ->where('quiz_form_id', $quizForm->id)
             ->whereIn('respondent_identifier', $requests->pluck('respondent_identifier'))
+            ->with('user:id,name,kelas')
             ->get()
             ->keyBy('respondent_identifier');
 
@@ -37,6 +38,9 @@ class UnlockRequestController extends Controller
                 'quiz_form_id' => $req->quiz_form_id,
                 'respondent_identifier' => $req->respondent_identifier,
                 'email' => $req->email,
+                // A guest's name and class from the confirmation screen; an account's own name.
+                'name' => $session?->user?->name ?? $session?->respondent_name,
+                'kelas' => $session?->user?->kelas ?? $session?->respondent_class,
                 'status' => $req->status,
                 'created_at' => $req->created_at,
                 'updated_at' => $req->updated_at,

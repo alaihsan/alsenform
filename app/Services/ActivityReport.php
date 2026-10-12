@@ -185,10 +185,10 @@ class ActivityReport
             'time' => $time->format('H:i:s'),
             'timezone' => $time->format('T'),
             'person' => [
-                'name' => $user?->name ?? ($log->respondent_email ?: 'Peserta tamu'),
-                'identifier' => $user ? ($user->nis ?: $user->nip ?: $user->email) : null,
+                'name' => $user?->name ?? ($log->respondent_name ?: ($log->respondent_email ?: 'Peserta tamu')),
+                'identifier' => $user ? ($user->nis ?: $user->nip ?: $user->email) : ($log->respondent_name ? $log->respondent_email : null),
                 'role' => self::ROLE_LABELS[$this->role($user)],
-                'kelas' => $user?->kelas,
+                'kelas' => $user?->kelas ?? $log->respondent_class,
             ],
             'form' => $form ? [
                 'title' => $this->title($form),
@@ -362,6 +362,7 @@ class ActivityReport
 
         return $query->where(fn (Builder $matches) => $matches
             ->whereRaw('LOWER(activity_logs.respondent_email) LIKE ?', [$term])
+            ->orWhereRaw('LOWER(activity_logs.respondent_name) LIKE ?', [$term])
             ->orWhereRaw('LOWER(activity_logs.ip_address) LIKE ?', [$term])
             ->orWhereHas('user', fn (Builder $users) => $users->where(fn (Builder $fields) => $fields
                 ->whereRaw('LOWER(name) LIKE ?', [$term])

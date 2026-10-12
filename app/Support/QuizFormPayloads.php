@@ -185,7 +185,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'email', 'score', 'is_timeout', 'answers', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'answers', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
@@ -194,16 +194,24 @@ class QuizFormPayloads
         $formQuestions = is_array($quizForm->questions) ? $quizForm->questions : [];
         $maxScore = $scoring->maxPoints($formQuestions);
 
-        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore): array {
+        // Guests type their own name: the same name (and class) on more than one response is flagged.
+        $guestNameCounts = $responses
+            ->filter(fn (QuizResponse $response): bool => $response->user_id === null && filled($response->respondent_name))
+            ->countBy(fn (QuizResponse $response): string => $this->guestNameKey($response));
+
+        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore, $guestNameCounts): array {
             $score = is_array($response->answers) ? $scoring->score($formQuestions, $response->answers) : (int) ($response->score ?? 0);
             $percentage = $scoring->grade($score, $maxScore);
+            $isGuest = $response->user_id === null;
 
             return [
                 'id' => $response->id,
                 'user_id' => $response->user_id,
-                'name' => $response->user?->name ?? 'Anonim',
+                'name' => $response->user?->name ?? $response->respondent_name ?? 'Anonim',
+                'isGuest' => $isGuest,
+                'duplicateName' => $isGuest && filled($response->respondent_name) && ($guestNameCounts[$this->guestNameKey($response)] ?? 0) > 1,
                 'nis' => $response->user?->nis ?? '-',
-                'kelas' => $response->user?->kelas ?? '-',
+                'kelas' => $response->user?->kelas ?? $response->respondent_class ?? '-',
                 'email' => $response->email ?? $response->user?->email ?? '-',
                 'score' => $score,
                 'percentage' => $percentage,
@@ -219,12 +227,18 @@ class QuizFormPayloads
             'exportUrl' => route('forms.responses.export', $quizForm),
             'latest' => $responses->take(5)->map(fn (QuizResponse $response): array => [
                 'id' => $response->id,
+                'name' => $response->user?->name ?? $response->respondent_name,
                 'email' => $response->email ?? $response->user?->email,
                 'submittedAt' => $response->created_at->diffForHumans(),
             ])->values()->all(),
             'gradebook' => $gradebook,
             'questions' => $questions,
         ];
+    }
+
+    protected function guestNameKey(QuizResponse $response): string
+    {
+        return mb_strtolower((string) $response->respondent_name).'|'.$response->respondent_class;
     }
 
     /**

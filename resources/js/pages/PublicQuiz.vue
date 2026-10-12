@@ -23,11 +23,13 @@ import {
     ListChecks,
     Play,
     ScrollText,
+    UserRound,
 } from 'lucide-vue-next';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
+import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
 
 type Question = {
     id: number;
@@ -76,6 +78,9 @@ const props = defineProps<{
         };
         submitUrl: string;
         startUrl?: string;
+        /** What a guest fills in before starting (name, class, email); empty for accounts. */
+        identityFields?: string[];
+        respondentClasses?: string[];
     };
     examSummary?: {
         questionCount: number;
@@ -86,6 +91,9 @@ const props = defineProps<{
     session?: {
         token?: string;
         respondent_identifier?: string;
+        respondent_name?: string | null;
+        respondent_class?: string | null;
+        respondent_email?: string | null;
         started_at?: string | null;
         expires_at?: string | null;
         server_time?: string;
@@ -183,6 +191,92 @@ const autoSaveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
 const draftAnswersKey = `alsen_draft_answers_${props.quizForm.id}`;
 const draftEmailKey = `alsen_draft_email_${props.quizForm.id}`;
 const draftSavedAtKey = `alsen_draft_saved_at_${props.quizForm.id}`;
+const draftIdentityKey = `alsen_draft_identity_${props.quizForm.id}`;
+
+/*
+ * Who a guest is on a public quiz: the fields the teacher picked when publishing. Given on the
+ * confirmation screen (or above a survey) and locked by the server once the exam has started.
+ */
+const identityFields = computed<string[]>(() => props.quizForm.identityFields ?? []);
+const asksIdentity = computed<boolean>(() => identityFields.value.length > 0);
+const identity = reactive({ name: props.session?.respondent_name ?? '', kelas: props.session?.respondent_class ?? '' });
+const identityErrors = ref<Record<string, string>>({});
+const identityLocked = ref<boolean>(Boolean(props.session?.respondent_name || props.session?.respondent_class || props.session?.respondent_email));
+const identityEditable = computed<boolean>(() => asksIdentity.value && !identityLocked.value);
+
+if (props.session?.respondent_email) {
+    email.value = props.session.respondent_email;
+} else if (identityEditable.value) {
+    try {
+        const saved = JSON.parse(localStorage.getItem(draftIdentityKey) || 'null');
+        identity.name = identity.name || saved?.name || '';
+        identity.kelas = identity.kelas || saved?.kelas || '';
+        email.value = email.value || localStorage.getItem(draftEmailKey) || '';
+    } catch {
+        // ignore storage access error
+    }
+}
+
+watch(identity, (value) => {
+    if (identityEditable.value && !isSubmitted.value) {
+        try {
+            localStorage.setItem(draftIdentityKey, JSON.stringify(value));
+        } catch {
+            // ignore storage error
+        }
+    }
+});
+
+const identitySummary = computed<string>(() =>
+    [identity.name.trim(), identity.kelas ? `Kelas ${identity.kelas}` : '', identityFields.value.includes('email') ? email.value.trim() : '']
+        .filter((part) => part)
+        .join(' · '),
+);
+
+const validateIdentity = (): boolean => {
+    const errors: Record<string, string> = {};
+    const name = identity.name.replace(/\s+/g, ' ').trim();
+    const emailValue = email.value.trim();
+
+    if (identityFields.value.includes('name')) {
+        if (!name) {
+            errors.name = 'Nama lengkap wajib diisi.';
+        } else if (name.length < 3 || !/\p{L}/u.test(name)) {
+            errors.name = 'Nama lengkap minimal 3 huruf.';
+        }
+    }
+    if (identityFields.value.includes('class') && !identity.kelas) {
+        errors.kelas = 'Pilih kelas Anda.';
+    }
+    if (identityFields.value.includes('email')) {
+        if (!emailValue) {
+            errors.email = 'Email wajib diisi.';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+            errors.email = 'Alamat email tidak valid.';
+        }
+    }
+
+    identityErrors.value = errors;
+    return Object.keys(errors).length === 0;
+};
+
+/** Server validation errors of the identity fields; true when there were any. */
+const applyIdentityErrors = (errors?: Record<string, string[] | string>): boolean => {
+    const keys: Record<string, string> = { respondent_name: 'name', respondent_class: 'kelas', email: 'email' };
+    const mapped: Record<string, string> = {};
+    for (const [key, messages] of Object.entries(errors ?? {})) {
+        if (keys[key]) {
+            mapped[keys[key]] = Array.isArray(messages) ? messages[0] : messages;
+        }
+    }
+    identityErrors.value = mapped;
+    return Object.keys(mapped).length > 0;
+};
+
+const identityPayload = () => ({
+    respondent_name: identity.name.trim() || null,
+    respondent_class: identity.kelas || null,
+});
 let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const hasAnswers = (value: unknown): value is Record<number, any> => !!value && typeof value === 'object' && Object.keys(value).length > 0;
@@ -299,6 +393,7 @@ const clearDraft = () => {
         localStorage.removeItem(draftAnswersKey);
         localStorage.removeItem(draftEmailKey);
         localStorage.removeItem(draftSavedAtKey);
+        localStorage.removeItem(draftIdentityKey);
         autoSaveStatus.value = 'idle';
     } catch {
         // ignore
@@ -588,13 +683,28 @@ const startExam = async () => {
     if (isStartingExam.value || !props.quizForm.startUrl) {
         return;
     }
+    if (identityEditable.value && !validateIdentity()) {
+        startExamError.value = '';
+        return;
+    }
     isStartingExam.value = true;
     startExamError.value = '';
 
     for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
         try {
-            const response = await axios.post(props.quizForm.startUrl, { session_token: props.session?.token }, { timeout: REQUEST_TIMEOUT_MS });
+            const response = await axios.post(
+                props.quizForm.startUrl,
+                { session_token: props.session?.token, ...identityPayload(), email: email.value.trim() || null },
+                { timeout: REQUEST_TIMEOUT_MS },
+            );
             markServerReachable(true);
+            if (asksIdentity.value) {
+                // As stored (and tidied) by the server, which locks it from now on.
+                identity.name = response.data.session.respondent_name ?? identity.name;
+                identity.kelas = response.data.session.respondent_class ?? identity.kelas;
+                email.value = response.data.session.respondent_email ?? email.value;
+                identityLocked.value = true;
+            }
             examClockOffset = new Date(response.data.session.server_time).getTime() - Date.now();
             examExpiresAt.value = response.data.session.expires_at;
             examStartedAt.value = response.data.session.started_at;
@@ -610,6 +720,10 @@ const startExam = async () => {
             }
             if (status === 409) {
                 startExamError.value = 'Jawaban ujian ini sudah dikirim sebelumnya.';
+                break;
+            }
+            if (status === 422 && applyIdentityErrors(error.response?.data?.errors)) {
+                startExamError.value = 'Periksa kembali identitas Anda.';
                 break;
             }
             if (status && status !== 429 && status < 500) {
@@ -974,7 +1088,15 @@ const goToFirstUnansweredRequired = () => {
 const showSubmitConfirmModal = ref(false);
 
 const openSubmitConfirmation = () => {
-    if (props.quizForm.settings.collectEmail && (!email.value || !email.value.trim())) {
+    if (identityEditable.value && !validateIdentity()) {
+        if (isPaginated.value) {
+            currentPage.value = 1;
+        }
+        nextTick(() => document.getElementById('respondent-identity')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        return;
+    }
+
+    if (!asksIdentity.value && props.quizForm.settings.collectEmail && (!email.value || !email.value.trim())) {
         validationErrors.value[0] = 'Silakan isi alamat email Anda terlebih dahulu.';
         if (isPaginated.value) {
             currentPage.value = 1;
@@ -1186,6 +1308,7 @@ const sendAnswers = async (isTimeout: boolean) => {
                     props.quizForm.submitUrl,
                     {
                         email: email.value || null,
+                        ...identityPayload(),
                         answers: answers.value,
                         respondent_identifier: respondentIdentifier,
                         session_token: props.session?.token ?? null,
@@ -1205,6 +1328,9 @@ const sendAnswers = async (isTimeout: boolean) => {
                 if (status === 422) {
                     pendingSubmission.value = null;
                     applyValidationErrors(error.response.data?.errors);
+                    if (applyIdentityErrors(error.response.data?.errors)) {
+                        identityLocked.value = false;
+                    }
                     submissionError.value = error.response.data?.message || 'Masih ada jawaban yang belum valid. Periksa kembali soal yang ditandai.';
                     return;
                 }
@@ -1440,8 +1566,38 @@ const submitAnotherResponse = () => {
                 </div>
             </section>
 
-            <!-- Email Collection Card -->
-            <section v-if="hasExamStarted && quizForm.settings.collectEmail && (!isPaginated || currentPage === 1)" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <!-- Who is taking the exam (a guest on a public quiz) -->
+            <div
+                v-if="hasExamStarted && asksIdentity && !identityEditable"
+                class="mx-auto mt-4 flex max-w-3xl items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 shadow-sm"
+            >
+                <UserRound class="h-4 w-4 shrink-0 text-indigo-600" />
+                <span class="min-w-0 truncate">Peserta: <strong class="text-slate-900">{{ identitySummary }}</strong></span>
+            </div>
+            <section
+                v-if="hasExamStarted && identityEditable && (!isPaginated || currentPage === 1)"
+                id="respondent-identity"
+                class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+                <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">
+                    <UserRound class="h-5 w-5 text-indigo-600" />
+                    Identitas Peserta
+                </h2>
+                <p class="mt-1 text-sm text-slate-500">Isi sebelum mengirim jawaban.</p>
+                <RespondentIdentityFields
+                    v-model:name="identity.name"
+                    v-model:kelas="identity.kelas"
+                    v-model:email="email"
+                    :fields="identityFields"
+                    :classes="quizForm.respondentClasses ?? []"
+                    :errors="identityErrors"
+                    id-prefix="form-identity"
+                    class="mt-4"
+                />
+            </section>
+
+            <!-- Email Collection Card (accounts; guests give their email with their identity) -->
+            <section v-if="hasExamStarted && quizForm.settings.collectEmail && !asksIdentity && (!isPaginated || currentPage === 1)" class="mx-auto mt-4 max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <label class="block">
                     <span class="text-base font-semibold text-slate-900">Email <span class="text-red-500">*</span></span>
                     <input
@@ -2046,6 +2202,24 @@ const submitAnotherResponse = () => {
                             <span>{{ rule }}</span>
                         </li>
                     </ol>
+                </div>
+
+                <div v-if="identityEditable" class="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
+                    <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
+                        <UserRound class="h-4 w-4" />
+                        Identitas Peserta
+                    </h2>
+                    <p class="mt-1 text-xs text-slate-500">Isi dengan benar. Data ini tidak dapat diubah setelah ujian dimulai.</p>
+                    <RespondentIdentityFields
+                        v-model:name="identity.name"
+                        v-model:kelas="identity.kelas"
+                        v-model:email="email"
+                        :fields="identityFields"
+                        :classes="quizForm.respondentClasses ?? []"
+                        :errors="identityErrors"
+                        id-prefix="start-identity"
+                        class="mt-4"
+                    />
                 </div>
 
                 <div v-if="startExamError" class="mt-5 flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">

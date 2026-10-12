@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\QuizForm;
+use App\Models\QuizSession;
+use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -23,6 +25,8 @@ class StoreQuizResponseRequest extends FormRequest
      */
     public function rules(): array
     {
+        $quizForm = $this->quizForm();
+
         return [
             'email' => ['nullable', 'email', 'max:255'],
             'respondent_identifier' => ['nullable', 'string', 'max:100'],
@@ -30,7 +34,34 @@ class StoreQuizResponseRequest extends FormRequest
             'is_timeout' => ['nullable', 'boolean'],
             'answers' => ['required', 'array'],
             'answers.*' => ['nullable'],
+            // A guest's name, class and email (the fields the teacher picked). Not required again
+            // when the exam session holds them already, nor when the time ran out.
+            ...($quizForm ? app(RespondentIdentity::class)->rules($quizForm, $this->user(), $this->examSession($quizForm), required: ! $this->boolean('is_timeout')) : []),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return app(RespondentIdentity::class)->messages();
+    }
+
+    protected function quizForm(): ?QuizForm
+    {
+        $quizForm = $this->route('quizForm');
+
+        return $quizForm instanceof QuizForm ? $quizForm : QuizForm::where('slug', (string) $quizForm)->first();
+    }
+
+    protected function examSession(QuizForm $quizForm): ?QuizSession
+    {
+        $token = $this->input('session_token');
+
+        return is_string($token) && $token !== ''
+            ? QuizSession::query()->where('quiz_form_id', $quizForm->id)->where('session_token', $token)->first()
+            : null;
     }
 
     /**
@@ -39,10 +70,7 @@ class StoreQuizResponseRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            $quizForm = $this->route('quizForm');
-            if (! $quizForm instanceof QuizForm) {
-                $quizForm = QuizForm::where('slug', (string) $this->route('quizForm'))->first();
-            }
+            $quizForm = $this->quizForm();
 
             if (! $quizForm) {
                 return;
@@ -63,11 +91,6 @@ class StoreQuizResponseRequest extends FormRequest
             // If timeout occurred, allow partial answers and skip required check
             if ($isTimeout) {
                 return;
-            }
-
-            // Check collectEmail setting if user is unauthenticated
-            if (! empty($quizForm->settings['collectEmail']) && empty($this->input('email')) && ! $this->user()) {
-                $validator->errors()->add('email', 'Email wajib diisi untuk kuis ini.');
             }
 
             // Validate required questions

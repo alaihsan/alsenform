@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\QuizForm;
+use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -77,6 +78,8 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.lockOnBlur' => ['nullable', 'boolean'],
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'settings.questionsPerPage' => ['nullable'],
+            'settings.respondentFields' => ['nullable', 'array'],
+            'settings.respondentFields.*' => ['string', Rule::in(RespondentIdentity::FIELDS)],
             'published' => ['nullable', 'boolean'],
             'base_version' => ['nullable', 'string', 'max:64'],
             'cohort_ids' => ['nullable', 'array'],

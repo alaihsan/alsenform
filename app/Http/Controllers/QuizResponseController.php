@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Support\ActivityRecorder;
 use App\Support\MediaUrl;
 use App\Support\QuizScoring;
+use App\Support\RespondentIdentity;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -128,6 +129,9 @@ class QuizResponseController extends Controller
                 'settings' => $quizForm->settings,
                 'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                 'startUrl' => route('forms.responses.start', ['quizForm' => $quizForm->slug]),
+                // Guests say who they are on the confirmation screen; accounts identify themselves.
+                'identityFields' => $user ? [] : app(RespondentIdentity::class)->fields($quizForm),
+                'respondentClasses' => RespondentIdentity::CLASSES,
             ],
             'examSummary' => [
                 'questionCount' => count($sanitizedQuestions),
@@ -138,6 +142,9 @@ class QuizResponseController extends Controller
             'session' => [
                 'token' => $quizSession->session_token,
                 'respondent_identifier' => $quizSession->respondent_identifier,
+                'respondent_name' => $quizSession->respondent_name,
+                'respondent_class' => $quizSession->respondent_class,
+                'respondent_email' => $quizSession->respondent_email,
                 'started_at' => $quizSession->started_at?->toISOString(),
                 'expires_at' => $quizSession->expires_at?->toISOString(),
                 'server_time' => now()->toISOString(),
@@ -182,6 +189,10 @@ class QuizResponseController extends Controller
         }
 
         if ($session->started_at === null) {
+            // Guests give their name, class and email before the timer starts; they cannot be
+            // changed afterwards. (A retry of a started exam keeps what was given.)
+            $identity = app(RespondentIdentity::class);
+            $identityInput = $request->validate($identity->rules($quizForm, $request->user(), $session), $identity->messages());
             $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
             $now = now();
 
@@ -191,6 +202,7 @@ class QuizResponseController extends Controller
                 ->update([
                     'started_at' => $now,
                     'expires_at' => $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null,
+                    ...($request->user() ? [] : $identity->fromInput($quizForm, $identityInput, $session)),
                 ]);
 
             $session->refresh();
@@ -207,6 +219,9 @@ class QuizResponseController extends Controller
                 'started_at' => $session->started_at?->toISOString(),
                 'expires_at' => $session->expires_at?->toISOString(),
                 'server_time' => now()->toISOString(),
+                'respondent_name' => $session->respondent_name,
+                'respondent_class' => $session->respondent_class,
+                'respondent_email' => $session->respondent_email,
             ],
         ]);
     }
@@ -271,11 +286,19 @@ class QuizResponseController extends Controller
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $validated['answers'] ?? []);
 
+        // A guest's identity: what the exam session locked at the start, or (a survey that opens
+        // without a confirmation screen) what is sent now.
+        $identity = $user
+            ? ['respondent_name' => null, 'respondent_class' => null, 'respondent_email' => null]
+            : app(RespondentIdentity::class)->fromInput($quizForm, $validated, $session);
+
         QuizResponse::query()->create([
             'quiz_form_id' => $quizForm->id,
             'user_id' => $user?->id,
             'respondent_identifier' => $respondentIdentifier,
-            'email' => $validated['email'] ?? $user?->email,
+            'respondent_name' => $identity['respondent_name'],
+            'respondent_class' => $identity['respondent_class'],
+            'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
             'answers' => $validated['answers'],
             'score' => $score,
             'is_timeout' => $isTimeout,
@@ -287,6 +310,7 @@ class QuizResponseController extends Controller
             'submitted_at' => now(),
             'draft_answers' => null,
             'draft_saved_at' => null,
+            ...$identity,
         ]);
 
         app(ActivityRecorder::class)->record(
@@ -295,7 +319,9 @@ class QuizResponseController extends Controller
             $user,
             $quizForm,
             respondentIdentifier: $respondentIdentifier,
-            respondentEmail: $validated['email'] ?? null,
+            respondentEmail: $identity['respondent_email'] ?? $validated['email'] ?? null,
+            respondentName: $identity['respondent_name'],
+            respondentClass: $identity['respondent_class'],
             meta: $isTimeout ? ['timeout' => true] : [],
         );
 
@@ -313,6 +339,9 @@ class QuizResponseController extends Controller
             $session->user_id !== null ? $request->user() : null,
             $quizForm,
             respondentIdentifier: $session->respondent_identifier,
+            respondentEmail: $session->respondent_email,
+            respondentName: $session->respondent_name,
+            respondentClass: $session->respondent_class,
         );
     }
 

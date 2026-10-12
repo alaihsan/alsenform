@@ -31,6 +31,8 @@ class ActivityRecorder
         ?QuizForm $quizForm = null,
         ?string $respondentIdentifier = null,
         ?string $respondentEmail = null,
+        ?string $respondentName = null,
+        ?string $respondentClass = null,
         array $meta = [],
     ): void {
         $agent = $this->userAgent->parse($request->userAgent());
@@ -43,6 +45,8 @@ class ActivityRecorder
                 'quiz_form_id' => $quizForm?->id,
                 'respondent_identifier' => $user ? null : ($respondentIdentifier !== null ? Str::limit($respondentIdentifier, 100, '') : null),
                 'respondent_email' => $user ? null : ($respondentEmail !== null && $respondentEmail !== '' ? Str::limit($respondentEmail, 255, '') : null),
+                'respondent_name' => $user || blank($respondentName) ? null : Str::limit($respondentName, 100, ''),
+                'respondent_class' => $user || blank($respondentClass) ? null : Str::limit($respondentClass, 20, ''),
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'device_type' => $agent['deviceType'],

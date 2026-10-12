@@ -75,6 +75,7 @@ Fitur editor lainnya:
 - **Kirim ulang otomatis** saat koneksi lemah. Untuk ujian yang dibatasi satu kali pengisian, kiriman yang terulang dikenali sebagai kiriman yang sama.
 - Panel nomor soal dengan warna status, acak urutan soal, beberapa soal per halaman, dan indikator kemajuan.
 - Tampilan disusun untuk layar HP: pilihan berhuruf yang besar, kisi soal berubah menjadi kartu, dan timer di bagian atas layar.
+- **Kuis publik tanpa akun.** Saat mempublikasikan, guru memilih data yang wajib diisi peserta di layar konfirmasi: Nama Lengkap, Kelas (7A–9D), dan Email. Setelah ujian dimulai, data itu dikunci. Nama peserta tamu tampil di rekap nilai, berkas Excel, panel buka kunci, dan laporan aktivitas. Nama dan kelas yang sama pada lebih dari satu jawaban diberi tanda "Nama ganda".
 - Bisa dipakai untuk **survei atau angket** tanpa timer dan tanpa login. Ada opsi pengumpulan email, batas satu kali pengisian, pesan konfirmasi, dan ringkasan hasil.
 
 ### Pengawasan dan anti-curang

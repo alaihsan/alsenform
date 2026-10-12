@@ -199,15 +199,16 @@ class QuizResultsReport
 
         return $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'email', 'score', 'is_timeout', 'answers', 'created_at'])
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'answers', 'created_at'])
             ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone): array {
                 // Scored against the current answer keys, so a corrected key re-grades earlier answers.
                 $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
 
                 return [
                     'nis' => $response->user?->nis ?: '-',
-                    'name' => $response->user?->name ?: 'Anonim',
-                    'kelas' => $response->user?->kelas ?: '-',
+                    // Guests on a public quiz: the name and class they gave before starting.
+                    'name' => $response->user?->name ?: ($response->respondent_name ?: 'Anonim'),
+                    'kelas' => $response->user?->kelas ?: ($response->respondent_class ?: '-'),
                     'email' => $response->email ?: ($response->user?->email ?: '-'),
                     'score' => $score,
                     'grade' => $this->scoring->grade($score, $maxScore),

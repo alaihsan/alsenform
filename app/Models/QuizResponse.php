@@ -16,6 +16,8 @@ class QuizResponse extends Model
         'quiz_form_id',
         'user_id',
         'respondent_identifier',
+        'respondent_name',
+        'respondent_class',
         'email',
         'answers',
         'score',

@@ -2,6 +2,7 @@
 import AccountMenu from '@/components/AccountMenu.vue';
 import RichContent from '@/components/RichContent.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
@@ -134,6 +135,7 @@ const form = reactive({
         lockOnBlur: props.quizForm?.settings?.lockOnBlur ?? false,
         timeLimit: props.quizForm?.settings?.timeLimit ?? 0,
         questionsPerPage: props.quizForm?.settings?.questionsPerPage ?? 'all',
+        respondentFields: [...(props.quizForm?.settings?.respondentFields ?? [])] as ('name' | 'class')[],
     },
 });
 
@@ -1435,6 +1437,54 @@ const setStatus = (status: boolean) => {
     triggerToast(status ? 'Quiz berhasil dipublikasikan' : 'Quiz diubah menjadi Draft');
 };
 
+/*
+ * Identity of guests on a public quiz: name, class and email asked on the confirmation screen.
+ * Publishing a public quiz asks the teacher which of them to show; Pengaturan can change it later.
+ */
+const identityChoiceFromSettings = (): IdentityChoice => ({
+    name: form.settings.respondentFields.includes('name'),
+    class: form.settings.respondentFields.includes('class'),
+    email: form.settings.emailCollectionMode !== 'none',
+});
+
+const applyIdentityChoice = (choice: IdentityChoice) => {
+    form.settings.respondentFields = (['name', 'class'] as const).filter((field) => choice[field]);
+    if (!choice.email) {
+        form.settings.emailCollectionMode = 'none';
+    } else if (form.settings.emailCollectionMode === 'none') {
+        form.settings.emailCollectionMode = 'responder';
+    }
+    markSettingsChanged();
+};
+
+const identityChecklist = computed<IdentityChoice>({
+    get: identityChoiceFromSettings,
+    set: applyIdentityChoice,
+});
+
+const showPublishIdentity = ref(false);
+const publishIdentityChoice = ref<IdentityChoice>({ name: true, class: false, email: false });
+
+const requestPublish = () => {
+    showStatusMenu.value = false;
+    // Accounts of the chosen cohorts identify themselves: nothing to ask.
+    if (isCohortRestricted.value) {
+        setStatus(true);
+        return;
+    }
+    const current = identityChoiceFromSettings();
+    // The first time, the name is suggested; afterwards the teacher's last choice is shown.
+    const hasChosenBefore = props.quizForm?.settings?.respondentFields !== undefined || form.settings.respondentFields.length > 0;
+    publishIdentityChoice.value = hasChosenBefore ? current : { ...current, name: true };
+    showPublishIdentity.value = true;
+};
+
+const confirmPublish = () => {
+    applyIdentityChoice(publishIdentityChoice.value);
+    showPublishIdentity.value = false;
+    setStatus(true);
+};
+
 const comparableContent = (content: Partial<LocalDraft>) =>
     JSON.stringify([content.title, content.description, content.questions, content.settings, content.isPublished]);
 
@@ -1682,7 +1732,7 @@ watch(
                             <button
                                 type="button"
                                 class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-                                @click="setStatus(true)"
+                                @click="requestPublish"
                             >
                                 <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
                                 <span>Publish</span>
@@ -2980,7 +3030,16 @@ watch(
                                 <li v-for="(item, idx) in filteredGradebook" :key="`grade-card-${item.id}`" class="flex items-center gap-3 px-4 py-3">
                                     <span class="w-5 shrink-0 text-xs font-semibold text-slate-400">{{ idx + 1 }}</span>
                                     <div class="min-w-0 flex-1">
-                                        <p class="truncate text-sm font-bold text-slate-900">{{ item.name }}</p>
+                                        <p class="flex min-w-0 items-center gap-1.5">
+                                            <span class="truncate text-sm font-bold text-slate-900">{{ item.name }}</span>
+                                            <span v-if="item.isGuest" class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Tamu</span>
+                                            <span
+                                                v-if="item.duplicateName"
+                                                class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
+                                                title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
+                                                >Nama ganda</span
+                                            >
+                                        </p>
                                         <p class="truncate text-[11px] text-slate-500">
                                             <span class="font-mono">{{ item.nis }}</span> · {{ item.kelas }} · {{ item.formattedDate }}
                                         </p>
@@ -3033,7 +3092,16 @@ watch(
                                         <tr v-for="(item, idx) in filteredGradebook" :key="item.id" class="transition-colors hover:bg-slate-50/80">
                                             <td class="px-4 py-3 font-semibold text-slate-400">{{ idx + 1 }}</td>
                                             <td class="px-4 py-3 font-mono font-medium text-slate-700">{{ item.nis }}</td>
-                                            <td class="px-4 py-3 font-bold text-slate-900">{{ item.name }}</td>
+                                            <td class="px-4 py-3 font-bold text-slate-900">
+                                                {{ item.name }}
+                                                <span v-if="item.isGuest" class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Tamu</span>
+                                                <span
+                                                    v-if="item.duplicateName"
+                                                    class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
+                                                    title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
+                                                    >Nama ganda</span
+                                                >
+                                            </td>
                                             <td class="px-4 py-3">
                                                 <span class="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{{ item.kelas }}</span>
                                             </td>
@@ -3085,7 +3153,7 @@ watch(
                             <div class="divide-y divide-slate-100">
                                 <div v-for="response in latestResponses" :key="response.id" class="flex items-center justify-between gap-4 px-4 py-3">
                                     <span class="min-w-0 truncate text-sm font-semibold text-slate-700">
-                                        {{ response.email ?? 'Anonymous respondent' }}
+                                        {{ response.name ?? response.email ?? 'Anonymous respondent' }}
                                     </span>
                                     <span class="shrink-0 text-xs font-semibold text-slate-500">{{ response.submittedAt }}</span>
                                 </div>
@@ -3354,6 +3422,17 @@ watch(
                                                 >
                                             </div>
                                         </label>
+                                    </div>
+
+                                    <!-- Guests' identity when public -->
+                                    <div v-if="!isCohortRestricted" class="mt-5 max-w-xl space-y-3">
+                                        <div>
+                                            <p class="text-sm font-bold uppercase tracking-wider text-slate-500">Identitas Peserta Tamu</p>
+                                            <p class="mt-1 text-sm text-slate-500">
+                                                Diisi peserta tanpa akun di layar konfirmasi, sebelum mulai mengerjakan.
+                                            </p>
+                                        </div>
+                                        <IdentityFieldsChecklist v-model="identityChecklist" />
                                     </div>
 
                                     <!-- Cohort Checklist when restricted -->
@@ -4293,6 +4372,34 @@ Jawaban: A, C</pre
                         @click="isCollaboratorModalOpen = false"
                     >
                         Tutup
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div v-if="showPublishIdentity" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+            <section role="dialog" aria-modal="true" aria-labelledby="publish-identity-title" class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+                <h2 id="publish-identity-title" class="text-xl font-black text-slate-900">Publikasikan untuk Publik</h2>
+                <p class="mt-1.5 text-sm text-slate-500">
+                    Siapa pun yang punya link dapat mengerjakan kuis ini tanpa akun. Pilih data yang wajib diisi peserta di layar konfirmasi
+                    sebelum mulai.
+                </p>
+                <IdentityFieldsChecklist v-model="publishIdentityChoice" class="mt-5" />
+                <p class="mt-3 text-xs text-slate-400">Murid yang masuk dengan akun tidak perlu mengisi: data diambil dari akunnya.</p>
+                <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button
+                        type="button"
+                        class="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100"
+                        @click="showPublishIdentity = false"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-indigo-700"
+                        @click="confirmPublish"
+                    >
+                        Publikasikan
                     </button>
                 </div>
             </section>

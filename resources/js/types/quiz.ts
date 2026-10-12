@@ -63,6 +63,8 @@ export type QuizFormPayload = {
         backgroundPatternClass?: string;
         lockOnBlur?: boolean;
         timeLimit?: number;
+        /** Identity fields guests fill in on a public quiz (email is collectEmail). */
+        respondentFields?: ('name' | 'class')[];
     };
     responses: {
         total: number;
@@ -70,6 +72,7 @@ export type QuizFormPayload = {
         exportUrl?: string;
         latest: {
             id: number;
+            name?: string | null;
             email: string | null;
             submittedAt: string;
         }[];
@@ -77,6 +80,10 @@ export type QuizFormPayload = {
             id: number;
             user_id?: number | null;
             name: string;
+            /** No account: the name and class come from the confirmation screen. */
+            isGuest?: boolean;
+            /** A guest name (and class) that appears on more than one response. */
+            duplicateName?: boolean;
             nis: string;
             kelas: string;
             email: string;
