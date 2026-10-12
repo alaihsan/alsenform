@@ -162,6 +162,80 @@ test('only attempts whose time ran out a while ago and were not handed in are su
     expect(app(SubmitExpiredAttempts::class)->handle())->toBe(1);
 });
 
+test('an exam with time left stays open while the page is closed or offline, until the time runs out', function () {
+    $student = User::factory()->create(['role' => 'siswa']);
+    // Started 10 minutes ago, 20 minutes left; the screen went off (or Wi-Fi dropped) 9 minutes ago.
+    $attempt = attemptOf($this->exam, [
+        'user_id' => $student->id,
+        'respondent_identifier' => 'user_'.$student->id,
+        'started_at' => now()->subMinutes(10),
+        'expires_at' => now()->addMinutes(20),
+        'draft_answers' => [1 => '4'],
+        'draft_saved_at' => now()->subMinutes(9),
+    ]);
+
+    $this->artisan('exam:submit-expired')->assertSuccessful();
+    $this->actingAs($this->teacher)->get(route('forms.edit', $this->exam->slug))->assertOk();
+
+    expect(QuizResponse::query()->count())->toBe(0)
+        ->and($attempt->refresh()->submitted_at)->toBeNull()
+        ->and($attempt->draft_answers)->toEqual([1 => '4']);
+
+    // Back on the page a while later: the saved answers and the remaining time are still there.
+    Carbon::setTestNow(now()->addMinutes(15));
+
+    $this->actingAs($student)
+        ->get(route('forms.public', $this->exam->slug))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('session.draft_answers', ['1' => '4'])
+            ->where('session.expires_at', $attempt->expires_at->toISOString()));
+
+    expect(app(SubmitExpiredAttempts::class)->handle())->toBe(0);
+
+    // Only once the time ran out (and the page had its minute to hand in by itself).
+    Carbon::setTestNow($attempt->expires_at->copy()->addSeconds(SubmitExpiredAttempts::GRACE_SECONDS));
+
+    expect(app(SubmitExpiredAttempts::class)->handle())->toBe(1)
+        ->and(QuizResponse::query()->sole()->answers)->toEqual([1 => '4']);
+});
+
+test('an exam without a time limit is never handed in automatically: the answers wait for the student', function () {
+    $this->exam->update(['settings' => array_merge($this->exam->settings, ['timeLimit' => null])]);
+    $student = User::factory()->create(['role' => 'siswa']);
+    $attempt = attemptOf($this->exam, [
+        'user_id' => $student->id,
+        'respondent_identifier' => 'user_'.$student->id,
+        'started_at' => now()->subHour(),
+        'expires_at' => null,
+        'draft_answers' => [1 => '4'],
+        'draft_saved_at' => now()->subHour(),
+    ]);
+
+    Carbon::setTestNow(now()->addDays(3));
+
+    $this->artisan('exam:submit-expired')->expectsOutputToContain('Tidak ada ujian')->assertSuccessful();
+    $this->actingAs($this->teacher)->get(route('forms.edit', $this->exam->slug))->assertOk();
+
+    expect(QuizResponse::query()->count())->toBe(0);
+
+    $this->actingAs($student)
+        ->get(route('forms.public', $this->exam->slug))
+        ->assertInertia(fn (Assert $page) => $page->where('session.draft_answers', ['1' => '4']));
+
+    // The student finishes and hands in by hand.
+    $this->actingAs($student)
+        ->postJson(route('forms.responses.store', $this->exam->slug), [
+            'session_token' => $attempt->session_token,
+            'answers' => [1 => '4', 2 => 'Jakarta'],
+        ])
+        ->assertOk();
+
+    expect(QuizResponse::query()->sole())
+        ->score->toBe(20)
+        ->is_timeout->toBeFalse()
+        ->is_auto_submitted->toBeFalse();
+});
+
 test('answers already stored by the exam page are not handed in a second time', function () {
     $attempt = attemptOf($this->exam);
     QuizResponse::query()->create([

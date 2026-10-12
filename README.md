@@ -71,7 +71,8 @@ Fitur editor lainnya:
 
 - Murid membaca ringkasan ujian (jumlah soal, soal wajib, total poin, durasi) lalu menekan **Kerjakan Sekarang**. Timer baru berjalan sejak tombol itu ditekan.
 - **Timer dijaga server.** Batas waktu dihitung di server, bukan dari jam HP murid. Saat waktu habis, jawaban yang sudah diisi terkirim otomatis.
-- **Tetap terkirim walau halaman tertutup.** Kalau HP mati, tab ditutup, atau Wi-Fi putus saat waktu habis, server mengirim sendiri jawaban yang sudah tersimpan semenit kemudian. Di rekap nilai statusnya "Otomatis". Bila perangkat murid tersambung lagi, jawaban di perangkat itu melengkapi jawaban yang terkirim.
+- **Jawaban aman walau layar mati atau offline.** Selama waktu belum habis, jawaban tetap tersimpan (di perangkat dan di server) dan murid bisa melanjutkan kapan saja. Ujian baru dikirim saat waktunya habis: oleh halaman ujian itu sendiri, atau oleh server satu menit setelah waktu habis bila halamannya tertutup atau offline (statusnya "Otomatis" di rekap nilai). Bila perangkat murid tersambung lagi, jawaban di perangkat itu melengkapi jawaban yang terkirim.
+- Ujian **tanpa batas waktu** tidak pernah dikirim otomatis: jawaban tersimpan sampai murid menekan **Kirim Jawaban**.
 - **Jawaban tersimpan berlapis**: di perangkat murid dan di server. Kalau Wi-Fi putus, HP mati, atau murid pindah perangkat, jawaban bisa dilanjutkan setelah login lagi.
 - **Kirim ulang otomatis** saat koneksi lemah. Untuk ujian yang dibatasi satu kali pengisian, kiriman yang terulang dikenali sebagai kiriman yang sama.
 - Panel nomor soal dengan warna status, acak urutan soal, beberapa soal per halaman, dan indikator kemajuan.
