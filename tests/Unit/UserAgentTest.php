@@ -154,6 +154,18 @@ test('the device report of the page completes what the user agent hides', functi
         'X-Device-Hints' => $report(['touch' => 1, 'platform' => 'MacIntel']),
     ]))->toBe(['deviceType' => 'tablet', 'device' => 'iPad', 'os' => 'iPadOS 17.5', 'browser' => 'Safari 17.5']);
 
+    // Chrome on an iPad in desktop mode, and a macOS hint never turns it back into a Mac.
+    expect(agentOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0.6668.69 Version/17.0 Safari/605.1.15', [
+        'Sec-CH-UA-Platform' => '"macOS"',
+        'Sec-CH-UA-Platform-Version' => '"14.5.0"',
+        'X-Device-Hints' => $report(['touch' => 5, 'platform' => 'MacIntel', 'screen' => [1024, 1366]]),
+    ]))->toBe(['deviceType' => 'tablet', 'device' => 'iPad', 'os' => 'iPadOS 17.0', 'browser' => 'Chrome 129.0.6668.69']);
+
+    // An iPhone asking for the desktop site is an iPhone, not an iPad.
+    expect(agentOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15', [
+        'X-Device-Hints' => $report(['touch' => 5, 'platform' => 'MacIntel', 'screen' => [390, 844]]),
+    ]))->toBe(['deviceType' => 'mobile', 'device' => 'iPhone', 'os' => 'iOS 18.5', 'browser' => 'Safari 18.5']);
+
     // A real Mac stays a Mac.
     expect(agentOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', [
         'X-Device-Hints' => $report(['touch' => 0, 'platform' => 'MacIntel', 'screen' => [1512, 982]]),

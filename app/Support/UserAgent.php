@@ -220,11 +220,20 @@ class UserAgent
         $platform = $hints['platform'] ?? null;
         $touch = $hints['touch'] ?? 0;
 
-        // Safari on an iPad asks for desktop sites and says it is a Mac; a Mac has no touch screen.
-        if (str_contains($userAgent, 'Macintosh') && $touch > 0) {
-            $version = preg_match('/Version\/([\d.]+)/', $userAgent, $matches) ? ' '.$matches[1] : '';
+        // Browsers on an iPad ask for desktop sites and say it is a Mac (an iPhone too, when asked
+        // to); a Mac has no touch screen. The screen tells an iPhone (narrower than 600) from an iPad.
+        $isAppleTouchDevice = str_contains($userAgent, 'Macintosh') && $touch > 0;
 
-            $parsed = [...$parsed, 'deviceType' => 'tablet', 'device' => 'iPad', 'os' => 'iPadOS'.$version];
+        if ($isAppleTouchDevice) {
+            $version = preg_match('/Version\/([\d.]+)/', $userAgent, $matches) ? ' '.$matches[1] : '';
+            $isPhone = isset($hints['screen']) && min($hints['screen']) < 600;
+
+            $parsed = [
+                ...$parsed,
+                'deviceType' => $isPhone ? 'mobile' : 'tablet',
+                'device' => $isPhone ? 'iPhone' : 'iPad',
+                'os' => ($isPhone ? 'iOS' : 'iPadOS').$version,
+            ];
         }
 
         // Chrome on Android in desktop mode says it is a Linux PC; its processor and touch screen tell.
@@ -248,7 +257,7 @@ class UserAgent
         }
 
         // Hints that do not match the User-Agent (another browser or system) are not used.
-        if (isset($hints['platformVersion']) && $this->platformMatches($platform, $userAgent)) {
+        if (isset($hints['platformVersion']) && ! $isAppleTouchDevice && $this->platformMatches($platform, $userAgent)) {
             $parsed['os'] = $this->hintedOperatingSystem($platform, $hints['platformVersion']) ?? $parsed['os'];
         }
 
