@@ -63,6 +63,8 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.sendResponseCopy' => ['nullable', 'string', Rule::in(['off', 'request', 'always'])],
             'settings.allowResponseEditing' => ['nullable', 'boolean'],
             'settings.limitOneResponse' => ['nullable', 'boolean'],
+            // How many times a student may take the quiz; 0 is no limit.
+            'settings.maxAttempts' => ['nullable', 'integer', 'min:0', 'max:100'],
             'settings.confirmationMessage' => ['nullable', 'string', 'max:500'],
             'settings.showSubmitAnotherResponse' => ['nullable', 'boolean'],
             'settings.showResultsSummary' => ['nullable', 'boolean'],

@@ -60,6 +60,8 @@ export type QuizFormPayload = {
         sendResponseCopy?: 'off' | 'request' | 'always';
         allowResponseEditing?: boolean;
         limitOneResponse?: boolean;
+        /** How many times a student may take the quiz; 0 is no limit. */
+        maxAttempts?: number;
         confirmationMessage?: string;
         showSubmitAnotherResponse?: boolean;
         showResultsSummary?: boolean;
@@ -108,6 +110,9 @@ export type QuizFormPayload = {
             percentage: number;
             /** Answers that arrived after the time ran out (a page offline at the end). */
             lateMinutes?: number | null;
+            /** Attempt number of this response (1 is the first) and the student's attempts in all. */
+            attempt?: number;
+            attempts?: number;
             is_timeout: boolean;
             /** Handed in by the server: the time ran out while the exam page was closed or offline. */
             is_auto_submitted?: boolean;

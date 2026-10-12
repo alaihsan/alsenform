@@ -17,7 +17,7 @@ class QuizResultsReport
 {
     protected const DEFAULT_KKM = 75;
 
-    protected const SCORE_COLUMNS = 11;
+    protected const SCORE_COLUMNS = 12;
 
     public function __construct(protected QuizScoring $scoring) {}
 
@@ -74,7 +74,7 @@ class QuizResultsReport
             ]), 'subtitle')],
             null,
             array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), [
-                'No', 'NIS', 'Nama Lengkap', 'Kelas', 'Email', 'Skor', 'Skor Maksimal', 'Nilai (0-100)', 'Keterangan', 'Status', 'Waktu Selesai',
+                'No', 'NIS', 'Nama Lengkap', 'Kelas', 'Email', 'Skor', 'Skor Maksimal', 'Nilai (0-100)', 'Keterangan', 'Status', 'Waktu Selesai', 'Percobaan',
             ]),
         ];
 
@@ -97,13 +97,14 @@ class QuizResultsReport
                     default => 'Selesai',
                 }, 'textCenter'),
                 XlsxWriter::cell($student['submittedAt'], 'datetime'),
+                XlsxWriter::cell("{$student['attempt']} dari {$student['attempts']}", 'textCenter'),
             ];
         }
 
         $lastRow = max(4, count($rows));
 
         return [$rows, [
-            'columns' => [5, 14, 30, 12, 28, 8, 10, 13, 14, 13, 17],
+            'columns' => [5, 14, 30, 12, 28, 8, 10, 13, 14, 13, 17, 11],
             'freeze' => 'A5',
             'autoFilter' => "A4:{$lastColumn}{$lastRow}",
             'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
@@ -140,7 +141,7 @@ class QuizResultsReport
             $row = [
                 XlsxWriter::cell($index + 1, 'integer'),
                 XlsxWriter::cell($student['nis'], 'textCenter'),
-                XlsxWriter::cell($student['name'], 'text'),
+                XlsxWriter::cell($student['attempts'] > 1 ? "{$student['name']} (percobaan {$student['attempt']})" : $student['name'], 'text'),
                 XlsxWriter::cell($student['kelas'], 'textCenter'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
             ];
@@ -268,10 +269,15 @@ class QuizResultsReport
     {
         $timezone = (string) config('app.display_timezone', config('app.timezone'));
 
-        return $quizForm->responses()
+        $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at'])
-            ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone): array {
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
+
+        // Every attempt of a student is listed, numbered in the order they were handed in.
+        $attemptNumbers = QuizResponse::attemptNumbers($responses);
+
+        return $responses
+            ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone, $attemptNumbers): array {
                 // Scored against the current answer keys, so a corrected key re-grades earlier answers.
                 $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
                 // With questions drawn per student, the maximum is that of the questions they got.
@@ -294,11 +300,14 @@ class QuizResultsReport
                     'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
                     'answers' => is_array($response->answers) ? $response->answers : [],
+                    'attempt' => $attemptNumbers[$response->id]['attempt'] ?? 1,
+                    'attempts' => $attemptNumbers[$response->id]['attempts'] ?? 1,
                 ];
             })
             ->sort(fn (array $a, array $b): int => ($a['kelas'] === '-') <=> ($b['kelas'] === '-')
                 ?: strnatcasecmp($a['kelas'], $b['kelas'])
-                ?: strnatcasecmp($a['name'], $b['name']))
+                ?: strnatcasecmp($a['name'], $b['name'])
+                ?: $a['attempt'] <=> $b['attempt'])
             ->values();
     }
 

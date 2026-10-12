@@ -213,8 +213,8 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                 </div>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                     P &gt; 0,70 mudah, 0,31–0,70 sedang, ≤ 0,30 sukar. D &gt; 0,40 baik, 0,21–0,40 cukup (revisi), ≤ 0,20 jelek (ganti); D negatif
-                    berarti siswa bernilai tinggi lebih sering salah. Pengecoh berfungsi bila dipilih minimal 5% siswa. Analisis juga ada di lembar
-                    ketiga file Excel.
+                    berarti siswa bernilai tinggi lebih sering salah. Pengecoh berfungsi bila dipilih minimal 5% siswa. Siswa yang mengerjakan lebih
+                    dari sekali dihitung dari percobaan pertamanya. Analisis juga ada di lembar ketiga file Excel.
                 </p>
             </template>
         </div>

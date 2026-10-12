@@ -61,35 +61,24 @@ class QuizResponseController extends Controller
         // on a shared lab computer must never open another student's exam session (or its draft).
         $respondentIdentifier = $user ? 'user_'.$user->id : $this->guestRespondentIdentifier($request);
 
-        // Check single-response restriction early
-        if (! empty($quizForm->settings['limitOneResponse'])) {
-            $hasSubmitted = false;
-            if ($user) {
-                $hasSubmitted = QuizResponse::where('quiz_form_id', $quizForm->id)
-                    ->where('user_id', $user->id)
-                    ->exists();
-            }
-            if (! $hasSubmitted && $respondentIdentifier) {
-                $hasSubmitted = QuizResponse::where('quiz_form_id', $quizForm->id)
-                    ->where('respondent_identifier', $respondentIdentifier)
-                    ->exists();
-            }
+        // The teacher may limit how many times a student takes the quiz (every attempt is kept).
+        $attemptsUsed = $quizForm->attemptsUsedBy($user, $respondentIdentifier);
+        $maxAttempts = $quizForm->maxAttempts();
 
-            if ($hasSubmitted) {
-                return Inertia::render('PublicQuiz', [
-                    'quizForm' => [
-                        'id' => $quizForm->id,
-                        'slug' => $quizForm->slug,
-                        'title' => $quizForm->title,
-                        'description' => $quizForm->description,
-                        'questions' => [],
-                        'settings' => $quizForm->settings,
-                        'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
-                    ],
-                    'accessRestricted' => true,
-                    'restrictionReason' => 'Anda sudah pernah mengisi kuis ini. Setiap peserta dibatasi hanya dapat mengirim 1 kali tanggapan.',
-                ]);
-            }
+        if ($maxAttempts !== null && $attemptsUsed >= $maxAttempts) {
+            return Inertia::render('PublicQuiz', [
+                'quizForm' => [
+                    'id' => $quizForm->id,
+                    'slug' => $quizForm->slug,
+                    'title' => $quizForm->title,
+                    'description' => $quizForm->description,
+                    'questions' => [],
+                    'settings' => $quizForm->settings,
+                    'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
+                ],
+                'accessRestricted' => true,
+                'restrictionReason' => $quizForm->noAttemptsLeftMessage(),
+            ]);
         }
 
         $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
@@ -166,6 +155,10 @@ class QuizResponseController extends Controller
                 'draft_answers' => $hasServerDraft ? $quizSession->draft_answers : null,
                 'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
+            'attempts' => [
+                'used' => $attemptsUsed,
+                'max' => $maxAttempts,
+            ],
             'accessRestricted' => false,
         ]);
     }
@@ -203,6 +196,8 @@ class QuizResponseController extends Controller
         }
 
         if ($session->started_at === null) {
+            abort_if($quizForm->hasNoAttemptsLeftFor($request->user(), $session->respondent_identifier), 403, $quizForm->noAttemptsLeftMessage());
+
             // The questions are fixed now, with the settings of the moment the student starts.
             $examLayout->ensure($quizForm, $session);
 
@@ -284,35 +279,19 @@ class QuizResponseController extends Controller
                 return $this->submissionSucceeded($request, $quizForm);
             }
 
-            // (One response per student is answered below with its own message.)
-            if ($isExam && empty($quizForm->settings['limitOneResponse'])) {
+            // (A student out of attempts is answered below with its own message.)
+            if ($isExam && ! $quizForm->hasNoAttemptsLeftFor($user, $respondentIdentifier)) {
                 abort(403, 'Jawaban ujian ini sudah dikirim. Muat ulang halaman untuk melihat statusnya.');
             }
         }
 
-        // Check single response restriction
-        if (! empty($quizForm->settings['limitOneResponse'])) {
-            $hasSubmitted = false;
-            if ($user) {
-                $hasSubmitted = QuizResponse::where('quiz_form_id', $quizForm->id)
-                    ->where('user_id', $user->id)
-                    ->exists();
-            }
-            if (! $hasSubmitted && $respondentIdentifier) {
-                $hasSubmitted = QuizResponse::where('quiz_form_id', $quizForm->id)
-                    ->where('respondent_identifier', $respondentIdentifier)
-                    ->exists();
+        // The number of attempts the teacher allows (each attempt is kept with its own grade).
+        if ($quizForm->hasNoAttemptsLeftFor($user, $respondentIdentifier)) {
+            if ($request->wantsJson()) {
+                return response()->json(['message' => $quizForm->noAttemptsLeftMessage()], 403);
             }
 
-            if ($hasSubmitted) {
-                if ($request->wantsJson()) {
-                    return response()->json([
-                        'message' => 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.',
-                    ], 403);
-                }
-
-                return back()->withErrors(['error' => 'Anda sudah pernah mengisi kuis ini.']);
-            }
+            return back()->withErrors(['error' => $quizForm->noAttemptsLeftMessage()]);
         }
 
         $lateSeconds = null;

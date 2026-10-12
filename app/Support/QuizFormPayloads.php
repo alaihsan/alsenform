@@ -201,11 +201,16 @@ class QuizFormPayloads
         $maxScore = $scoring->maxPoints($formQuestions);
 
         // Guests type their own name: the same name (and class) on more than one response is flagged.
+        // (Attempts of the same guest device are one student, not a duplicate.)
         $guestNameCounts = $responses
             ->filter(fn (QuizResponse $response): bool => $response->user_id === null && filled($response->respondent_name))
+            ->unique(fn (QuizResponse $response): string => $response->studentKey())
             ->countBy(fn (QuizResponse $response): string => $this->guestNameKey($response));
 
-        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore, $guestNameCounts): array {
+        // A student may take the quiz more than once: every attempt keeps its own answers and grade.
+        $attemptNumbers = QuizResponse::attemptNumbers($responses);
+
+        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore, $guestNameCounts, $attemptNumbers): array {
             $score = is_array($response->answers) ? $scoring->score($formQuestions, $response->answers) : (int) ($response->score ?? 0);
             // With questions drawn per student, the maximum is that of the questions they got.
             $responseMax = $response->question_ids !== null
@@ -227,6 +232,8 @@ class QuizFormPayloads
                 'maxScore' => $responseMax,
                 'percentage' => $percentage,
                 'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
+                'attempt' => $attemptNumbers[$response->id]['attempt'] ?? 1,
+                'attempts' => $attemptNumbers[$response->id]['attempts'] ?? 1,
                 'is_timeout' => (bool) $response->is_timeout,
                 // Handed in by the server: the time ran out while the exam page was closed or offline.
                 'is_auto_submitted' => (bool) $response->is_auto_submitted,

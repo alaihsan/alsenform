@@ -104,6 +104,11 @@ const props = defineProps<{
         draft_answers?: Record<string, any> | null;
         draft_saved_at?: string | null;
     };
+    /** Attempts handed in before this one, and how many the teacher allows (null: no limit). */
+    attempts?: {
+        used: number;
+        max: number | null;
+    };
     accessRestricted?: boolean;
     restrictionReason?: string;
     allowedCohorts?: string[];
@@ -1046,6 +1051,12 @@ const examDurationLabel = computed<string>(() => {
     return rest === 0 ? `${hours} jam` : `${hours} jam ${rest} menit`;
 });
 
+/* How many times the student may take the quiz, and which attempt this is. */
+const maxAttempts = computed<number | null>(() => props.attempts?.max ?? (props.quizForm.settings.limitOneResponse ? 1 : null));
+const attemptNumber = computed<number>(() => (props.attempts?.used ?? 0) + 1);
+// After handing this attempt in: the attempts still left (null: no limit).
+const attemptsLeftAfterThis = computed<number | null>(() => (maxAttempts.value === null ? null : Math.max(0, maxAttempts.value - attemptNumber.value)));
+
 /** Rules shown before the exam starts, derived from how the teacher configured the quiz. */
 const examRules = computed<string[]>(() => {
     const settings = props.quizForm.settings;
@@ -1077,8 +1088,12 @@ const examRules = computed<string[]>(() => {
             : 'Gunakan panel Nomor Soal untuk melompat ke soal mana pun.',
     );
 
-    if (settings.limitOneResponse) {
+    if (maxAttempts.value === 1) {
         rules.push('Jawaban hanya dapat dikirim satu kali, jadi periksa kembali sebelum mengirim.');
+    } else if (maxAttempts.value) {
+        rules.push(
+            `Kesempatan mengerjakan ${maxAttempts.value} kali; ini percobaan ke-${attemptNumber.value}. Jawaban dan nilai setiap percobaan tetap tersimpan.`,
+        );
     }
 
     return rules;
@@ -1915,13 +1930,16 @@ const submitAnotherResponse = () => {
                     {{ quizForm.settings.confirmationMessage ?? 'Your response has been recorded' }}
                 </h1>
                 <button
-                    v-if="quizForm.settings.showSubmitAnotherResponse ?? true"
+                    v-if="(quizForm.settings.showSubmitAnotherResponse ?? true) && attemptsLeftAfterThis !== 0"
                     type="button"
                     class="mt-6 rounded-2xl border border-slate-300 px-5 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
                     @click="submitAnotherResponse"
                 >
-                    Submit another response
+                    {{ attemptsLeftAfterThis === null ? 'Submit another response' : `Kerjakan lagi (sisa ${attemptsLeftAfterThis} kesempatan)` }}
                 </button>
+                <p v-else-if="maxAttempts !== null && maxAttempts > 1" class="mt-4 text-sm font-semibold text-slate-500">
+                    Semua {{ maxAttempts }} kesempatan mengerjakan sudah dipakai.
+                </p>
             </div>
         </section>
 

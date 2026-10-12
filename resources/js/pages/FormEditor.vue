@@ -132,6 +132,7 @@ const form = reactive({
         sendResponseCopy: props.quizForm?.settings?.sendResponseCopy ?? 'off',
         allowResponseEditing: props.quizForm?.settings?.allowResponseEditing ?? false,
         limitOneResponse: props.quizForm?.settings?.limitOneResponse ?? false,
+        maxAttempts: props.quizForm?.settings?.maxAttempts ?? (props.quizForm?.settings?.limitOneResponse ? 1 : 0),
         confirmationMessage: props.quizForm?.settings?.confirmationMessage ?? 'Your response has been recorded',
         showSubmitAnotherResponse: props.quizForm?.settings?.showSubmitAnotherResponse ?? true,
         showResultsSummary: props.quizForm?.settings?.showResultsSummary ?? false,
@@ -467,6 +468,12 @@ watch(activeTab, (newTab) => {
 const markSettingsChanged = () => {
     form.settings.collectEmail = form.settings.emailCollectionMode !== 'none';
     markChanged('Settings updated');
+};
+
+/** How many times a student may take the quiz (0 is no limit); the older one-response switch follows it. */
+const updateMaxAttempts = () => {
+    form.settings.limitOneResponse = form.settings.maxAttempts === 1;
+    markSettingsChanged();
 };
 
 const toggleSetting = (key: keyof typeof form.settings) => {
@@ -3252,6 +3259,12 @@ watch(
                                                 title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
                                                 >Nama ganda</span
                                             >
+                                            <span
+                                                v-if="(item.attempts ?? 1) > 1"
+                                                class="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
+                                                :title="`Percobaan ke-${item.attempt} dari ${item.attempts} percobaan siswa ini`"
+                                                >Percobaan {{ item.attempt }}/{{ item.attempts }}</span
+                                            >
                                         </p>
                                         <p class="truncate text-[11px] text-slate-500">
                                             <span class="font-mono">{{ item.nis }}</span> · {{ item.kelas }} · {{ item.formattedDate }}
@@ -3316,6 +3329,12 @@ watch(
                                                     class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
                                                     title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
                                                     >Nama ganda</span
+                                                >
+                                                <span
+                                                    v-if="(item.attempts ?? 1) > 1"
+                                                    class="ml-1 whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
+                                                    :title="`Percobaan ke-${item.attempt} dari ${item.attempts} percobaan siswa ini`"
+                                                    >Percobaan {{ item.attempt }}/{{ item.attempts }}</span
                                                 >
                                             </td>
                                             <td class="px-4 py-3">
@@ -3553,24 +3572,26 @@ watch(
                                         </button>
                                     </div>
 
-                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Requires sign-in</p>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Kesempatan mengerjakan</p>
                                     <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Limit to 1 response</span>
-                                        <button
-                                            type="button"
-                                            :class="[
-                                                'relative h-5 w-11 shrink-0 rounded-full transition',
-                                                form.settings.limitOneResponse ? 'bg-indigo-500' : 'bg-slate-300',
-                                            ]"
-                                            @click="toggleSetting('limitOneResponse')"
+                                        <span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Batas pengerjaan per siswa</span>
+                                            <span class="mt-1 block text-sm text-slate-500"
+                                                >Setiap pengerjaan disimpan dengan jawaban dan nilainya sendiri: yang lama tidak tertimpa.</span
+                                            >
+                                        </span>
+                                        <select
+                                            v-model.number="form.settings.maxAttempts"
+                                            aria-label="Batas pengerjaan per siswa"
+                                            class="h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800"
+                                            @change="updateMaxAttempts"
                                         >
-                                            <span
-                                                :class="[
-                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
-                                                    form.settings.limitOneResponse ? 'left-5' : '-left-1',
-                                                ]"
-                                            ></span>
-                                        </button>
+                                            <option :value="0">Tanpa batas</option>
+                                            <option v-for="count in 10" :key="count" :value="count">{{ count }} kali</option>
+                                            <option v-if="form.settings.maxAttempts > 10" :value="form.settings.maxAttempts">
+                                                {{ form.settings.maxAttempts }} kali
+                                            </option>
+                                        </select>
                                     </div>
                                 </div>
                             </section>

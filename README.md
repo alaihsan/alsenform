@@ -84,7 +84,8 @@ Fitur editor lainnya:
 - **Soal acak per siswa**: tiap murid hanya mendapat sebagian soal, diambil acak dari ujian. Bisa berdasarkan jumlah soal, atau per tingkat kesulitan (misalnya 5 mudah, 3 sedang, 2 sulit) dari label soal. Nilai dihitung dari soal yang didapat masing-masing murid.
 - Tampilan disusun untuk layar HP: pilihan berhuruf yang besar, kisi soal berubah menjadi kartu, dan timer di bagian atas layar.
 - **Kuis publik tanpa akun.** Saat mempublikasikan, guru memilih data yang wajib diisi peserta di layar konfirmasi: Nama Lengkap, Kelas (7A–9D), dan Email. Setelah ujian dimulai, data itu dikunci. Nama peserta tamu tampil di rekap nilai, berkas Excel, panel buka kunci, dan laporan aktivitas. Nama dan kelas yang sama pada lebih dari satu jawaban diberi tanda "Nama ganda".
-- Bisa dipakai untuk **survei atau angket** tanpa timer dan tanpa login. Ada opsi pengumpulan email, batas satu kali pengisian, pesan konfirmasi, dan ringkasan hasil.
+- **Batas pengerjaan per siswa** (Settings → Kesempatan mengerjakan): 1 kali, beberapa kali (sampai 10), atau tanpa batas. Setiap pengerjaan disimpan dengan jawaban dan nilainya sendiri, jadi nilai lama dan terbaru sama-sama ada di rekap (ditandai "Percobaan 1/2", "2/2") dan di berkas Excel (kolom Percobaan). Murid melihat sisa kesempatannya setelah mengirim jawaban. Analisis butir soal memakai percobaan pertama tiap murid.
+- Bisa dipakai untuk **survei atau angket** tanpa timer dan tanpa login. Ada opsi pengumpulan email, batas pengisian, pesan konfirmasi, dan ringkasan hasil.
 
 ### Pengawasan dan anti-curang
 

@@ -150,6 +150,58 @@ class QuizForm extends Model
     }
 
     /**
+     * How many times a student may take this quiz: null for no limit. Forms saved before the
+     * setting existed have the older one-response switch.
+     */
+    public function maxAttempts(): ?int
+    {
+        $settings = is_array($this->settings) ? $this->settings : [];
+        $maxAttempts = $settings['maxAttempts'] ?? null;
+
+        if (is_numeric($maxAttempts)) {
+            return (int) $maxAttempts >= 1 ? (int) $maxAttempts : null;
+        }
+
+        return ! empty($settings['limitOneResponse']) ? 1 : null;
+    }
+
+    /**
+     * How many times a student handed this quiz in: an account by account, a guest by device.
+     */
+    public function attemptsUsedBy(?User $user, ?string $respondentIdentifier): int
+    {
+        if ($user !== null) {
+            return $this->responses()->where('user_id', $user->id)->count();
+        }
+
+        return filled($respondentIdentifier)
+            ? $this->responses()->whereNull('user_id')->where('respondent_identifier', $respondentIdentifier)->count()
+            : 0;
+    }
+
+    /**
+     * The student may not start another attempt: the limit set by the teacher is reached.
+     */
+    public function hasNoAttemptsLeftFor(?User $user, ?string $respondentIdentifier): bool
+    {
+        $maxAttempts = $this->maxAttempts();
+
+        return $maxAttempts !== null && $this->attemptsUsedBy($user, $respondentIdentifier) >= $maxAttempts;
+    }
+
+    /**
+     * What a student who used all attempts is told.
+     */
+    public function noAttemptsLeftMessage(): string
+    {
+        $maxAttempts = $this->maxAttempts();
+
+        return $maxAttempts === 1
+            ? 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.'
+            : "Anda sudah mengerjakan kuis ini {$maxAttempts} kali, sesuai batas kesempatan yang diberikan guru.";
+    }
+
+    /**
      * How many students handed in at least once: accounts counted by account, guests by their device.
      */
     public function submittedStudentCount(): int

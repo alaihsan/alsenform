@@ -36,7 +36,7 @@ class ItemAnalysis
     public function analyze(QuizForm $quizForm): array
     {
         $questions = array_values(array_filter(is_array($quizForm->questions) ? $quizForm->questions : [], fn (mixed $question): bool => is_array($question) && isset($question['id'])));
-        $responses = $quizForm->responses()->get(['id', 'answers', 'question_ids']);
+        $responses = $quizForm->responses()->get(['id', 'user_id', 'respondent_identifier', 'answers', 'question_ids']);
 
         return $this->analyzeResponses($questions, $responses);
     }
@@ -49,6 +49,13 @@ class ItemAnalysis
     public function analyzeResponses(array $questions, Collection $responses): array
     {
         $maxAll = $this->scoring->maxPoints($questions);
+
+        // A student who took the quiz more than once counts with their first attempt: the one made
+        // without having seen the questions before.
+        $responses = $responses
+            ->sortBy('id')
+            ->unique(fn (QuizResponse $response): string => $response->studentKey())
+            ->values();
 
         // Each student's grade (0–100, out of the questions they got) ranks them for the groups.
         $ranked = $responses
