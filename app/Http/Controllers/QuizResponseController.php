@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
+use App\Models\UnlockRequest;
 use App\Models\User;
 use App\Support\ActivityRecorder;
 use App\Support\MediaUrl;
@@ -148,7 +149,7 @@ class QuizResponseController extends Controller
                 'started_at' => $quizSession->started_at?->toISOString(),
                 'expires_at' => $quizSession->expires_at?->toISOString(),
                 'server_time' => now()->toISOString(),
-                'is_locked' => (bool) $quizSession->is_locked,
+                'is_locked' => $quizSession->isEffectivelyLocked($quizForm),
                 'draft_answers' => $hasServerDraft ? $quizSession->draft_answers : null,
                 'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
@@ -274,14 +275,18 @@ class QuizResponseController extends Controller
         }
 
         if ($session) {
-            if ($session->is_locked) {
-                abort(403, 'Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.');
-            }
-
-            if ($session->expires_at && now()->gt($session->expires_at->addSeconds(60))) {
+            if ($session->expires_at && now()->gt($session->expires_at->copy()->addSeconds(60))) {
                 $isTimeout = true;
             }
+
+            // A locked attempt waits for the teacher, except when its time is up: the answers
+            // given so far are then stored instead of being lost.
+            if ($session->isEffectivelyLocked($quizForm) && ! $this->timeIsUp($session)) {
+                abort(403, 'Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.');
+            }
         }
+
+        $wasLocked = $session?->isEffectivelyLocked($quizForm) ?? false;
 
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $validated['answers'] ?? []);
@@ -322,7 +327,7 @@ class QuizResponseController extends Controller
             respondentEmail: $identity['respondent_email'] ?? $validated['email'] ?? null,
             respondentName: $identity['respondent_name'],
             respondentClass: $identity['respondent_class'],
-            meta: $isTimeout ? ['timeout' => true] : [],
+            meta: array_filter(['timeout' => $isTimeout, 'locked' => $wasLocked]),
         );
 
         return $this->submissionSucceeded($request, $quizForm);
@@ -515,29 +520,105 @@ class QuizResponseController extends Controller
         ]);
     }
 
+    /**
+     * Lock the attempt after the student left the exam tab or window. Nothing is locked when
+     * the teacher has switched the lock off, before the exam starts or after it is handed in.
+     */
     public function lockSession(Request $request, QuizForm $quizForm): JsonResponse
     {
-        $identifier = $request->input('respondent_identifier') ?? ($request->user() ? 'user_'.$request->user()->id : null);
-        if ($identifier) {
-            $session = QuizSession::query()
-                ->where('quiz_form_id', $quizForm->id)
-                ->where('respondent_identifier', $identifier)
-                ->first();
+        $session = $this->sessionOfRequest($request, $quizForm);
 
-            if (! $session) {
-                $session = QuizSession::create([
-                    'quiz_form_id' => $quizForm->id,
-                    'user_id' => $request->user()?->id,
-                    'respondent_identifier' => $identifier,
-                    'session_token' => Str::random(40),
-                    'started_at' => now(),
-                    'is_locked' => true,
-                ]);
-            }
+        if (! $quizForm->locksOnBlur()) {
+            return $this->lockState($quizForm, $session);
+        }
 
+        if ($session === null && $request->user() !== null) {
+            $session = QuizSession::create([
+                'quiz_form_id' => $quizForm->id,
+                'user_id' => $request->user()->id,
+                'respondent_identifier' => 'user_'.$request->user()->id,
+                'session_token' => Str::random(40),
+                'started_at' => now(),
+            ]);
+        }
+
+        if ($session !== null && $session->started_at !== null && $session->submitted_at === null) {
             $session->recordBlurEvent($request->ip());
         }
 
-        return response()->json(['locked' => true]);
+        return $this->lockState($quizForm, $session);
+    }
+
+    /**
+     * The live lock state of an attempt, polled by the exam page: whether the teacher has the
+     * lock switched on (it can change mid-exam) and whether the attempt is locked right now.
+     */
+    public function examStatus(Request $request, QuizForm $quizForm): JsonResponse
+    {
+        $request->validate([
+            'session_token' => ['required', 'string', 'max:100'],
+        ]);
+
+        $session = $this->sessionOfRequest($request, $quizForm);
+
+        abort_if($session === null, 404);
+
+        return $this->lockState($quizForm, $session);
+    }
+
+    /**
+     * The exam session a lock or status request is about: by its token, or (older pages) by the
+     * signed-in account or the respondent identifier of a guest.
+     */
+    protected function sessionOfRequest(Request $request, QuizForm $quizForm): ?QuizSession
+    {
+        $token = $request->input('session_token');
+
+        if (is_string($token) && $token !== '') {
+            $session = QuizSession::query()
+                ->where('quiz_form_id', $quizForm->id)
+                ->where('session_token', $token)
+                ->first();
+
+            abort_if($session?->user_id !== null && $request->user() !== null && $session->user_id !== $request->user()->id, 403);
+
+            return $session;
+        }
+
+        $user = $request->user();
+        $identifier = $user ? 'user_'.$user->id : $request->input('respondent_identifier');
+
+        return is_string($identifier) && $identifier !== ''
+            ? $this->findExamSession($quizForm, $user, $identifier)
+            : null;
+    }
+
+    /**
+     * The lock state returned to the exam page.
+     */
+    protected function lockState(QuizForm $quizForm, ?QuizSession $session): JsonResponse
+    {
+        $unlockRequested = $session !== null && $session->isEffectivelyLocked($quizForm)
+            && UnlockRequest::query()
+                ->whereBelongsTo($quizForm)
+                ->where('respondent_identifier', $session->respondent_identifier)
+                ->where('status', 'pending')
+                ->exists();
+
+        return response()->json([
+            'lock_on_blur' => $quizForm->locksOnBlur(),
+            'locked' => $session?->isEffectivelyLocked($quizForm) ?? false,
+            'unlock_requested' => $unlockRequested,
+            'submitted' => $session?->submitted_at !== null,
+        ]);
+    }
+
+    /**
+     * Determine if the time limit of the attempt has run out. A little early is accepted: the
+     * page submits when its own clock reaches the end, which may run slightly ahead.
+     */
+    protected function timeIsUp(QuizSession $session): bool
+    {
+        return $session->expires_at !== null && now()->gte($session->expires_at->copy()->subSeconds(30));
     }
 }

@@ -114,6 +114,34 @@ class QuizForm extends Model
         ]));
     }
 
+    /**
+     * Determine if an attempt is locked when the student leaves the exam tab or window.
+     */
+    public function locksOnBlur(): bool
+    {
+        return filter_var($this->settings['lockOnBlur'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Unlock every locked attempt still in progress and close the pending unlock requests.
+     *
+     * @return int The number of attempts unlocked.
+     */
+    public function releaseLockedSessions(): int
+    {
+        $unlocked = $this->sessions()
+            ->where('is_locked', true)
+            ->whereNull('submitted_at')
+            ->update(['is_locked' => false, 'unlocked_at' => now()]);
+
+        UnlockRequest::query()
+            ->whereBelongsTo($this)
+            ->where('status', 'pending')
+            ->update(['status' => 'approved']);
+
+        return $unlocked;
+    }
+
     public function isRestrictedToCohorts(): bool
     {
         return $this->cohorts()->exists();

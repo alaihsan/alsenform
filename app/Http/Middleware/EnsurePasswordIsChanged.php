@@ -25,6 +25,7 @@ class EnsurePasswordIsChanged
                 'forms.responses.start',
                 'forms.responses.draft',
                 'forms.responses.lock',
+                'forms.responses.status',
                 'forms.public.unlock-requests.store',
                 'forms.public.unlock-requests.status',
                 'forms.public.unlock-verify',

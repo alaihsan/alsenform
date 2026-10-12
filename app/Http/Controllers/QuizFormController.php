@@ -79,6 +79,8 @@ class QuizFormController extends Controller
                 return null;
             }
 
+            $wasLockingOnBlur = $current->locksOnBlur();
+
             $current->update([
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? '',
@@ -90,6 +92,12 @@ class QuizFormController extends Controller
 
             if ($request->has('cohort_ids')) {
                 $current->cohorts()->sync($request->input('cohort_ids', []));
+            }
+
+            // Switching the tab-switch lock off releases the students it locked; their exam
+            // pages pick the change up while they are working.
+            if ($wasLockingOnBlur && ! $current->locksOnBlur()) {
+                $current->releaseLockedSessions();
             }
 
             return $current;

@@ -432,15 +432,17 @@ watch(email, (newVal) => {
     }
 });
 
-// Anti-Cheat (Focus Lock) Refs & Logic
+// Anti-Cheat (Focus Lock). The server holds the lock state; the page polls it during the exam, so
+// the teacher can switch the lock on or off, or unlock a student, while the exam is running.
+const LOCKED_POLL_MS = 4000;
+const STATUS_POLL_MS = 15000;
+const isLockOnBlurEnabled = ref<boolean>(Boolean(props.quizForm.settings?.lockOnBlur));
 const isLocked = ref(false);
-const unlockRequestEmail = ref('');
 const isRequestingUnlock = ref(false);
 const hasRequestedUnlock = ref(false);
-const unlockRequestStatus = ref<'none' | 'pending' | 'approved'>('none');
-const manualUnlockCode = ref('');
 const unlockError = ref('');
-const showRequestSuccess = ref(false);
+const lockModeNotice = ref('');
+let lockModeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const getRespondentIdentifier = () => {
     if (props.session?.respondent_identifier) {
@@ -459,31 +461,131 @@ const respondentIdentifier = getRespondentIdentifier();
 const timeRemaining = ref(0);
 const formattedTime = ref('');
 let timerInterval: any = null;
-let pollInterval: any = null;
-let isCheckingLockStatus = false;
 
-const checkLockStatus = async () => {
-    if (isCheckingLockStatus) {
+/*
+ * A lock the server has not confirmed yet is remembered on the device, so reloading the page or a
+ * dropped Wi-Fi connection cannot skip it. Once confirmed, only the server decides.
+ */
+const pendingLockKey = `lock_pending_${props.quizForm.id}`;
+const pendingLockValue = props.session?.token ?? respondentIdentifier;
+let isLockConfirmed = true;
+// Bumped by every new lock, so a status answer sent before it cannot unlock the page again.
+let lockVersion = 0;
+let isRefreshingLockState = false;
+let lockStateTimer: ReturnType<typeof setTimeout> | null = null;
+let isLockWatchActive = false;
+
+const rememberPendingLock = () => {
+    try {
+        localStorage.setItem(pendingLockKey, pendingLockValue);
+    } catch {
+        // Storage blocked: the lock is still sent while the page stays open.
+    }
+};
+
+const forgetPendingLock = () => {
+    try {
+        localStorage.removeItem(pendingLockKey);
+        // Flag of older versions of this page, which re-locked an attempt the teacher had unlocked.
+        localStorage.removeItem(`is_locked_${props.quizForm.id}`);
+    } catch {
+        // ignore
+    }
+};
+
+const hasPendingLock = () => {
+    try {
+        return localStorage.getItem(pendingLockKey) === pendingLockValue;
+    } catch {
+        return false;
+    }
+};
+
+const showLockModeNotice = (message: string) => {
+    lockModeNotice.value = message;
+    if (lockModeNoticeTimer) {
+        clearTimeout(lockModeNoticeTimer);
+    }
+    lockModeNoticeTimer = setTimeout(() => {
+        lockModeNotice.value = '';
+        lockModeNoticeTimer = null;
+    }, 10000);
+};
+
+type LockState = { lock_on_blur?: boolean; locked?: boolean; unlock_requested?: boolean };
+
+const applyLockState = (state: LockState) => {
+    const lockOnBlur = Boolean(state.lock_on_blur);
+    if (lockOnBlur !== isLockOnBlurEnabled.value && isLockWatchActive && !isSubmitted.value) {
+        showLockModeNotice(
+            lockOnBlur
+                ? 'Guru mengaktifkan kunci layar. Mulai sekarang jangan berpindah tab atau aplikasi sampai ujian selesai.'
+                : 'Guru menonaktifkan kunci layar untuk ujian ini.',
+        );
+    }
+    isLockOnBlurEnabled.value = lockOnBlur;
+
+    if (state.locked) {
+        isLocked.value = true;
+        hasRequestedUnlock.value = Boolean(state.unlock_requested);
+    } else {
+        unlockQuiz();
+    }
+};
+
+const refreshLockState = async () => {
+    const isSendingLock = !isLockConfirmed;
+    // Pages without an exam session (older links) can only send their locks.
+    if (!isLockWatchActive || isRefreshingLockState || isSubmitted.value || (!isSendingLock && !props.session?.token)) {
         return;
     }
-    isCheckingLockStatus = true;
+    isRefreshingLockState = true;
+    const version = lockVersion;
     try {
-        const response = await axios.get(`/forms/${props.quizForm.slug}/unlock-requests/status/${respondentIdentifier}`, {
-            timeout: REQUEST_TIMEOUT_MS,
-        });
-        if (response.data.status === 'approved') {
-            unlockQuiz();
-        } else {
-            unlockRequestStatus.value = response.data.status;
-            if (response.data.status === 'pending') {
-                hasRequestedUnlock.value = true;
-            }
+        const response = isSendingLock
+            ? await axios.post(
+                  `/forms/${props.quizForm.slug}/lock`,
+                  { session_token: props.session?.token ?? null, respondent_identifier: respondentIdentifier },
+                  { timeout: REQUEST_TIMEOUT_MS },
+              )
+            : await axios.get(`/forms/${props.quizForm.slug}/status`, {
+                  params: { session_token: props.session?.token },
+                  timeout: REQUEST_TIMEOUT_MS,
+              });
+        // A newer lock happened while this request was underway; it is sent right after.
+        if (version !== lockVersion) {
+            return;
         }
-    } catch (err) {
-        console.error('Failed to check unlock status', err);
+        if (isSendingLock) {
+            isLockConfirmed = true;
+            forgetPendingLock();
+        }
+        applyLockState(response.data);
+    } catch {
+        // Weak Wi-Fi: keep the current state and try again on the next poll.
     } finally {
-        isCheckingLockStatus = false;
+        isRefreshingLockState = false;
+        if (version !== lockVersion) {
+            void refreshLockState();
+        }
     }
+};
+
+const scheduleLockStatePoll = () => {
+    if (lockStateTimer) {
+        clearTimeout(lockStateTimer);
+        lockStateTimer = null;
+    }
+    if (!isLockWatchActive || isSubmitted.value || (!props.session?.token && isLockConfirmed)) {
+        return;
+    }
+    lockStateTimer = setTimeout(
+        async () => {
+            await refreshLockState();
+            scheduleLockStatePoll();
+        },
+        isLocked.value || !isLockConfirmed ? LOCKED_POLL_MS : STATUS_POLL_MS,
+    );
 };
 
 const requestUnlock = async () => {
@@ -497,86 +599,97 @@ const requestUnlock = async () => {
             `/forms/${props.quizForm.slug}/unlock-requests`,
             {
                 respondent_identifier: respondentIdentifier,
-                email: unlockRequestEmail.value || email.value || null,
+                email: email.value || null,
             },
             { timeout: REQUEST_TIMEOUT_MS },
         );
         hasRequestedUnlock.value = true;
-        unlockRequestStatus.value = 'pending';
-        showRequestSuccess.value = true;
     } catch (err: any) {
-        unlockError.value = err.response?.data?.message || 'Gagal mengirim permintaan buka kunci.';
+        unlockError.value = err.response?.data?.message || 'Gagal mengirim permintaan buka kunci. Coba lagi sebentar.';
     } finally {
         isRequestingUnlock.value = false;
     }
 };
 
-const verifyCode = async () => {
-    if (!manualUnlockCode.value) {
-        return;
-    }
-    unlockError.value = '';
-    try {
-        const response = await axios.post(
-            `/forms/${props.quizForm.slug}/unlock`,
-            {
-                respondent_identifier: respondentIdentifier,
-                code: manualUnlockCode.value,
-            },
-            { timeout: REQUEST_TIMEOUT_MS },
-        );
-        if (response.data.success) {
-            unlockQuiz();
-        }
-    } catch (err: any) {
-        unlockError.value = err.response?.data?.message || 'Kode salah. Silakan coba lagi.';
-    }
-};
-
 const lockQuiz = () => {
-    if (isSubmitted.value || isSubmitting.value) {
+    if (!isLockWatchActive || !isLockOnBlurEnabled.value || isSubmitted.value || isSubmitting.value || isLocked.value) {
         return;
     }
     isLocked.value = true;
-    localStorage.setItem(`is_locked_${props.quizForm.id}`, 'true');
-    axios
-        .post(
-            `/forms/${props.quizForm.slug}/lock`,
-            {
-                respondent_identifier: respondentIdentifier,
-            },
-            { timeout: REQUEST_TIMEOUT_MS },
-        )
-        .catch(() => {});
-
-    checkLockStatus();
-    if (!pollInterval) {
-        pollInterval = setInterval(checkLockStatus, 5000);
-    }
+    hasRequestedUnlock.value = false;
+    unlockError.value = '';
+    isLockConfirmed = false;
+    lockVersion++;
+    rememberPendingLock();
+    void refreshLockState();
+    scheduleLockStatePoll();
 };
 
 const unlockQuiz = () => {
     isLocked.value = false;
-    localStorage.setItem(`is_locked_${props.quizForm.id}`, 'false');
-    manualUnlockCode.value = '';
+    hasRequestedUnlock.value = false;
     unlockError.value = '';
-    showRequestSuccess.value = false;
-    if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-    }
 };
 
 const handleBlur = () => {
-    if (props.quizForm.settings?.lockOnBlur) {
-        lockQuiz();
+    if (!isLockOnBlurEnabled.value) {
+        return;
     }
+    // Playing a video in a question moves the focus into its frame: the student is still here.
+    setTimeout(() => {
+        if (document.activeElement instanceof HTMLIFrameElement && document.visibilityState === 'visible') {
+            return;
+        }
+        lockQuiz();
+    }, 0);
 };
 
 const handleVisibilityChange = () => {
-    if (document.visibilityState === 'hidden' && props.quizForm.settings?.lockOnBlur) {
-        lockQuiz();
+    if (document.visibilityState === 'hidden') {
+        if (isLockOnBlurEnabled.value) {
+            lockQuiz();
+        }
+        return;
     }
+    // Back on the page: pick up an unlock or a changed setting right away.
+    void refreshLockState();
+};
+
+/** Start following the lock state once the exam is running (not while the rules are read). */
+const startLockWatch = () => {
+    if (isLockWatchActive) {
+        return;
+    }
+    isLockWatchActive = true;
+    window.addEventListener('blur', handleBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (hasPendingLock()) {
+        // Locked before a reload, but the server never heard of it: send it now.
+        isLocked.value = true;
+        isLockConfirmed = false;
+    } else {
+        forgetPendingLock();
+        isLocked.value = Boolean(props.session?.is_locked);
+    }
+
+    void refreshLockState();
+    scheduleLockStatePoll();
+};
+
+const stopLockWatch = () => {
+    isLockWatchActive = false;
+    window.removeEventListener('blur', handleBlur);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (lockStateTimer) {
+        clearTimeout(lockStateTimer);
+        lockStateTimer = null;
+    }
+    if (lockModeNoticeTimer) {
+        clearTimeout(lockModeNoticeTimer);
+        lockModeNoticeTimer = null;
+    }
+    lockModeNotice.value = '';
 };
 
 /*
@@ -667,14 +780,9 @@ const beginExam = (questions: Question[]) => {
     // Restore draft answers saved on this device or on the server
     restoreDraft();
 
-    // Focus Lock (Anti-Cheat): only active while the exam is running, not while reading the rules
-    if (props.quizForm.settings?.lockOnBlur) {
-        window.addEventListener('blur', handleBlur);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        if (props.session?.is_locked || localStorage.getItem(`is_locked_${props.quizForm.id}`) === 'true') {
-            lockQuiz();
-        }
-    }
+    // Focus Lock (Anti-Cheat): only active while the exam is running, not while reading the rules.
+    // Followed also when switched off now, as the teacher may switch it on during the exam.
+    startLockWatch();
 
     startCountdown();
 };
@@ -782,7 +890,7 @@ const examRules = computed<string[]>(() => {
         rules.push(`Soal bertanda * wajib dijawab (${examRequiredCount.value} soal) sebelum jawaban dapat dikirim.`);
     }
 
-    if (settings.lockOnBlur) {
+    if (isLockOnBlurEnabled.value) {
         rules.push('Jangan berpindah tab, membuka aplikasi lain, atau meminimalkan browser. Ujian akan terkunci dan hanya dapat dibuka oleh pengawas.');
     }
 
@@ -833,13 +941,9 @@ onUnmounted(() => {
     if (serverPingTimer) {
         clearTimeout(serverPingTimer);
     }
-    window.removeEventListener('blur', handleBlur);
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    stopLockWatch();
     if (timerInterval) {
         clearInterval(timerInterval);
-    }
-    if (pollInterval) {
-        clearInterval(pollInterval);
     }
 });
 
@@ -1280,7 +1384,9 @@ const markSubmitted = () => {
     pendingSubmission.value = null;
     submissionError.value = '';
     clearDraft();
-    localStorage.removeItem(`is_locked_${props.quizForm.id}`);
+    stopLockWatch();
+    forgetPendingLock();
+    unlockQuiz();
     localStorage.removeItem(`form_start_time_${props.quizForm.id}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -1470,6 +1576,20 @@ const submitAnotherResponse = () => {
             <AlertCircle class="h-4 w-4 shrink-0" />
             <span v-if="!isOnline">Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
             <span v-else>Server ujian sedang tidak terjangkau. Jawaban tetap tersimpan di perangkat ini dan akan dikirim otomatis saat koneksi pulih.</span>
+        </div>
+
+        <!-- The teacher switched the tab-switch lock on or off during the exam -->
+        <div
+            v-if="lockModeNotice && !isSubmitted"
+            role="status"
+            :class="[
+                'fixed inset-x-4 bottom-24 z-[60] mx-auto flex max-w-xl items-start gap-2 rounded-2xl px-4 py-3 text-left text-xs font-bold shadow-xl sm:text-sm lg:bottom-8',
+                isLockOnBlurEnabled ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white',
+            ]"
+        >
+            <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
+            <span class="flex-1">{{ lockModeNotice }}</span>
+            <button type="button" class="shrink-0 rounded-lg px-1.5 text-white/80 hover:text-white" aria-label="Tutup pemberitahuan" @click="lockModeNotice = ''">✕</button>
         </div>
 
         <!-- Access Restricted State (Cohort Restriction) -->
@@ -2375,67 +2495,67 @@ const submitAnotherResponse = () => {
     </div>
 
     <!-- Locked Screen Overlay -->
-    <div v-if="isLocked" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md">
-        <section class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-8 text-center text-white shadow-2xl backdrop-blur-xl">
+    <div
+        v-if="isLocked && !isSubmitted"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="lock-title"
+        class="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-4 backdrop-blur-md"
+    >
+        <section class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/90 p-6 text-center text-white shadow-2xl backdrop-blur-xl sm:p-8">
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                <Lock class="h-8 w-8 animate-bounce" />
+                <Lock class="h-8 w-8" />
             </div>
-            
-            <h2 class="mt-6 text-2xl font-black tracking-tight text-white">Kuis Terkunci</h2>
-            <p class="mt-3 text-sm text-slate-400">
-                Sistem mendeteksi bahwa Anda telah memindahkan tab atau mem-blur jendela pengerjaan kuis.
+
+            <h2 id="lock-title" class="mt-6 text-2xl font-black tracking-tight text-white">Ujian Terkunci</h2>
+            <p class="mt-3 text-sm leading-relaxed text-slate-400">
+                Anda meninggalkan halaman ujian (pindah tab, membuka aplikasi lain, atau jendela kehilangan fokus). Jawaban Anda tetap tersimpan.
             </p>
 
-            <div class="mt-8 border-t border-slate-800/80 pt-6 space-y-6">
-                <!-- Request Status -->
-                <div v-if="hasRequestedUnlock" class="rounded-2xl bg-slate-800/50 p-4 border border-slate-700/30">
-                    <div class="flex items-center justify-center gap-2 text-amber-400 font-bold text-sm">
+            <div v-if="hasCountdownTimer && timeRemaining > 0" class="mt-5 flex items-center justify-center gap-2 text-sm text-slate-300">
+                <Clock class="h-4 w-4 text-indigo-400" />
+                <span>Sisa waktu <span class="font-mono font-bold text-white">{{ formattedTime }}</span></span>
+            </div>
+
+            <div class="mt-6 space-y-4 border-t border-slate-800/80 pt-6">
+                <div v-if="isSubmitting" class="rounded-2xl border border-slate-700/30 bg-slate-800/50 p-4 text-sm font-bold text-indigo-300">
+                    <div class="flex items-center justify-center gap-2">
                         <RefreshCw class="h-4 w-4 animate-spin" />
-                        <span>Menunggu Persetujuan...</span>
+                        <span>Waktu habis. Mengirim jawaban...</span>
                     </div>
-                    <p class="mt-1.5 text-xs text-slate-400 leading-relaxed">
-                        Permintaan buka kunci telah dikirim ke guru / pengawas. Halaman ini akan terbuka otomatis begitu disetujui oleh guru.
+                </div>
+
+                <div v-else-if="hasRequestedUnlock" class="rounded-2xl border border-slate-700/30 bg-slate-800/50 p-4">
+                    <div class="flex items-center justify-center gap-2 text-sm font-bold text-amber-400">
+                        <RefreshCw class="h-4 w-4 animate-spin" />
+                        <span>Menunggu guru membuka kunci...</span>
+                    </div>
+                    <p class="mt-1.5 text-xs leading-relaxed text-slate-400">
+                        Guru sudah diberi tahu. Halaman ini terbuka sendiri begitu kunci dibuka, tidak perlu dimuat ulang.
                     </p>
                 </div>
 
                 <div v-else class="space-y-3">
-                    <p class="text-xs text-slate-500 text-left">Minta persetujuan secara otomatis ke pembuat kuis:</p>
+                    <p class="text-xs leading-relaxed text-slate-400">
+                        Nama Anda sudah muncul di daftar siswa terkunci milik guru / pengawas. Tekan tombol di bawah agar guru tahu Anda menunggu.
+                    </p>
                     <button
                         type="button"
-                        class="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-4 shadow-lg transition-all"
+                        class="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-indigo-500 disabled:opacity-60"
                         :disabled="isRequestingUnlock"
                         @click="requestUnlock"
                     >
                         <RefreshCw v-if="isRequestingUnlock" class="h-4 w-4 animate-spin" />
-                        <span>Minta Kode Buka Kunci</span>
+                        <span>Minta Guru Membuka Kunci</span>
                     </button>
                 </div>
 
-                <!-- Manual Unlock Code Entry -->
-                <div class="space-y-3 pt-2">
-                    <label for="manual-code" class="block text-left text-xs text-slate-500">Atau masukkan kode buka kunci 6-digit secara manual:</label>
-                    <div class="flex gap-2">
-                        <input
-                            id="manual-code"
-                            v-model="manualUnlockCode"
-                            type="text"
-                            placeholder="Contoh: 123456"
-                            class="h-12 flex-1 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-center font-mono text-lg font-black tracking-wider text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
-                            @keyup.enter="verifyCode"
-                        />
-                        <button
-                            type="button"
-                            class="rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 transition-colors"
-                            @click="verifyCode"
-                        >
-                            Verifikasi
-                        </button>
-                    </div>
-                </div>
+                <p v-if="hasCountdownTimer && !isSubmitting" class="text-xs leading-relaxed text-slate-500">
+                    Jika waktu habis sebelum kunci dibuka, jawaban yang sudah diisi terkirim otomatis.
+                </p>
 
-                <!-- Error Messages -->
-                <div v-if="unlockError" class="rounded-xl bg-red-500/10 border border-red-500/20 p-3.5 text-xs text-red-400 font-medium">
-                    {{ unlockError }}
+                <div v-if="unlockError || submissionError" class="rounded-xl border border-red-500/20 bg-red-500/10 p-3.5 text-xs font-medium text-red-400">
+                    {{ unlockError || submissionError }}
                 </div>
             </div>
         </section>

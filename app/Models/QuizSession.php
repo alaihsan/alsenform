@@ -68,6 +68,26 @@ class QuizSession extends Model
         ]);
     }
 
+    /**
+     * Let the student continue the attempt.
+     */
+    public function unlock(): void
+    {
+        $this->update([
+            'is_locked' => false,
+            'unlocked_at' => now(),
+        ]);
+    }
+
+    /**
+     * Determine if the attempt is locked right now. The lock only holds while the form still
+     * locks on blur (the teacher can switch it off mid-exam) and the answers are not handed in.
+     */
+    public function isEffectivelyLocked(QuizForm $quizForm): bool
+    {
+        return $this->is_locked && $this->submitted_at === null && $quizForm->locksOnBlur();
+    }
+
     public function quizForm(): BelongsTo
     {
         return $this->belongsTo(QuizForm::class);

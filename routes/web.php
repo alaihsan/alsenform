@@ -71,6 +71,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         // Unlock Request Admin / Teacher Routes
         Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');
         Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
+        Route::post('forms/{quizForm}/sessions/unlock-all', [UnlockRequestController::class, 'unlockAll'])->name('forms.sessions.unlock-all');
+        Route::post('forms/{quizForm}/sessions/{quizSession}/unlock', [UnlockRequestController::class, 'unlockSession'])->name('forms.sessions.unlock');
 
         // Cohort Management Routes
         Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');
@@ -112,6 +114,7 @@ Route::post('forms/{quizForm:slug}/responses', [QuizResponseController::class, '
 Route::post('forms/{quizForm:slug}/start', [QuizResponseController::class, 'start'])->middleware('throttle:quiz-activity')->name('forms.responses.start');
 Route::post('forms/{quizForm:slug}/draft', [QuizResponseController::class, 'saveDraft'])->middleware('throttle:quiz-activity')->name('forms.responses.draft');
 Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:quiz-activity')->name('forms.responses.lock');
+Route::get('forms/{quizForm:slug}/status', [QuizResponseController::class, 'examStatus'])->middleware('throttle:quiz-activity')->name('forms.responses.status');
 Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-requests.store');
 Route::post('forms/{quizForm:slug}/unlock', [UnlockRequestController::class, 'verify'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-verify');
 Route::get('forms/{quizForm:slug}/unlock-requests/status/{identifier}', [UnlockRequestController::class, 'status'])->middleware('throttle:quiz-activity')->name('forms.public.unlock-requests.status');

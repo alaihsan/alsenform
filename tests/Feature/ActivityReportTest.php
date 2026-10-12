@@ -148,6 +148,15 @@ test('the report shows each activity with its device, browser and local time', f
         );
 });
 
+test('the report notes answers handed in when the time ran out during a lock', function () {
+    Carbon::setTestNow('2026-10-11 02:00:00');
+    ActivityLog::factory()->for($this->student)->examSubmitted($this->exam)->create(['created_at' => '2026-10-11 01:15:00', 'meta' => ['timeout' => true, 'locked' => true]]);
+
+    $this->actingAs($this->teacher)
+        ->get(route('reports.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('activities.rows.0.note', 'Waktu habis saat terkunci'));
+});
+
 test('teachers see their students and their own exams, admins see everything', function () {
     $otherTeacher = User::factory()->create(['name' => 'Pak Budi']);
     $otherExam = QuizForm::factory()->for($otherTeacher)->create(['title' => 'Ujian Fisika']);

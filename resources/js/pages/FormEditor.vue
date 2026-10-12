@@ -4,7 +4,7 @@ import RichContent from '@/components/RichContent.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
-import UnlockRequestsPanel from '@/components/form-editor/UnlockRequestsPanel.vue';
+import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
     colorThemes,
@@ -325,7 +325,10 @@ const isFormDefaultsOpen = ref(true);
 const isQuestionDefaultsOpen = ref(true);
 const isSecuritySettingsOpen = ref(true);
 
-const unlockRequests = ref<any[]>([]);
+const unlockRequests = ref<UnlockPanelEntry[]>([]);
+const lockedStudentCount = computed(() => unlockRequests.value.filter((entry) => entry.state === 'locked').length);
+const unlockingIds = ref<string[]>([]);
+const isUnlockingAll = ref(false);
 
 const fetchUnlockRequests = async () => {
     if (!props.quizForm?.id) {
@@ -339,13 +342,42 @@ const fetchUnlockRequests = async () => {
     }
 };
 
-const approveUnlockRequest = async (requestId: number) => {
+/** Unlock one student: their attempt when there is one, else their unlock request. */
+const unlockStudent = async (entry: UnlockPanelEntry) => {
+    if (!props.quizForm?.id || unlockingIds.value.includes(entry.id)) {
+        return;
+    }
+    unlockingIds.value = [...unlockingIds.value, entry.id];
     try {
-        await axios.post(`/unlock-requests/${requestId}/approve`);
-        fetchUnlockRequests();
-        markChanged('Unlock request approved');
+        if (entry.session_id !== null) {
+            await axios.post(`/forms/${props.quizForm.id}/sessions/${entry.session_id}/unlock`);
+        } else if (entry.request_id !== null) {
+            await axios.post(`/unlock-requests/${entry.request_id}/approve`);
+        }
+        statusMessage.value = `Kunci ${entry.name ?? 'siswa'} dibuka`;
     } catch (error) {
-        console.error('Failed to approve unlock request', error);
+        console.error('Failed to unlock student', error);
+        statusMessage.value = 'Gagal membuka kunci. Coba lagi.';
+    } finally {
+        unlockingIds.value = unlockingIds.value.filter((id) => id !== entry.id);
+        fetchUnlockRequests();
+    }
+};
+
+const unlockAllStudents = async () => {
+    if (!props.quizForm?.id || isUnlockingAll.value) {
+        return;
+    }
+    isUnlockingAll.value = true;
+    try {
+        const response = await axios.post(`/forms/${props.quizForm.id}/sessions/unlock-all`);
+        statusMessage.value = response.data?.message ?? 'Semua siswa dibuka kuncinya';
+    } catch (error) {
+        console.error('Failed to unlock all students', error);
+        statusMessage.value = 'Gagal membuka kunci. Coba lagi.';
+    } finally {
+        isUnlockingAll.value = false;
+        fetchUnlockRequests();
     }
 };
 
@@ -383,10 +415,14 @@ const handleShiftEnterKeydown = (event: KeyboardEvent) => {
 };
 
 let unlockRequestsInterval: any = null;
+let unlockRequestsTick = 0;
 onMounted(() => {
     resizeAllTextareas();
+    fetchUnlockRequests();
+    // Every 5 s on the Keamanan tab; elsewhere every 15 s while the lock is on, for the tab's count.
     unlockRequestsInterval = setInterval(() => {
-        if (activeTab.value === 'keamanan') {
+        unlockRequestsTick++;
+        if (activeTab.value === 'keamanan' || (form.settings.lockOnBlur && isPublished.value && unlockRequestsTick % 3 === 0)) {
             fetchUnlockRequests();
         }
     }, 5000);
@@ -1807,7 +1843,13 @@ watch(
                     ]"
                     @click="activeTab = tab as 'questions' | 'responses' | 'settings' | 'keamanan'"
                 >
-                    {{ tab === 'keamanan' ? 'keamanan' : tab }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span>
+                    {{ tab === 'keamanan' ? 'keamanan' : tab }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span
+                    ><span
+                        v-if="tab === 'keamanan' && lockedStudentCount > 0"
+                        class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold text-white"
+                        :title="`${lockedStudentCount} siswa terkunci`"
+                        >{{ lockedStudentCount }}</span
+                    >
                 </button>
             </nav>
         </header>
@@ -3835,8 +3877,13 @@ watch(
                 <UnlockRequestsPanel
                     v-else-if="activeTab === 'keamanan'"
                     :unlock-requests="unlockRequests"
+                    :lock-on-blur="Boolean(form.settings.lockOnBlur)"
+                    :busy-ids="unlockingIds"
+                    :is-unlocking-all="isUnlockingAll"
                     @refresh="fetchUnlockRequests"
-                    @approve="approveUnlockRequest"
+                    @unlock="unlockStudent"
+                    @unlock-all="unlockAllStudents"
+                    @toggle-lock="toggleSetting('lockOnBlur')"
                 />
             </div>
         </section>

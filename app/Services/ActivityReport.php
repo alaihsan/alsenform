@@ -201,7 +201,11 @@ class ActivityReport
             'browser' => $log->browser,
             'ip' => $log->ip_address,
             'userAgent' => $log->user_agent,
-            'note' => ($log->meta['timeout'] ?? false) ? 'Waktu habis' : null,
+            'note' => match (true) {
+                ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',
+                (bool) ($log->meta['timeout'] ?? false) => 'Waktu habis',
+                default => null,
+            },
         ];
     }
 
