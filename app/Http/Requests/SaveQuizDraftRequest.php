@@ -56,23 +56,38 @@ class SaveQuizDraftRequest extends FormRequest
                 }
 
                 $quizForm = $this->route('quizForm');
-                $questionIds = $quizForm instanceof QuizForm
-                    ? array_map('strval', array_column($quizForm->questions ?? [], 'id'))
-                    : [];
+                $problem = self::answersProblem($quizForm instanceof QuizForm ? $quizForm : null, $answers);
 
-                foreach (array_keys($answers) as $questionId) {
-                    if (! in_array((string) $questionId, $questionIds, true)) {
-                        $validator->errors()->add('answers', 'Draf berisi pertanyaan yang tidak ada di kuis ini.');
-
-                        return;
-                    }
-                }
-
-                $encoded = json_encode($answers, 0, self::MAX_DEPTH);
-                if ($encoded === false || strlen($encoded) > self::MAX_PAYLOAD_BYTES) {
-                    $validator->errors()->add('answers', 'Draf jawaban terlalu besar.');
+                if ($problem !== null) {
+                    $validator->errors()->add('answers', $problem);
                 }
             },
         ];
+    }
+
+    /**
+     * Why the answers cannot be stored as a draft of this quiz, or null when they can.
+     *
+     * @param  array<mixed>  $answers
+     */
+    public static function answersProblem(?QuizForm $quizForm, array $answers): ?string
+    {
+        $questionIds = $quizForm !== null
+            ? array_map('strval', array_column($quizForm->questions ?? [], 'id'))
+            : [];
+
+        if (count($answers) > 500) {
+            return 'Draf jawaban terlalu besar.';
+        }
+
+        foreach (array_keys($answers) as $questionId) {
+            if (! in_array((string) $questionId, $questionIds, true)) {
+                return 'Draf berisi pertanyaan yang tidak ada di kuis ini.';
+            }
+        }
+
+        $encoded = json_encode($answers, 0, self::MAX_DEPTH);
+
+        return $encoded === false || strlen($encoded) > self::MAX_PAYLOAD_BYTES ? 'Draf jawaban terlalu besar.' : null;
     }
 }

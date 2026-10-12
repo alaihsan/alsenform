@@ -110,7 +110,7 @@ class SubmitExpiredAttempts
 
             $wasLocked = $attempt->isEffectivelyLocked($quizForm);
             $questions = is_array($quizForm->questions) ? $quizForm->questions : [];
-            $answers = $this->savedAnswers($questions, $attempt->draft_answers);
+            $answers = $attempt->savedAnswersFor($quizForm);
             $isAccount = $attempt->user_id !== null;
 
             $response = new QuizResponse([
@@ -190,23 +190,5 @@ class SubmitExpiredAttempts
                     : $sameRespondent->whereNull('user_id')->where('respondent_identifier', $attempt->respondent_identifier)))
             ->where('created_at', '>=', $attempt->started_at)
             ->exists();
-    }
-
-    /**
-     * The saved answers to questions the exam still has.
-     *
-     * @param  array<int, mixed>  $questions
-     * @param  array<int|string, mixed>|null  $draftAnswers
-     * @return array<int|string, mixed>
-     */
-    protected function savedAnswers(array $questions, ?array $draftAnswers): array
-    {
-        $questionIds = array_map('strval', array_column($questions, 'id'));
-
-        return array_filter(
-            $draftAnswers ?? [],
-            fn (int|string $questionId): bool => in_array((string) $questionId, $questionIds, true),
-            ARRAY_FILTER_USE_KEY,
-        );
     }
 }

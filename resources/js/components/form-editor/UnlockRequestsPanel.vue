@@ -60,7 +60,7 @@ const formatTime = (value?: string | null) =>
                         <template v-else>Nonaktif: siswa tidak dikunci. Mematikan fitur ini membuka semua siswa yang sedang terkunci.</template>
                     </p>
                     <p class="mt-1 text-xs text-slate-500">
-                        Bisa diubah sebelum atau selama ujian; siswa yang sedang mengerjakan ikut berubah dalam ±15 detik.
+                        Bisa diubah sebelum atau selama ujian dan langsung berlaku untuk siswa yang sedang mengerjakan, tanpa pemberitahuan ke siswa.
                     </p>
                 </div>
                 <button

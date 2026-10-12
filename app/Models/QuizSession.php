@@ -88,6 +88,23 @@ class QuizSession extends Model
         return $this->is_locked && $this->submitted_at === null && $quizForm->locksOnBlur();
     }
 
+    /**
+     * The answers saved on the server (draft, or the copy taken when the attempt was locked) to
+     * questions the exam still has.
+     *
+     * @return array<int|string, mixed>
+     */
+    public function savedAnswersFor(QuizForm $quizForm): array
+    {
+        $questionIds = array_map('strval', array_column(is_array($quizForm->questions) ? $quizForm->questions : [], 'id'));
+
+        return array_filter(
+            is_array($this->draft_answers) ? $this->draft_answers : [],
+            fn (int|string $questionId): bool => in_array((string) $questionId, $questionIds, true),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
     public function quizForm(): BelongsTo
     {
         return $this->belongsTo(QuizForm::class);

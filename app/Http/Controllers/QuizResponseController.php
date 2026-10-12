@@ -246,9 +246,14 @@ class QuizResponseController extends Controller
         // The server handed this attempt in when its time ran out, while the page was offline. What
         // the page sends now is what the student had on the device then: its answers win, and the
         // answers the server had saved stay where the device has none (another, empty device).
+        // A locked attempt keeps the answers it had when it was locked.
         $autoSubmitted = $this->isRetryOfSubmittedAttempt($session, $validated['session_token'] ?? null)
             ? $this->autoSubmittedResponse($session)
             : null;
+
+        if ($autoSubmitted !== null && $session->is_locked && $quizForm->locksOnBlur()) {
+            return $this->submissionSucceeded($request, $quizForm);
+        }
 
         if ($autoSubmitted !== null) {
             $answers = array_replace(
@@ -312,8 +317,14 @@ class QuizResponseController extends Controller
 
         $wasLocked = $session?->isEffectivelyLocked($quizForm) ?? false;
 
+        // A locked attempt handed in at the end of the time counts the answers it had when it was
+        // locked: anything changed behind the lock screen is ignored.
+        $answers = $wasLocked && is_array($session->draft_answers)
+            ? $session->savedAnswersFor($quizForm)
+            : $validated['answers'];
+
         // Calculate score on the server
-        $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $validated['answers'] ?? []);
+        $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
 
         // A guest's identity: what the exam session locked at the start, or (a survey that opens
         // without a confirmation screen) what is sent now.
@@ -328,7 +339,7 @@ class QuizResponseController extends Controller
             'respondent_name' => $identity['respondent_name'],
             'respondent_class' => $identity['respondent_class'],
             'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
-            'answers' => $validated['answers'],
+            'answers' => $answers,
             'score' => $score,
             'is_timeout' => $isTimeout,
             'ip_address' => $request->ip(),
@@ -544,6 +555,11 @@ class QuizResponseController extends Controller
             return response()->json(['saved' => false, 'submitted' => true], 409);
         }
 
+        // While locked the answers stay as they were at the lock (see lockSession()).
+        if ($session->isEffectivelyLocked($quizForm)) {
+            return response()->json(['saved' => false, 'locked' => true]);
+        }
+
         if (! empty($quizForm->settings['disableRespondentAutosave'])) {
             return response()->json(['saved' => false]);
         }
@@ -582,7 +598,15 @@ class QuizResponseController extends Controller
         }
 
         if ($session !== null && $session->started_at !== null && $session->submitted_at === null) {
+            $wasLocked = $session->isEffectivelyLocked($quizForm);
             $session->recordBlurEvent($request->ip());
+
+            // The answers on the page when the student left are kept: they are the ones that count
+            // if the time runs out before the teacher unlocks. Not replaced by a repeated lock.
+            $snapshot = $request->input('answers');
+            if (! $wasLocked && is_array($snapshot) && SaveQuizDraftRequest::answersProblem($quizForm, $snapshot) === null) {
+                $session->update(['draft_answers' => $snapshot, 'draft_saved_at' => now()]);
+            }
         }
 
         return $this->lockState($quizForm, $session);

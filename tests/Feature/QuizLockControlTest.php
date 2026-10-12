@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\SubmitExpiredAttempts;
 use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
@@ -368,4 +369,104 @@ test('the lock status needs the token of an existing attempt', function () {
 
     $this->getJson(route('forms.responses.status', $quizForm->slug))->assertUnprocessable();
     $this->getJson(route('forms.responses.status', ['quizForm' => $quizForm->slug, 'session_token' => 'unknown']))->assertNotFound();
+});
+
+test('the answers on the page when the student left are the ones that count while locked', function () {
+    $quizForm = lockingQuiz(['timeLimit' => 10]);
+    $session = runningAttempt($quizForm, ['expires_at' => now()->addMinutes(5)]);
+
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 1'],
+    ])->assertJsonPath('locked', true);
+
+    // Changes made behind the lock screen (developer tools) are not saved...
+    $this->postJson(route('forms.responses.draft', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 2'],
+    ])->assertOk()->assertJsonPath('saved', false)->assertJsonPath('locked', true);
+
+    // ...a second lock request does not replace the copy taken at the first one...
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 2'],
+    ])->assertJsonPath('locked', true);
+
+    expect($session->refresh()->draft_answers)->toEqual([1 => 'Option 1']);
+
+    // ...and do not count when the time runs out while still locked.
+    $this->travel(5)->minutes();
+
+    $this->postJson(route('forms.responses.store', $quizForm->slug), array_merge(submission($session, isTimeout: true), [
+        'answers' => [1 => 'Option 2'],
+    ]))->assertOk();
+
+    expect(QuizResponse::query()->sole()->answers)->toEqual([1 => 'Option 1']);
+});
+
+test('after the teacher unlocks, the student answers and saves as usual', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+    $quizForm = lockingQuiz(owner: $teacher);
+    $session = runningAttempt($quizForm);
+
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), ['session_token' => $session->session_token, 'answers' => [1 => 'Option 1']]);
+    $this->actingAs($teacher)->postJson(route('forms.sessions.unlock', [$quizForm, $session]))->assertOk();
+    auth()->logout();
+
+    $this->postJson(route('forms.responses.draft', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 2'],
+    ])->assertJsonPath('saved', true);
+
+    $this->postJson(route('forms.responses.store', $quizForm->slug), array_merge(submission($session), ['answers' => [1 => 'Option 2']]))->assertOk();
+
+    expect(QuizResponse::query()->sole()->answers)->toEqual([1 => 'Option 2']);
+});
+
+test('a lock with answers to unknown questions still locks, without keeping those answers', function () {
+    $quizForm = lockingQuiz();
+    $session = runningAttempt($quizForm, ['draft_answers' => [1 => 'Option 1']]);
+
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [999 => 'injected'],
+    ])->assertJsonPath('locked', true);
+
+    expect($session->refresh())
+        ->is_locked->toBeTrue()
+        ->draft_answers->toEqual([1 => 'Option 1']);
+});
+
+test('the page asking while the lock is off changes nothing, and is locked the moment the teacher switches it on', function () {
+    $quizForm = lockingQuiz(['lockOnBlur' => false]);
+    $session = runningAttempt($quizForm);
+    $leave = fn () => $this->postJson(route('forms.responses.lock', $quizForm->slug), [
+        'session_token' => $session->session_token,
+        'answers' => [1 => 'Option 1'],
+    ]);
+
+    $leave()->assertExactJson(['lock_on_blur' => false, 'locked' => false, 'unlock_requested' => false, 'submitted' => false]);
+    expect($session->refresh())->blur_count->toBe(0)->draft_answers->toBeNull();
+
+    $quizForm->update(['settings' => array_merge($quizForm->settings, ['lockOnBlur' => true])]);
+
+    $leave()->assertJsonPath('locked', true)->assertJsonPath('lock_on_blur', true);
+    expect($session->refresh())->blur_count->toBe(1)->draft_answers->toEqual([1 => 'Option 1']);
+});
+
+test('answers handed in by the server for a locked attempt are not changed by the page later', function () {
+    $quizForm = lockingQuiz(['timeLimit' => 10]);
+    $session = runningAttempt($quizForm, ['expires_at' => now()->addMinute()]);
+    $this->postJson(route('forms.responses.lock', $quizForm->slug), ['session_token' => $session->session_token, 'answers' => [1 => 'Option 1']]);
+
+    $this->travel(3)->minutes();
+    app(SubmitExpiredAttempts::class)->handle();
+
+    $this->postJson(route('forms.responses.store', $quizForm->slug), array_merge(submission($session, isTimeout: true), [
+        'answers' => [1 => 'Option 2'],
+    ]))->assertOk();
+
+    expect(QuizResponse::query()->sole())
+        ->answers->toEqual([1 => 'Option 1'])
+        ->is_auto_submitted->toBeTrue();
 });

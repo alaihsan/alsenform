@@ -4,6 +4,7 @@ use App\Http\Controllers\ActivityReportController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
+use App\Http\Controllers\QuestionBankController;
 use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
 use App\Http\Controllers\QuizFormCollaboratorController;
@@ -63,6 +64,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
+        Route::get('question-bank', [QuestionBankController::class, 'index'])->name('question-bank.index');
+        Route::post('question-bank/questions', [QuestionBankController::class, 'questions'])->name('question-bank.questions');
 
         // Laporan: logins and exam participation with device, browser and time
         Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');

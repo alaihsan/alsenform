@@ -62,6 +62,7 @@ Fitur editor lainnya:
 
 - **Impor dari Microsoft Word (.docx).** Templat Word bisa diunduh dari aplikasi, berisi contoh untuk setiap tipe soal. Cukup ketik nomor soal, pilihan A–E, dan baris `Jawaban:`. Gambar dan rumus ikut terbaca. Baris tambahan `Tipe:`, `Poin:`, `Wajib:`, dan `Skala:` bersifat opsional. Soal yang perlu dicek ulang ditandai setelah impor.
 - **Impor dari ExamView** lewat ekspor Blackboard 6.0–9.0 (.zip), termasuk gambar soal.
+- **Bank soal.** Setiap soal yang ditulis guru tersimpan otomatis sebagai cadangan, juga setelah soal atau ujiannya dihapus. Di **Import Soal → Bank Soal**, guru mencari soal lamanya (teks soal atau pilihan jawaban), menyaring per tipe atau asal ujian, mencentang yang dibutuhkan, lalu menambahkannya lengkap dengan kunci, poin, dan gambar. Soal yang sudah ada di ujian yang sedang dibuka ditandai. Bank soal hanya terlihat oleh guru pemiliknya.
 - **Impor data murid** dari CSV atau tempel langsung dari Excel. Pemisah koma, titik koma, atau tab dikenali otomatis.
 - **Ekspor nilai ke Excel (.xlsx)** dengan dua lembar: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai) dan jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal.
 - **Ekspor laporan aktivitas** ke Excel.
@@ -84,7 +85,8 @@ Fitur editor lainnya:
 
 - **Kunci saat pindah tab (lock on blur).** Begitu murid meninggalkan halaman ujian, sesinya dikunci di server dan setiap perpindahan dicatat beserta jamnya.
 - Murid yang terkunci langsung muncul di tab **Keamanan & Kunci** milik guru, lengkap dengan jumlah pindah tab dan jamnya. Guru membuka kunci satu per satu atau sekaligus; halaman murid terbuka sendiri dalam beberapa detik. Selama terkunci, jawaban tidak hilang, waktu tetap berjalan, dan jawaban terkirim otomatis bila waktu habis.
-- Kunci bisa dinyalakan atau dimatikan **sebelum maupun selama ujian**. Murid yang sedang mengerjakan ikut berubah dalam ±15 detik; mematikannya membuka semua murid yang terkunci.
+- Kunci bisa dinyalakan atau dimatikan **sebelum maupun selama ujian**, dan langsung berlaku tanpa pemberitahuan ke murid: begitu dinyalakan, saat murid berikutnya meninggalkan halaman ujian ia terkunci; mematikannya membuka semua murid yang terkunci dalam beberapa detik.
+- Jawaban **dibekukan saat terkunci**: yang dihitung adalah jawaban di halaman pada saat murid meninggalkannya. Perubahan di balik layar kunci (misalnya lewat developer tools) tidak disimpan dan tidak ikut dinilai.
 - **Pembatasan peserta per kelompok (cohort)**: ujian hanya bisa dibuka oleh murid di kelas atau kelompok yang dipilih.
 - **Laporan aktivitas** (lihat di bawah) menunjukkan perangkat dan browser yang dipakai saat mulai dan mengirim ujian, jadi murid yang berganti perangkat di tengah ujian ikut terlihat.
 

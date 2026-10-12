@@ -4,6 +4,7 @@ import RichContent from '@/components/RichContent.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
+import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
@@ -28,6 +29,7 @@ import {
     AlignLeft,
     AlignRight,
     Archive,
+    Library,
     Check,
     ChevronDown,
     Circle,
@@ -201,7 +203,7 @@ const openLightbox = (media: any) => {
 const fileInput = ref<HTMLInputElement | null>(null);
 const docxFileInput = ref<HTMLInputElement | null>(null);
 const examviewFileInput = ref<HTMLInputElement | null>(null);
-const importSource = ref<'examview' | 'docx'>('examview');
+const importSource = ref<'examview' | 'docx' | 'bank'>('examview');
 const isImportModalOpen = ref(false);
 const isImportingFile = ref(false);
 const importError = ref('');
@@ -1209,6 +1211,33 @@ const handleDrop = (question: Question, event: DragEvent) => {
     }
     draggedQuestionId.value = null;
     draggableQuestionId.value = null;
+};
+
+/** Questions chosen in the "Bank Soal" tab: copies of earlier questions, added at the end. */
+const addQuestionsFromBank = (bankQuestions: Record<string, any>[]) => {
+    bankQuestions.forEach((bankQuestion) => {
+        const copy = JSON.parse(JSON.stringify(bankQuestion));
+        const question: Question = {
+            ...copy,
+            id: nextQuestionId++,
+            title: copy.title || 'Untitled Question',
+            description: copy.description || '',
+            type: copy.type || 'Multiple choice',
+            options: Array.isArray(copy.options) ? copy.options : [],
+            rows: Array.isArray(copy.rows) ? copy.rows : [],
+            columns: Array.isArray(copy.columns) ? copy.columns : [],
+            answer: copy.answer ?? '',
+            required: !!copy.required,
+            media: Array.isArray(copy.media) ? copy.media : [],
+            points: copy.points ?? 1,
+        };
+        form.questions.push(question);
+        activeQuestionId.value = question.id;
+    });
+
+    activeTab.value = 'questions';
+    isImportModalOpen.value = false;
+    markChanged(`${bankQuestions.length} soal dari bank soal ditambahkan`);
 };
 
 const downloadImportTemplate = () => {
@@ -4057,15 +4086,20 @@ watch(
         </div>
 
         <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <section class="max-h-[92vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <section
+                :class="[
+                    'max-h-[92vh] w-full space-y-5 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl',
+                    importSource === 'bank' ? 'max-w-2xl' : 'max-w-lg',
+                ]"
+            >
                 <div class="flex items-center justify-between">
-                    <h2 class="text-xl font-extrabold text-slate-900">Import Bank Soal</h2>
+                    <h2 class="text-xl font-extrabold text-slate-900">Import Soal</h2>
                     <button type="button" class="text-lg font-bold text-slate-400 transition hover:text-slate-600" @click="isImportModalOpen = false">
                         x
                     </button>
                 </div>
 
-                <!-- Segmented Tabs: ExamView (.zip) vs Word (.docx) -->
+                <!-- Segmented Tabs: ExamView (.zip), Word (.docx) and the question bank -->
                 <div class="flex rounded-2xl bg-slate-100 p-1">
                     <button
                         type="button"
@@ -4089,10 +4123,24 @@ watch(
                         <FileText class="h-4 w-4" />
                         Word (.docx)
                     </button>
+                    <button
+                        type="button"
+                        :class="[
+                            'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition',
+                            importSource === 'bank' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900',
+                        ]"
+                        @click="importSource = 'bank'"
+                    >
+                        <Library class="h-4 w-4" />
+                        Bank Soal
+                    </button>
                 </div>
 
+                <!-- Question bank: the teacher's own earlier questions -->
+                <QuestionBankPicker v-if="importSource === 'bank'" :exam-id="props.quizForm?.id" @add="addQuestionsFromBank" />
+
                 <!-- ExamView Import Tab -->
-                <div v-if="importSource === 'examview'" class="space-y-4">
+                <div v-else-if="importSource === 'examview'" class="space-y-4">
                     <div class="space-y-2 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 text-xs text-indigo-950">
                         <span class="block font-bold text-indigo-900">Panduan Ekspor dari ExamView:</span>
                         <ol class="list-inside list-decimal space-y-1 text-slate-600">

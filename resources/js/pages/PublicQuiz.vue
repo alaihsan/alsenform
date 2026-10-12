@@ -433,7 +433,8 @@ watch(email, (newVal) => {
 });
 
 // Anti-Cheat (Focus Lock). The server holds the lock state; the page polls it during the exam, so
-// the teacher can switch the lock on or off, or unlock a student, while the exam is running.
+// the teacher can switch the lock on or off, or unlock a student, while the exam is running. The
+// change applies quietly: the student is not told, the next time they leave the page counts.
 const LOCKED_POLL_MS = 4000;
 const STATUS_POLL_MS = 15000;
 const isLockOnBlurEnabled = ref<boolean>(Boolean(props.quizForm.settings?.lockOnBlur));
@@ -441,8 +442,6 @@ const isLocked = ref(false);
 const isRequestingUnlock = ref(false);
 const hasRequestedUnlock = ref(false);
 const unlockError = ref('');
-const lockModeNotice = ref('');
-let lockModeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const getRespondentIdentifier = () => {
     if (props.session?.respondent_identifier) {
@@ -501,29 +500,17 @@ const hasPendingLock = () => {
     }
 };
 
-const showLockModeNotice = (message: string) => {
-    lockModeNotice.value = message;
-    if (lockModeNoticeTimer) {
-        clearTimeout(lockModeNoticeTimer);
-    }
-    lockModeNoticeTimer = setTimeout(() => {
-        lockModeNotice.value = '';
-        lockModeNoticeTimer = null;
-    }, 10000);
-};
-
 type LockState = { lock_on_blur?: boolean; locked?: boolean; unlock_requested?: boolean };
 
+/** What a lock request carries: the attempt, and the answers on the page that count while it is locked. */
+const lockPayload = () => ({
+    session_token: props.session?.token ?? null,
+    respondent_identifier: respondentIdentifier,
+    answers: answers.value,
+});
+
 const applyLockState = (state: LockState) => {
-    const lockOnBlur = Boolean(state.lock_on_blur);
-    if (lockOnBlur !== isLockOnBlurEnabled.value && isLockWatchActive && !isSubmitted.value) {
-        showLockModeNotice(
-            lockOnBlur
-                ? 'Guru mengaktifkan kunci layar. Mulai sekarang jangan berpindah tab atau aplikasi sampai ujian selesai.'
-                : 'Guru menonaktifkan kunci layar untuk ujian ini.',
-        );
-    }
-    isLockOnBlurEnabled.value = lockOnBlur;
+    isLockOnBlurEnabled.value = Boolean(state.lock_on_blur);
 
     if (state.locked) {
         isLocked.value = true;
@@ -543,11 +530,7 @@ const refreshLockState = async () => {
     const version = lockVersion;
     try {
         const response = isSendingLock
-            ? await axios.post(
-                  `/forms/${props.quizForm.slug}/lock`,
-                  { session_token: props.session?.token ?? null, respondent_identifier: respondentIdentifier },
-                  { timeout: REQUEST_TIMEOUT_MS },
-              )
+            ? await axios.post(`/forms/${props.quizForm.slug}/lock`, lockPayload(), { timeout: REQUEST_TIMEOUT_MS })
             : await axios.get(`/forms/${props.quizForm.slug}/status`, {
                   params: { session_token: props.session?.token },
                   timeout: REQUEST_TIMEOUT_MS,
@@ -631,24 +614,61 @@ const unlockQuiz = () => {
     unlockError.value = '';
 };
 
-const handleBlur = () => {
-    if (!isLockOnBlurEnabled.value) {
+let isProbingLock = false;
+
+/**
+ * The page believes the lock is off, but the teacher may have switched it on a moment ago: the
+ * server decides, and locks the attempt if so.
+ */
+const probeLock = async () => {
+    if (isProbingLock || !props.session?.token) {
         return;
     }
+    isProbingLock = true;
+    const version = lockVersion;
+    try {
+        const response = await axios.post(`/forms/${props.quizForm.slug}/lock`, lockPayload(), { timeout: REQUEST_TIMEOUT_MS });
+        if (version !== lockVersion || isSubmitted.value || isSubmitting.value) {
+            return;
+        }
+        if (response.data?.locked) {
+            // A status answer sent before this lock must not unlock the page again.
+            lockVersion++;
+        }
+        applyLockState(response.data);
+        scheduleLockStatePoll();
+    } catch {
+        // Weak Wi-Fi: the next poll brings the current setting.
+    } finally {
+        isProbingLock = false;
+    }
+};
+
+/** The student left the exam page: another tab or app, or the screen went off. */
+const handleLeave = () => {
+    if (!isLockWatchActive || isSubmitted.value || isSubmitting.value || isLocked.value) {
+        return;
+    }
+    if (isLockOnBlurEnabled.value) {
+        lockQuiz();
+    } else {
+        void probeLock();
+    }
+};
+
+const handleBlur = () => {
     // Playing a video in a question moves the focus into its frame: the student is still here.
     setTimeout(() => {
         if (document.activeElement instanceof HTMLIFrameElement && document.visibilityState === 'visible') {
             return;
         }
-        lockQuiz();
+        handleLeave();
     }, 0);
 };
 
 const handleVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
-        if (isLockOnBlurEnabled.value) {
-            lockQuiz();
-        }
+        handleLeave();
         return;
     }
     // Back on the page: pick up an unlock or a changed setting right away.
@@ -685,11 +705,6 @@ const stopLockWatch = () => {
         clearTimeout(lockStateTimer);
         lockStateTimer = null;
     }
-    if (lockModeNoticeTimer) {
-        clearTimeout(lockModeNoticeTimer);
-        lockModeNoticeTimer = null;
-    }
-    lockModeNotice.value = '';
 };
 
 /*
@@ -1576,20 +1591,6 @@ const submitAnotherResponse = () => {
             <AlertCircle class="h-4 w-4 shrink-0" />
             <span v-if="!isOnline">Koneksi intranet terputus. Jawaban Anda tetap tersimpan aman di perangkat. Hubungkan kembali ke Wi-Fi sekolah untuk mengirimkan.</span>
             <span v-else>Server ujian sedang tidak terjangkau. Jawaban tetap tersimpan di perangkat ini dan akan dikirim otomatis saat koneksi pulih.</span>
-        </div>
-
-        <!-- The teacher switched the tab-switch lock on or off during the exam -->
-        <div
-            v-if="lockModeNotice && !isSubmitted"
-            role="status"
-            :class="[
-                'fixed inset-x-4 bottom-24 z-[60] mx-auto flex max-w-xl items-start gap-2 rounded-2xl px-4 py-3 text-left text-xs font-bold shadow-xl sm:text-sm lg:bottom-8',
-                isLockOnBlurEnabled ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white',
-            ]"
-        >
-            <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
-            <span class="flex-1">{{ lockModeNotice }}</span>
-            <button type="button" class="shrink-0 rounded-lg px-1.5 text-white/80 hover:text-white" aria-label="Tutup pemberitahuan" @click="lockModeNotice = ''">✕</button>
         </div>
 
         <!-- Access Restricted State (Cohort Restriction) -->

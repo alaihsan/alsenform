@@ -10,6 +10,7 @@ use App\Http\Requests\UploadQuizFormMediaRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Services\ImageOptimizationService;
+use App\Services\QuestionBank;
 use App\Support\MediaUrl;
 use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
@@ -71,7 +72,7 @@ class QuizFormController extends Controller
         ]);
     }
 
-    public function update(UpdateQuizFormRequest $request, QuizForm $quizForm, MediaUrl $mediaUrl): RedirectResponse
+    public function update(UpdateQuizFormRequest $request, QuizForm $quizForm, MediaUrl $mediaUrl, QuestionBank $questionBank): RedirectResponse
     {
         $validated = $request->validated();
 
@@ -106,6 +107,12 @@ class QuizFormController extends Controller
 
             return $current;
         });
+
+        if ($savedForm !== null) {
+            // Every question written is kept in the teacher's question bank, to reuse later. A
+            // problem there never stops the exam from being saved.
+            rescue(fn () => $questionBank->sync($savedForm));
+        }
 
         if ($savedForm === null) {
             return back()->withErrors([
