@@ -10,11 +10,15 @@ namespace App\Support;
 enum Addon: string
 {
     case ItemAnalysis = 'item-analysis';
+    case ExamToken = 'exam-token';
+    case Remedial = 'remedial';
 
     public function label(): string
     {
         return match ($this) {
             self::ItemAnalysis => 'Analisis Butir Soal',
+            self::ExamToken => 'Token Ujian',
+            self::Remedial => 'Remedial & Pengayaan',
         };
     }
 
@@ -22,6 +26,8 @@ enum Addon: string
     {
         return match ($this) {
             self::ItemAnalysis => 'Tingkat kesukaran, daya pembeda dan pengecoh tiap soal, dengan saran Dipakai, Revisi atau Ganti.',
+            self::ExamToken => 'Seperti ANBK: siswa mengetik token 6 huruf dari pengawas sebelum mulai. Token berganti setiap 15 menit.',
+            self::Remedial => 'Daftar siswa di bawah KKM tersusun otomatis; ujian remedial dan pengayaan dibuat dalam beberapa klik.',
         };
     }
 
@@ -29,6 +35,8 @@ enum Addon: string
     {
         return match ($this) {
             self::ItemAnalysis => 'Setelah siswa mengirim jawaban, setiap soal pilihan dianalisis seperti di buku Arikunto: berapa siswa yang benar (P), seberapa baik soal membedakan siswa bernilai tinggi dan rendah (D, kelompok atas dan bawah 27%), dan pengecoh mana yang tidak dipilih siapa pun. Setiap soal mendapat keputusan beserta alasannya.',
+            self::ExamToken => 'Pengawas menampilkan token di kelas (bisa layar penuh untuk proyektor) dan siswa mengetiknya di layar konfirmasi ujian. Tanpa token yang berlaku ujian tidak dapat dimulai, jadi ujian tidak dapat dikerjakan dari luar ruangan atau sebelum waktunya. Token berganti setiap 15 menit (menit :00, :15, :30 dan :45); token sebelumnya masih diterima 5 menit lagi agar siswa yang sedang mengetik tidak tertolak. Siswa yang sudah mulai tidak perlu mengetik token lagi saat halaman dimuat ulang. Guru pemilik dan kolaborator tidak perlu token saat mencoba ujiannya.',
+            self::Remedial => 'Setelah ulangan, siswa dibagi menjadi Belum Tuntas (di bawah KKM) dan Tuntas menurut nilai terbaiknya. Ujian remedial dibuat dari soal yang dijawab salah oleh siswa remedial, atau dari soal lain setopik di Bank Soal; ujian pengayaan dari soal sulit setopik. Ujian tindak lanjut dibuat sebagai draf dan hanya dapat dikerjakan siswa yang dipilih. Nilainya dicatat terpisah: nilai asli tidak berubah, dan laporan Excel menampilkan nilai asli, nilai remedial dan nilai akhir berdampingan.',
         };
     }
 
@@ -39,6 +47,8 @@ enum Addon: string
     {
         return match ($this) {
             self::ItemAnalysis => 'flask-conical',
+            self::ExamToken => 'key-round',
+            self::Remedial => 'graduation-cap',
         };
     }
 
@@ -55,6 +65,15 @@ enum Addon: string
                 'Laporan Excel: lembar ketiga "Analisis Butir Soal".',
                 'Tombol "Jadikan label kesulitan" untuk mengisi label tingkat kesulitan di Bank Soal.',
             ],
+            self::ExamToken => [
+                'Tab Keamanan: token yang berlaku, hitung mundur pergantiannya, dan tampilan layar penuh untuk proyektor.',
+                'Layar konfirmasi ujian: kolom Token yang wajib diisi siswa sebelum "Kerjakan Sekarang".',
+            ],
+            self::Remedial => [
+                'Tab Responses: panel Remedial & Pengayaan berisi siswa Belum Tuntas dan Tuntas beserta nilai tindak lanjutnya.',
+                'Tombol "Buat ujian remedial" dan "Buat ujian pengayaan": ujian baru (draf) khusus siswa yang dipilih.',
+                'Laporan Excel: lembar "Remedial & Pengayaan" dengan nilai asli, nilai remedial dan nilai akhir.',
+            ],
         };
     }
 
@@ -70,6 +89,13 @@ enum Addon: string
                 'Soal dan kunci jawaban ujian Anda.',
                 'Jawaban siswa di ujian Anda (tidak dikirim ke mana pun; semua dihitung di server sekolah).',
             ],
+            self::ExamToken => [
+                'Hanya ujian dan jam server sekolah: token dihitung di server, tidak membaca data siswa.',
+            ],
+            self::Remedial => [
+                'Nilai siswa di ujian Anda dan KKM di profil Anda.',
+                'Soal Bank Soal Anda beserta label topik dan tingkat kesulitannya.',
+            ],
         };
     }
 
@@ -79,7 +105,9 @@ enum Addon: string
     public function onByDefault(): bool
     {
         return match ($this) {
-            self::ItemAnalysis => true,
+            self::ItemAnalysis, self::Remedial => true,
+            // Students could not start an exam without a token: switched on per exam by the teacher.
+            self::ExamToken => false,
         };
     }
 }

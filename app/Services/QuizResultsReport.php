@@ -16,8 +16,6 @@ use Illuminate\Support\Str;
  */
 class QuizResultsReport
 {
-    protected const DEFAULT_KKM = 75;
-
     protected const SCORE_COLUMNS = 12;
 
     public function __construct(protected QuizScoring $scoring) {}
@@ -41,7 +39,7 @@ class QuizResultsReport
 
         // Only questions with an answer key can be earned, so a fully correct sheet is 100.
         $maxScore = $this->scoring->maxPoints($questions);
-        $kkm = $this->kkm($quizForm);
+        $kkm = $quizForm->kkm();
         $students = $this->students($quizForm, $questions, $maxScore);
 
         $workbook = (new XlsxWriter)
@@ -51,6 +49,9 @@ class QuizResultsReport
         // Sheets of the add-ons that are on for this exam.
         if ($quizForm->usesAddon(Addon::ItemAnalysis)) {
             $workbook->addSheet('Analisis Butir Soal', ...$this->analysisSheet($quizForm));
+        }
+        if ($quizForm->usesAddon(Addon::Remedial)) {
+            $workbook->addSheet('Remedial & Pengayaan', ...$this->remedialSheet($quizForm, $kkm));
         }
 
         $workbook->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
@@ -267,6 +268,75 @@ class QuizResultsReport
     }
 
     /**
+     * Remedial & Pengayaan: each student once, with the original grade (best attempt), the grade
+     * of the remedial or enrichment exam kept apart, and the grade that counts after remedial.
+     *
+     * @return array{0: list<list<mixed>|null>, 1: array<string, mixed>}
+     */
+    protected function remedialSheet(QuizForm $quizForm, float $kkm): array
+    {
+        $students = app(Remedial::class)->students($quizForm);
+        $headers = ['No', 'NIS', 'Nama Lengkap', 'Kelas', 'Nilai Asli', 'Status', 'Tindak Lanjut', 'Nilai Remedial', 'Nilai Pengayaan', 'Nilai Akhir', 'Keterangan'];
+        $lastColumn = XlsxWriter::columnLetter(count($headers));
+        $belowKkm = $students->where('passed', false);
+        $passedAfterRemedial = $belowKkm->filter(fn (array $student): bool => $student['remedialGrade'] !== null && $student['remedialGrade'] >= $kkm)->count();
+
+        $rows = [
+            [XlsxWriter::cell('Remedial & Pengayaan: '.$this->plainText((string) $quizForm->title), 'title')],
+            [XlsxWriter::cell(implode('   •   ', [
+                'KKM '.$this->decimal($kkm),
+                'Belum tuntas '.$belowKkm->count().' (remedial)',
+                'Tuntas '.($students->count() - $belowKkm->count()).' (pengayaan)',
+                "Tuntas setelah remedial {$passedAfterRemedial}",
+                'Nilai asli: nilai terbaik di ujian ini',
+                'Nilai akhir remedial paling tinggi sama dengan KKM; nilai asli tetap tercatat',
+            ]), 'subtitle')],
+            null,
+            array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $headers),
+        ];
+
+        foreach ($students->values() as $index => $student) {
+            $remedialGrade = $student['remedialGrade'];
+            $enrichmentGrade = $student['enrichmentGrade'];
+            $note = match (true) {
+                $student['passed'] => $enrichmentGrade !== null ? 'Mengikuti pengayaan' : 'Tuntas',
+                $remedialGrade === null => 'Belum mengikuti remedial',
+                $remedialGrade >= $kkm => 'Tuntas setelah remedial',
+                default => 'Belum tuntas setelah remedial',
+            };
+
+            $rows[] = [
+                XlsxWriter::cell($index + 1, 'integer'),
+                XlsxWriter::cell($student['nis'], 'textCenter'),
+                XlsxWriter::cell($student['name'], 'text'),
+                XlsxWriter::cell($student['kelas'], 'textCenter'),
+                XlsxWriter::cell($student['grade'], 'decimal'),
+                XlsxWriter::cell($student['passed'] ? 'Tuntas' : 'Belum Tuntas', $student['passed'] ? 'pass' : 'fail'),
+                XlsxWriter::cell($student['passed'] ? 'Pengayaan' : 'Remedial', 'textCenter'),
+                $remedialGrade !== null ? XlsxWriter::cell($remedialGrade, 'decimal') : XlsxWriter::cell('-', 'textCenter'),
+                $enrichmentGrade !== null ? XlsxWriter::cell($enrichmentGrade, 'decimal') : XlsxWriter::cell('-', 'textCenter'),
+                XlsxWriter::cell($student['finalGrade'], 'decimal'),
+                XlsxWriter::cell($note, match ($note) {
+                    'Tuntas setelah remedial' => 'pass',
+                    'Belum tuntas setelah remedial', 'Belum mengikuti remedial' => 'fail',
+                    default => 'textCenter',
+                }),
+            ];
+        }
+
+        $lastRow = max(4, count($rows));
+
+        return [$rows, [
+            'columns' => [5, 14, 30, 12, 11, 14, 14, 13, 14, 11, 28],
+            'freeze' => 'D5',
+            'autoFilter' => "A4:{$lastColumn}{$lastRow}",
+            'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
+            'rowHeights' => [1 => 28, 2 => 20],
+            'repeatRows' => [4, 4],
+        ]];
+    }
+
+    /**
      * The students who responded, sorted by class and name.
      *
      * @param  list<array<string, mixed>>  $questions
@@ -316,16 +386,6 @@ class QuizResultsReport
                 ?: strnatcasecmp($a['name'], $b['name'])
                 ?: $a['attempt'] <=> $b['attempt'])
             ->values();
-    }
-
-    /**
-     * The passing grade: the quiz owner's default KKM from their profile, else 75.
-     */
-    protected function kkm(QuizForm $quizForm): float
-    {
-        $kkm = $quizForm->user?->quiz_preferences['default_kkm'] ?? null;
-
-        return is_numeric($kkm) ? (float) $kkm : self::DEFAULT_KKM;
     }
 
     /**

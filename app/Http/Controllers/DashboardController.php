@@ -23,13 +23,15 @@ class DashboardController extends Controller
             $forms = QuizForm::query()
                 ->whereNotNull('published_at')
                 ->whereNull('deleted_at')
-                ->where(function ($query) use ($userCohortIds): void {
-                    $query->whereDoesntHave('cohorts');
+                ->where(function ($query) use ($userCohortIds, $user): void {
+                    // Open to everyone, or to the student's cohorts, or chosen for them (remedial / enrichment).
+                    $query->where(fn ($open) => $open->whereDoesntHave('cohorts')->whereDoesntHave('participants'));
                     if (! empty($userCohortIds)) {
                         $query->orWhereHas('cohorts', function ($q) use ($userCohortIds): void {
                             $q->whereIn('cohorts.id', $userCohortIds);
                         });
                     }
+                    $query->orWhereHas('participants', fn ($q) => $q->where('users.id', $user->id));
                 })
                 ->with(['user:id,name', 'cohorts:id,name'])
                 ->latest('published_at')

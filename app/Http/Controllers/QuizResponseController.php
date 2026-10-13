@@ -11,7 +11,9 @@ use App\Models\QuizSession;
 use App\Models\UnlockRequest;
 use App\Models\User;
 use App\Support\ActivityRecorder;
+use App\Support\Addon;
 use App\Support\ExamLayout;
+use App\Support\ExamToken;
 use App\Support\MediaUrl;
 use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
@@ -21,7 +23,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,8 +37,8 @@ class QuizResponseController extends Controller
 
         $user = auth()->user();
 
-        // If quiz is restricted to cohorts
-        if ($quizForm->isRestrictedToCohorts()) {
+        // If quiz is restricted to cohorts, or to the students chosen for it (remedial / enrichment)
+        if ($quizForm->isRestricted()) {
             if (! $user) {
                 return redirect()->guest(route('login'))->with('error', 'Kuis ini hanya dapat diakses oleh peserta terdaftar (Cohort). Silakan masuk terlebih dahulu.');
             }
@@ -51,7 +55,9 @@ class QuizResponseController extends Controller
                         'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                     ],
                     'accessRestricted' => true,
-                    'restrictionReason' => 'Akun Anda tidak terdaftar dalam kelompok (Cohort) peserta untuk kuis ini.',
+                    'restrictionReason' => $quizForm->isRestrictedToParticipants() && ! $quizForm->isRestrictedToCohorts()
+                        ? 'Ujian ini hanya untuk siswa yang dipilih guru (remedial atau pengayaan).'
+                        : 'Akun Anda tidak terdaftar dalam kelompok (Cohort) peserta untuk kuis ini.',
                     'allowedCohorts' => $quizForm->cohorts()->pluck('name')->all(),
                 ]);
             }
@@ -135,6 +141,8 @@ class QuizResponseController extends Controller
                 // Guests say who they are on the confirmation screen; accounts identify themselves.
                 'identityFields' => $user ? [] : app(RespondentIdentity::class)->fields($quizForm),
                 'respondentClasses' => RespondentIdentity::CLASSES,
+                // Token Ujian add-on: the token from the proctor is typed on the confirmation screen.
+                'requiresExamToken' => $this->requiresExamToken($quizForm, $user),
             ],
             'examSummary' => [
                 'questionCount' => count($sanitizedQuestions),
@@ -172,7 +180,7 @@ class QuizResponseController extends Controller
     {
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
-        if ($quizForm->isRestrictedToCohorts() && ! $quizForm->allowsUser($request->user())) {
+        if ($quizForm->isRestricted() && ! $quizForm->allowsUser($request->user())) {
             abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan kuis ini.');
         }
 
@@ -197,6 +205,10 @@ class QuizResponseController extends Controller
 
         if ($session->started_at === null) {
             abort_if($quizForm->hasNoAttemptsLeftFor($request->user(), $session->respondent_identifier), 403, $quizForm->noAttemptsLeftMessage());
+
+            if ($this->requiresExamToken($quizForm, $request->user())) {
+                $this->checkExamToken($request, $quizForm, $session);
+            }
 
             // The questions are fixed now, with the settings of the moment the student starts.
             $examLayout->ensure($quizForm, $session);
@@ -242,7 +254,7 @@ class QuizResponseController extends Controller
     {
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
-        if ($quizForm->isRestrictedToCohorts() && ! $quizForm->allowsUser($request->user())) {
+        if ($quizForm->isRestricted() && ! $quizForm->allowsUser($request->user())) {
             abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan kuis ini.');
         }
 
@@ -463,11 +475,59 @@ class QuizResponseController extends Controller
 
     /**
      * Exams (quizzes and timed forms) start only after the student confirms the rules;
-     * a plain survey opens directly.
+     * a plain survey opens directly, unless a token is needed to start it.
      */
     protected function requiresStartConfirmation(QuizForm $quizForm): bool
     {
-        return ($quizForm->settings['isQuiz'] ?? true) !== false || $this->timeLimitMinutes($quizForm) !== null;
+        return ($quizForm->settings['isQuiz'] ?? true) !== false
+            || $this->timeLimitMinutes($quizForm) !== null
+            || $quizForm->usesAddon(Addon::ExamToken);
+    }
+
+    /**
+     * With the Token Ujian add-on on, students start only with the token shown by the proctor.
+     * The exam's teachers know it anyway, and try their exam without it.
+     */
+    protected function requiresExamToken(QuizForm $quizForm, ?User $user): bool
+    {
+        return $quizForm->usesAddon(Addon::ExamToken) && ! $quizForm->canBeEditedBy($user);
+    }
+
+    /**
+     * The token typed on the confirmation screen must be the current one (or the one just
+     * replaced). Wrong tokens are limited, so the token cannot be guessed.
+     *
+     * @throws ValidationException
+     */
+    protected function checkExamToken(Request $request, QuizForm $quizForm, QuizSession $session): void
+    {
+        $limits = [
+            "exam-token:{$quizForm->id}:{$session->id}" => ExamToken::MAX_WRONG_PER_MINUTE,
+            'exam-token-ip:'.$request->ip() => ExamToken::MAX_WRONG_PER_MINUTE * 10,
+        ];
+
+        foreach ($limits as $key => $maxAttempts) {
+            if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+                throw ValidationException::withMessages([
+                    'exam_token' => 'Terlalu banyak token salah. Tunggu '.RateLimiter::availableIn($key).' detik, lalu coba lagi.',
+                ]);
+            }
+        }
+
+        $typed = $request->input('exam_token');
+        $typed = is_string($typed) ? $typed : null;
+
+        if (blank($typed)) {
+            throw ValidationException::withMessages(['exam_token' => 'Masukkan token dari pengawas.']);
+        }
+
+        if (! app(ExamToken::class)->accepts($quizForm, $typed)) {
+            foreach (array_keys($limits) as $key) {
+                RateLimiter::hit($key, 60);
+            }
+
+            throw ValidationException::withMessages(['exam_token' => 'Token salah atau sudah berganti. Minta token terbaru ke pengawas.']);
+        }
     }
 
     protected function findExamSession(QuizForm $quizForm, ?User $user, string $respondentIdentifier): ?QuizSession

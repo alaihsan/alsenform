@@ -3,6 +3,8 @@ import AccountMenu from '@/components/AccountMenu.vue';
 import RichContent from '@/components/RichContent.vue';
 import AddonExamSwitches from '@/components/addons/AddonExamSwitches.vue';
 import AddonGallery, { type AddonEntry } from '@/components/addons/AddonGallery.vue';
+import ExamTokenCard from '@/components/addons/ExamTokenCard.vue';
+import RemedialPanel, { type RemedialOverview } from '@/components/addons/RemedialPanel.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import GradebookTable from '@/components/form-editor/GradebookTable.vue';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
@@ -485,6 +487,8 @@ const isAddonGalleryOpen = ref(false);
 const examAddons = computed(() => addonCatalog.value.filter((addon) => addon.installed || addon.installedForOwner));
 const isAddonOnForExam = (addon: AddonEntry) => Boolean(addon.installedForOwner) && (form.settings.addons[addon.key] ?? addon.onByDefault);
 const itemAnalysisAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'item-analysis') ?? null);
+const examTokenAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'exam-token') ?? null);
+const remedialAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'remedial') ?? null);
 
 const setAddonForExam = (addon: AddonEntry, on: boolean) => {
     form.settings.addons = { ...form.settings.addons, [addon.key]: on };
@@ -1304,6 +1308,8 @@ const labelSuggestions = ref<LabelSuggestions>(props.quizForm?.labelSuggestions 
 const savingLabelsOf = ref<string | null>(null);
 /* Analisis butir soal (Responses tab), and its difficulty applied to the labels. */
 const itemAnalysis = computed<ItemAnalysis | null>(() => (props.quizForm?.responses as { analysis?: ItemAnalysis } | undefined)?.analysis ?? null);
+const remedialOverview = computed<RemedialOverview | null>(() => (props.quizForm?.responses as { remedial?: RemedialOverview } | undefined)?.remedial ?? null);
+const followUp = computed(() => props.quizForm?.followUp ?? null);
 const isApplyingDifficulty = ref(false);
 const applyDifficultyMessage = ref('');
 const applyAnalysedDifficulty = async () => {
@@ -2103,6 +2109,29 @@ watch(
                 </div>
 
                 <template v-if="activeTab === 'questions'">
+                    <!-- A remedial or enrichment exam: what it follows up, and the students who may take it -->
+                    <details
+                        v-if="followUp"
+                        :class="[
+                            'rounded-2xl border px-4 py-3 text-sm',
+                            followUp.kind === 'remedial' ? 'border-rose-200 bg-rose-50/60 text-rose-900' : 'border-emerald-200 bg-emerald-50/60 text-emerald-900',
+                        ]"
+                        data-testid="follow-up-banner"
+                    >
+                        <summary class="cursor-pointer list-none">
+                            <span class="font-extrabold">{{ followUp.kind === 'remedial' ? 'Ujian remedial' : 'Ujian pengayaan' }}</span>
+                            <template v-if="followUp.of">
+                                dari
+                                <Link v-if="followUp.of.editUrl" :href="followUp.of.editUrl" class="font-bold underline" @click.stop>{{ followUp.of.title }}</Link>
+                                <span v-else class="font-bold">{{ followUp.of.title }}</span>
+                            </template>
+                            ·
+                            {{ followUp.participants.length ? `khusus ${followUp.participants.length} siswa terpilih (lihat)` : 'terbuka bagi siapa pun yang punya tautannya' }}
+                        </summary>
+                        <p v-if="followUp.participants.length" class="mt-2 text-xs leading-relaxed">
+                            {{ followUp.participants.map((participant) => (participant.kelas ? `${participant.name} (${participant.kelas})` : participant.name)).join(', ') }}
+                        </p>
+                    </details>
                     <section class="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md">
                         <div :class="['h-3 transition-all duration-300', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                         <div class="grid gap-3 p-5 sm:p-6">
@@ -3289,6 +3318,28 @@ watch(
                             </button>
                         </div>
 
+                        <RemedialPanel v-if="remedialOverview && responseCount" :overview="remedialOverview" />
+                        <div
+                            v-else-if="responseCount && remedialAddon"
+                            class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
+                        >
+                            <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                {{
+                                    remedialAddon.installedForOwner
+                                        ? 'Add-on Remedial & Pengayaan dimatikan untuk ujian ini.'
+                                        : 'Siapkan remedial dan pengayaan dari nilai ini dalam beberapa klik: pasang add-on Remedial & Pengayaan.'
+                                }}
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
+                                @click="remedialAddon.installedForOwner ? setAddonForExam(remedialAddon, true) : (isAddonGalleryOpen = true)"
+                            >
+                                {{ remedialAddon.installedForOwner ? 'Aktifkan' : 'Lihat add-on' }}
+                            </button>
+                        </div>
+
                         <div v-if="latestResponses.length" class="mt-6 rounded-2xl border border-slate-200">
                             <div class="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">Recent submissions</div>
                             <div class="divide-y divide-slate-100">
@@ -4013,17 +4064,27 @@ watch(
                     </section>
                 </template>
 
-                <UnlockRequestsPanel
-                    v-else-if="activeTab === 'keamanan'"
-                    :unlock-requests="unlockRequests"
-                    :lock-on-blur="Boolean(form.settings.lockOnBlur)"
-                    :busy-ids="unlockingIds"
-                    :is-unlocking-all="isUnlockingAll"
-                    @refresh="fetchUnlockRequests"
-                    @unlock="unlockStudent"
-                    @unlock-all="unlockAllStudents"
-                    @toggle-lock="toggleSetting('lockOnBlur')"
-                />
+                <div v-else-if="activeTab === 'keamanan'" class="space-y-5">
+                    <ExamTokenCard
+                        v-if="examTokenAddon && quizForm?.examTokenUrl"
+                        :addon="examTokenAddon"
+                        :is-on="isAddonOnForExam(examTokenAddon)"
+                        :token-url="quizForm.examTokenUrl"
+                        :exam-title="form.title"
+                        @toggle="(on) => examTokenAddon && setAddonForExam(examTokenAddon, on)"
+                        @open-gallery="isAddonGalleryOpen = true"
+                    />
+                    <UnlockRequestsPanel
+                        :unlock-requests="unlockRequests"
+                        :lock-on-blur="Boolean(form.settings.lockOnBlur)"
+                        :busy-ids="unlockingIds"
+                        :is-unlocking-all="isUnlockingAll"
+                        @refresh="fetchUnlockRequests"
+                        @unlock="unlockStudent"
+                        @unlock-all="unlockAllStudents"
+                        @toggle-lock="toggleSetting('lockOnBlur')"
+                    />
+                </div>
             </div>
         </section>
 

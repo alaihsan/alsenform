@@ -12,6 +12,7 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    KeyRound,
     Send,
     LayoutGrid,
     AlertCircle,
@@ -85,6 +86,8 @@ const props = defineProps<{
         /** What a guest fills in before starting (name, class, email); empty for accounts. */
         identityFields?: string[];
         respondentClasses?: string[];
+        /** Token Ujian add-on: the token shown by the proctor is needed to start. */
+        requiresExamToken?: boolean;
     };
     examSummary?: {
         questionCount: number;
@@ -883,6 +886,23 @@ const examExpiresAt = ref<string | null>(props.session?.expires_at ?? null);
 let examClockOffset = serverClockOffset;
 const isStartingExam = ref(false);
 const startExamError = ref('');
+/* Token Ujian add-on: six letters from the proctor, typed before starting. */
+const requiresExamToken = computed<boolean>(() => Boolean(props.quizForm.requiresExamToken));
+const examToken = ref('');
+const examTokenError = ref('');
+const examTokenInput = ref<HTMLInputElement | null>(null);
+const EXAM_TOKEN_LENGTH = 6;
+const normalizedExamToken = computed<string>(() => examToken.value.replace(/[^a-z]/gi, '').toUpperCase());
+const updateExamToken = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    examToken.value = input.value.replace(/[^a-z]/gi, '').toUpperCase().slice(0, EXAM_TOKEN_LENGTH);
+    input.value = examToken.value;
+    examTokenError.value = '';
+};
+const showExamTokenError = (message: string) => {
+    examTokenError.value = message;
+    nextTick(() => examTokenInput.value?.focus());
+};
 let hasExamBegun = false;
 
 const hasExamStarted = computed<boolean>(() => !props.session?.token || examStartedAt.value !== null);
@@ -968,18 +988,29 @@ const startExam = async () => {
     if (isStartingExam.value || !props.quizForm.startUrl) {
         return;
     }
-    if (identityEditable.value && !validateIdentity()) {
+    const isIdentityValid = !identityEditable.value || validateIdentity();
+    const isTokenTyped = !requiresExamToken.value || normalizedExamToken.value.length === EXAM_TOKEN_LENGTH;
+    if (!isTokenTyped) {
+        showExamTokenError(normalizedExamToken.value ? `Token terdiri dari ${EXAM_TOKEN_LENGTH} huruf.` : 'Masukkan token dari pengawas.');
+    }
+    if (!isIdentityValid || !isTokenTyped) {
         startExamError.value = '';
         return;
     }
     isStartingExam.value = true;
     startExamError.value = '';
+    examTokenError.value = '';
 
     for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
         try {
             const response = await axios.post(
                 props.quizForm.startUrl,
-                { session_token: props.session?.token, ...identityPayload(), email: email.value.trim() || null },
+                {
+                    session_token: props.session?.token,
+                    ...identityPayload(),
+                    email: email.value.trim() || null,
+                    ...(requiresExamToken.value ? { exam_token: normalizedExamToken.value } : {}),
+                },
                 { timeout: REQUEST_TIMEOUT_MS },
             );
             markServerReachable(true);
@@ -1007,6 +1038,11 @@ const startExam = async () => {
                 startExamError.value = 'Jawaban ujian ini sudah dikirim sebelumnya.';
                 break;
             }
+            const tokenErrors = error.response?.data?.errors?.exam_token;
+            if (status === 422 && tokenErrors) {
+                showExamTokenError(Array.isArray(tokenErrors) ? tokenErrors[0] : tokenErrors);
+                break;
+            }
             if (status === 422 && applyIdentityErrors(error.response?.data?.errors)) {
                 startExamError.value = 'Periksa kembali identitas Anda.';
                 break;
@@ -1024,7 +1060,8 @@ const startExam = async () => {
         }
     }
 
-    if (!startExamError.value) {
+    // A wrong token is told at the token field.
+    if (!startExamError.value && !examTokenError.value) {
         startExamError.value = 'Server ujian belum terjangkau. Periksa koneksi Wi-Fi, lalu tekan "Kerjakan Sekarang" lagi.';
     }
     isStartingExam.value = false;
@@ -1062,6 +1099,10 @@ const attemptsLeftAfterThis = computed<number | null>(() => (maxAttempts.value =
 const examRules = computed<string[]>(() => {
     const settings = props.quizForm.settings;
     const rules = ['Baca setiap soal dengan teliti dan kerjakan secara mandiri.'];
+
+    if (requiresExamToken.value) {
+        rules.push(`Ketik token ${EXAM_TOKEN_LENGTH} huruf yang ditampilkan pengawas di kolom Token, lalu tekan "Kerjakan Sekarang". Token berganti berkala.`);
+    }
 
     rules.push(
         examTimeLimitMinutes.value
@@ -2636,6 +2677,39 @@ const submitAnotherResponse = () => {
                         id-prefix="start-identity"
                         class="mt-4"
                     />
+                </div>
+
+                <div v-if="requiresExamToken" class="mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
+                    <label for="exam-token" class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800">
+                        <KeyRound class="h-4 w-4" />
+                        Token Ujian
+                    </label>
+                    <p class="mt-1 text-xs text-slate-600">Minta token kepada pengawas. Huruf besar atau kecil sama saja.</p>
+                    <input
+                        id="exam-token"
+                        ref="examTokenInput"
+                        :value="examToken"
+                        type="text"
+                        inputmode="text"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        autocorrect="off"
+                        spellcheck="false"
+                        :maxlength="EXAM_TOKEN_LENGTH"
+                        placeholder="••••••"
+                        :aria-invalid="Boolean(examTokenError)"
+                        :aria-describedby="examTokenError ? 'exam-token-error' : undefined"
+                        :class="[
+                            'mt-3 w-full rounded-2xl border-2 bg-white px-4 py-3 text-center font-mono text-3xl font-black uppercase tracking-[0.5em] text-slate-900 outline-none transition placeholder:text-slate-300 focus:ring-4 sm:max-w-xs',
+                            examTokenError ? 'border-red-400 focus:ring-red-100' : 'border-amber-300 focus:border-amber-500 focus:ring-amber-100',
+                        ]"
+                        @input="updateExamToken"
+                        @keydown.enter.prevent="startExam"
+                    />
+                    <p v-if="examTokenError" id="exam-token-error" class="mt-2 flex items-start gap-1.5 text-sm font-semibold text-red-700" role="alert">
+                        <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+                        {{ examTokenError }}
+                    </p>
                 </div>
 
                 <div v-if="startExamError" class="mt-5 flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Addons;
 use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
+use App\Services\Remedial;
 use Illuminate\Support\Collection;
 
 class QuizFormPayloads
@@ -60,6 +61,9 @@ class QuizFormPayloads
                 'uninstall' => route('addons.uninstall', ['addon' => '__addon__']),
             ],
             'canInstallAddonsForEveryone' => (bool) auth()->user()?->isAdmin(),
+            'examTokenUrl' => route('forms.exam-token', $quizForm),
+            // A remedial or enrichment exam: the exam it follows up and the students chosen for it.
+            'followUp' => $quizForm->follow_up_kind !== null ? $this->followUp($quizForm) : null,
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
@@ -273,6 +277,30 @@ class QuizFormPayloads
                 ? app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
                 : null,
             'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
+            // Remedial & Pengayaan: the students below and above the KKM, and their follow-up exams.
+            'remedial' => $quizForm->usesAddon(Addon::Remedial) ? app(Remedial::class)->overview($quizForm) : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function followUp(QuizForm $quizForm): array
+    {
+        $original = $quizForm->followUpOf;
+        $participants = $quizForm->participants()->orderBy('kelas')->orderBy('name')->get(['users.id', 'users.name', 'users.kelas']);
+
+        return [
+            'kind' => $quizForm->follow_up_kind,
+            'of' => $original !== null ? [
+                'title' => trim((string) preg_replace('/\s+/u', ' ', app(HtmlToPlainText::class)->convert((string) $original->title))),
+                'editUrl' => $original->canBeEditedBy(auth()->user()) ? route('forms.edit', ['quizForm' => $original->slug]) : null,
+            ] : null,
+            'participants' => $participants->map(fn (User $user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'kelas' => $user->kelas,
+            ])->values()->all(),
         ];
     }
 

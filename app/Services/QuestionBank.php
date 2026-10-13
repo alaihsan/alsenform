@@ -357,6 +357,37 @@ class QuestionBank
     }
 
     /**
+     * Questions of a teacher's bank on the given topics that an exam does not have: for remedial
+     * and enrichment exams. One item per question (its latest copy); archived ones are left out.
+     *
+     * @param  list<string>  $topics
+     * @param  list<string>  $excludedFingerprints
+     * @param  list<string>  $difficulties  Only these difficulties, when given.
+     * @return Collection<int, QuestionBankItem>
+     */
+    public function onTopics(User $user, array $topics, array $excludedFingerprints = [], array $difficulties = []): Collection
+    {
+        if ($topics === []) {
+            return collect();
+        }
+
+        $latestOfEachQuestion = QuestionBankItem::query()
+            ->selectRaw('MAX(id)')
+            ->where('user_id', $user->id)
+            ->groupBy('fingerprint');
+
+        return QuestionBankItem::query()
+            ->where('user_id', $user->id)
+            ->whereIn('id', $latestOfEachQuestion)
+            ->whereNull('archived_at')
+            ->whereIn('topic', $topics)
+            ->whereNotIn('fingerprint', $excludedFingerprints)
+            ->when($difficulties !== [], fn (Builder $query) => $query->whereIn('difficulty', $difficulties))
+            ->orderBy('id')
+            ->get(['id', 'fingerprint', 'topic', 'difficulty', 'question']);
+    }
+
+    /**
      * The questions of the chosen bank items, in the order they were chosen. Items of another
      * teacher are left out.
      *

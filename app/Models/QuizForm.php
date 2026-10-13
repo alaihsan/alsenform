@@ -20,8 +20,19 @@ class QuizForm extends Model
 
     use SoftDeletes;
 
+    /**
+     * The passing grade (KKM) when the teacher has not set one in their profile.
+     */
+    public const DEFAULT_KKM = 75;
+
+    public const FOLLOW_UP_REMEDIAL = 'remedial';
+
+    public const FOLLOW_UP_ENRICHMENT = 'pengayaan';
+
     protected $fillable = [
         'user_id',
+        'follow_up_of_id',
+        'follow_up_kind',
         'title',
         'description',
         'slug',
@@ -70,6 +81,41 @@ class QuizForm extends Model
     {
         return $this->belongsToMany(Cohort::class, 'cohort_quiz_form')
             ->withTimestamps();
+    }
+
+    /**
+     * Students chosen for this exam (a remedial or enrichment exam): only they may take it.
+     */
+    public function participants(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'quiz_form_participants')
+            ->withTimestamps();
+    }
+
+    /**
+     * The exam a remedial or enrichment exam follows up.
+     */
+    public function followUpOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'follow_up_of_id');
+    }
+
+    /**
+     * The remedial and enrichment exams made after this exam.
+     */
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(self::class, 'follow_up_of_id');
+    }
+
+    /**
+     * The passing grade (KKM): the owner's default from their profile, else 75.
+     */
+    public function kkm(): float
+    {
+        $kkm = $this->user?->quiz_preferences['default_kkm'] ?? null;
+
+        return is_numeric($kkm) ? (float) $kkm : (float) self::DEFAULT_KKM;
     }
 
     public function collaborators(): BelongsToMany
@@ -261,9 +307,22 @@ class QuizForm extends Model
         return $this->cohorts()->exists();
     }
 
+    public function isRestrictedToParticipants(): bool
+    {
+        return $this->participants()->exists();
+    }
+
+    /**
+     * Whether only some students may take the exam: those of its cohorts and those chosen for it.
+     */
+    public function isRestricted(): bool
+    {
+        return $this->isRestrictedToCohorts() || $this->isRestrictedToParticipants();
+    }
+
     public function allowsUser(?User $user): bool
     {
-        if (! $this->isRestrictedToCohorts()) {
+        if (! $this->isRestricted()) {
             return true;
         }
 
@@ -275,9 +334,10 @@ class QuizForm extends Model
             return true;
         }
 
-        return $this->cohorts()
-            ->whereHas('users', fn ($query) => $query->where('users.id', $user->id))
-            ->exists();
+        return $this->participants()->where('users.id', $user->id)->exists()
+            || $this->cohorts()
+                ->whereHas('users', fn ($query) => $query->where('users.id', $user->id))
+                ->exists();
     }
 
     public static function uniqueSlug(string $title, ?self $ignore = null): string

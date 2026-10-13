@@ -7,6 +7,8 @@ use App\Http\Controllers\ConnectionCheckController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\ExamProgressController;
+use App\Http\Controllers\ExamTokenController;
+use App\Http\Controllers\FollowUpExamController;
 use App\Http\Controllers\QuestionBankController;
 use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
@@ -70,6 +72,8 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
         Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
         Route::get('forms/{quizForm}/progress', ExamProgressController::class)->name('forms.progress');
+        Route::get('forms/{quizForm}/exam-token', ExamTokenController::class)->name('forms.exam-token');
+        Route::post('forms/{quizForm}/follow-ups', [FollowUpExamController::class, 'store'])->name('forms.follow-ups.store');
         Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
