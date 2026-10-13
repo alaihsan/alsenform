@@ -116,6 +116,8 @@ export type QuizFormPayload = {
             is_timeout: boolean;
             /** Handed in by the server: the time ran out while the exam page was closed or offline. */
             is_auto_submitted?: boolean;
+            /** Unix time of handing in, for sorting. */
+            submittedAtTimestamp?: number;
             submittedAt: string;
             formattedDate: string;
         }[];

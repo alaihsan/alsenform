@@ -94,7 +94,8 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                 {{ applyMessage }}
             </p>
             <p v-if="analysis.respondents > 0 && !analysis.reliable" class="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                Baru {{ analysis.respondents }} siswa: hasil analisis belum dapat diandalkan (sebaiknya minimal 10 siswa).
+                Baru {{ analysis.respondents }} siswa: tingkat kesukaran sudah terlihat, tetapi daya pembeda, pengecoh dan keputusan baru muncul
+                setelah minimal 10 siswa mengerjakan soalnya.
             </p>
             <p v-if="analysis.respondents === 0" class="py-6 text-center text-sm text-slate-400">
                 Analisis muncul setelah ada siswa yang mengirim jawaban.
@@ -117,7 +118,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                             <tr>
                                 <th class="px-3 py-2.5">No</th>
                                 <th class="px-3 py-2.5">Soal</th>
-                                <th class="px-3 py-2.5 text-center">Benar</th>
+                                <th class="px-3 py-2.5 text-center" title="Siswa yang menjawab benar dari siswa yang mendapat soal ini">Benar</th>
                                 <th class="px-3 py-2.5 text-center">Kesukaran (P)</th>
                                 <th class="px-3 py-2.5 text-center">Daya pembeda (D)</th>
                                 <th class="px-3 py-2.5 text-center">Pengecoh lemah</th>
@@ -173,7 +174,7 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                                             :class="['rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase', tone(question.decision)]"
                                             >{{ question.decision.label }}</span
                                         >
-                                        <span v-else class="text-slate-400">-</span>
+                                        <span v-else class="text-slate-400" :title="question.analyzed ? 'Perlu minimal 10 siswa' : undefined">-</span>
                                     </td>
                                 </tr>
                                 <tr v-if="open.has(question.id)" class="bg-slate-50/60">
@@ -189,7 +190,13 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                                                     <div
                                                         :class="[
                                                             'h-full rounded-full',
-                                                            option.isKey ? 'bg-emerald-500' : option.works ? 'bg-indigo-400' : 'bg-amber-400',
+                                                            option.isKey
+                                                                ? 'bg-emerald-500'
+                                                                : option.works === null
+                                                                  ? 'bg-slate-400'
+                                                                  : option.works
+                                                                    ? 'bg-indigo-400'
+                                                                    : 'bg-amber-400',
                                                         ]"
                                                         :style="{ width: percent(option.share) }"
                                                     ></div>
@@ -199,9 +206,23 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                                                 >
                                                 <span
                                                     class="w-24 text-[10px] font-bold"
-                                                    :class="option.isKey ? 'text-emerald-700' : option.works ? 'text-slate-500' : 'text-amber-700'"
+                                                    :class="
+                                                        option.isKey
+                                                            ? 'text-emerald-700'
+                                                            : option.works === false
+                                                              ? 'text-amber-700'
+                                                              : 'text-slate-500'
+                                                    "
                                                 >
-                                                    {{ option.isKey ? 'Kunci' : option.works ? 'Berfungsi' : 'Tidak berfungsi' }}
+                                                    {{
+                                                        option.isKey
+                                                            ? 'Kunci'
+                                                            : option.works === null
+                                                              ? ''
+                                                              : option.works
+                                                                ? 'Berfungsi'
+                                                                : 'Tidak berfungsi'
+                                                    }}
                                                 </span>
                                             </div>
                                         </div>
@@ -213,8 +234,10 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                 </div>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                     P &gt; 0,70 mudah, 0,31–0,70 sedang, ≤ 0,30 sukar. D &gt; 0,40 baik, 0,21–0,40 cukup (revisi), ≤ 0,20 jelek (ganti); D negatif
-                    berarti siswa bernilai tinggi lebih sering salah. Pengecoh berfungsi bila dipilih minimal 5% siswa. Siswa yang mengerjakan lebih
-                    dari sekali dihitung dari percobaan pertamanya. Analisis juga ada di lembar ketiga file Excel.
+                    berarti siswa bernilai tinggi lebih sering salah. Pengecoh berfungsi bila dipilih minimal 5% siswa. Tiap soal dihitung dari siswa
+                    yang mendapatnya (minimal 10 siswa untuk D, pengecoh dan keputusan); kelompok atas dan bawah masing-masing 27% dari mereka, dan
+                    siswa bernilai sama di batas kelompok dihitung sebagian, sehingga hasilnya tidak bergantung pada urutan pengiriman. Siswa yang
+                    mengerjakan lebih dari sekali dihitung dari percobaan pertamanya. Hasil yang sama ada di lembar ketiga file Excel.
                 </p>
             </template>
         </div>

@@ -222,7 +222,8 @@ class QuizResultsReport
                 'P: > 0,70 mudah, 0,31–0,70 sedang, ≤ 0,30 sukar',
                 'D: kelompok atas – bawah 27%; > 0,40 baik, 0,21–0,40 cukup, ≤ 0,20 jelek',
                 'Pengecoh berfungsi bila dipilih ≥ 5% peserta',
-            ]).($analysis['reliable'] ? '' : '   •   Peserta masih sedikit: hasil belum dapat diandalkan'), 'subtitle')],
+                'D, pengecoh dan keputusan dari minimal '.ItemAnalysis::MIN_TAKERS.' peserta per soal (percobaan pertama)',
+            ]), 'subtitle')],
             null,
             array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $headers),
         ];

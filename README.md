@@ -105,8 +105,11 @@ Fitur editor lainnya:
 - Nilai akhir selalu dalam rentang **0–100**: jumlah poin benar dibagi poin maksimal soal yang dinilai otomatis.
 - **Kunci jawaban bisa diperbaiki setelah ujian.** Nilai seluruh murid langsung dihitung ulang dari kunci yang baru, termasuk di berkas Excel.
 - Rekap di aplikasi menampilkan poin dan nilai setiap murid serta ringkasan jawaban per soal. Rata-rata, KKM, dan status tuntas ada di berkas Excel.
+- **Rekap nilai** bisa diurutkan menurut setiap kolom (klik judul kolom: naik, klik lagi: turun), termasuk nama depan atau nama belakang. Tombol **A–Z** membuka saringan huruf awal nama depan dan nama belakang seperti di Moodle; huruf tanpa murid diredupkan, dan saringan yang aktif tampil sebagai label kecil yang bisa dihapus. Di HP, urutan dipilih dari menu Urutkan.
 - Tab **Responses** menampilkan jumlah murid yang sudah mengirim jawaban (tiap murid dihitung sekali) dan yang sedang mengerjakan. Angkanya diperbarui langsung setiap 5 detik, dan rekap nilai ikut bertambah tanpa memuat ulang halaman.
-- **Analisis butir soal** di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik. Analisis baru dapat diandalkan setelah minimal 10 murid mengirim jawaban.
+- **Analisis butir soal** di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** beserta alasannya untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik.
+  - Tiap soal dihitung dari murid yang mendapatnya. Daya pembeda, pengecoh, dan keputusan baru muncul setelah minimal 10 murid mengerjakan soal itu; di bawah itu hanya tingkat kesukaran yang ditampilkan, karena hasilnya masih untung-untungan.
+  - Murid bernilai sama di batas kelompok atas atau bawah dihitung sebagian, jadi hasilnya selalu sama, tidak bergantung pada urutan masuknya jawaban, dan sama persis antara aplikasi dan berkas Excel.
 
 ### Laporan aktivitas
 

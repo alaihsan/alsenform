@@ -239,6 +239,8 @@ class QuizFormPayloads
                 'is_auto_submitted' => (bool) $response->is_auto_submitted,
                 'submittedAt' => $response->created_at->diffForHumans(),
                 'formattedDate' => $response->created_at->format('d/m/Y H:i'),
+                // For sorting by the moment of handing in.
+                'submittedAtTimestamp' => $response->created_at->getTimestamp(),
             ];
         })->values()->all();
 

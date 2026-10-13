@@ -122,3 +122,73 @@ test('with questions drawn per student, a question is analysed over the students
     expect($byNumber[1]['takers'])->toBe(10)
         ->and($byNumber[3]['takers'])->toBe(6);
 });
+
+/**
+ * Ten students over five questions (key A everywhere); soal 1 is the one looked at.
+ * Two score 100, four tie at 60 on the edge of the top group (two of them right on soal 1),
+ * four score 20. The top group (3 places) is the two at 100 plus a quarter of each of the four.
+ *
+ * @param  list<string>  $order
+ */
+function tiedExam(User $teacher, array $order): QuizForm
+{
+    $questions = array_map(fn (int $id) => ['id' => $id, 'title' => "Soal {$id}", 'type' => 'Multiple choice', 'options' => ["A{$id}", "B{$id}", "C{$id}", "D{$id}", "E{$id}"], 'answer' => 0, 'points' => 1], range(1, 5));
+    $exam = QuizForm::factory()->for($teacher)->create(['published_at' => now(), 'questions' => $questions]);
+
+    $answers = fn (string $first, int $rightFillers) => [1 => "{$first}1", ...array_combine(range(2, 5), array_map(fn (int $id) => ($id - 1 <= $rightFillers ? 'A' : 'B').$id, range(2, 5)))];
+    $students = [
+        's1' => $answers('A', 4), 's2' => $answers('A', 4),
+        's3' => $answers('A', 2), 's4' => $answers('A', 2), 's5' => $answers('B', 3), 's6' => $answers('B', 3),
+        's7' => $answers('B', 1), 's8' => $answers('B', 1), 's9' => $answers('B', 1), 's10' => $answers('B', 1),
+    ];
+
+    foreach ($order as $student) {
+        QuizResponse::query()->create(['quiz_form_id' => $exam->id, 'respondent_identifier' => $student, 'answers' => $students[$student], 'score' => 0]);
+    }
+
+    return $exam;
+}
+
+test('students tied at the edge of a group share it, so the result never depends on the order of the answers', function () {
+    $inOrder = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'];
+    $analyses = collect([$inOrder, array_reverse($inOrder), ['s5', 's6', 's1', 's7', 's3', 's8', 's2', 's9', 's4', 's10']])
+        ->map(fn (array $order) => app(ItemAnalysis::class)->analyze(tiedExam($this->teacher, $order))['questions'][0]);
+
+    // Top group: 2 right + a quarter of 2 right = 2,5 of 3; bottom group: none right.
+    expect($analyses->pluck('d')->unique()->values()->all())->toBe([0.83])
+        ->and($analyses[0])->toMatchArray(['p' => 0.4, 'correct' => 4, 'weakDistractors' => ['C', 'D', 'E']])
+        ->and($analyses[0]['discrimination']['label'])->toBe('Baik sekali')
+        ->and($analyses[0]['decision']['label'])->toBe('Revisi')
+        ->and($analyses[0]['note'])->toContain('Pengecoh C, D, E hampir tidak dipilih');
+});
+
+test('a question taken by fewer than ten students gets its difficulty only, not a decision', function () {
+    QuizResponse::query()->where('quiz_form_id', $this->exam->id)->limit(1)->delete();
+
+    $analysis = app(ItemAnalysis::class)->analyze($this->exam);
+    $first = $analysis['questions'][1];
+
+    expect($first)->toMatchArray(['takers' => 9, 'd' => null, 'discrimination' => null, 'decision' => null, 'weakDistractors' => []])
+        ->and($first['p'])->not->toBeNull()
+        ->and($first['note'])->toContain('minimal 10 siswa')
+        ->and(collect($first['options'])->pluck('works')->unique()->all())->toBe([null])
+        ->and($analysis['summary'])->toMatchArray(['dipakai' => 0, 'revisi' => 0, 'ganti' => 0]);
+});
+
+test('each decision says why', function () {
+    $byNumber = collect(app(ItemAnalysis::class)->analyze($this->exam)['questions'])->keyBy('number');
+
+    expect($byNumber[1]['note'])->toContain('Terlalu mudah')
+        ->and($byNumber[2]['note'])->toContain('Pengecoh B, D, E hampir tidak dipilih')
+        ->and($byNumber[4]['note'])->toBeNull();
+});
+
+test('the results page and the excel workbook show the same analysis', function () {
+    $analysis = null;
+    $this->actingAs($this->teacher)->get(route('forms.edit', $this->exam->slug))
+        ->assertInertia(function (Assert $page) use (&$analysis) {
+            $analysis = $page->toArray()['props']['quizForm']['responses']['analysis'];
+        });
+
+    expect($analysis)->toEqual(app(ItemAnalysis::class)->analyze($this->exam->refresh()));
+});

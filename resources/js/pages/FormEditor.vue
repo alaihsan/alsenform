@@ -2,6 +2,7 @@
 import AccountMenu from '@/components/AccountMenu.vue';
 import RichContent from '@/components/RichContent.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import GradebookTable from '@/components/form-editor/GradebookTable.vue';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
@@ -528,7 +529,6 @@ const shareUrl = computed(() => publicUrl.value);
 const responseQuestions = computed(() => props.quizForm?.responses?.questions ?? []);
 const latestResponses = computed(() => props.quizForm?.responses?.latest ?? []);
 
-const gradebookSearch = ref('');
 const maxScore = computed(() => props.quizForm?.responses?.maxScore ?? 0);
 const exportResponsesUrl = computed(
     () =>
@@ -537,25 +537,6 @@ const exportResponsesUrl = computed(
         (props.quizForm ? `/forms/${props.quizForm.id}/responses/export` : '#'),
 );
 const gradebook = computed(() => props.quizForm?.responses?.gradebook ?? []);
-
-const autoSubmittedHint = 'Waktu habis saat halaman ujian tertutup atau offline. Jawaban yang sudah tersimpan dikirim otomatis oleh sistem.';
-const responseStatusLabel = (item: { is_timeout: boolean; is_auto_submitted?: boolean; lateMinutes?: number | null }) =>
-    item.is_auto_submitted ? 'Otomatis' : item.lateMinutes ? `Terlambat ${item.lateMinutes} mnt` : item.is_timeout ? 'Timeout' : 'Selesai';
-
-const filteredGradebook = computed(() => {
-    if (!gradebookSearch.value.trim()) {
-        return gradebook.value;
-    }
-    const q = gradebookSearch.value.toLowerCase().trim();
-    return gradebook.value.filter((item) => {
-        return (
-            item.name.toLowerCase().includes(q) ||
-            item.nis.toLowerCase().includes(q) ||
-            item.kelas.toLowerCase().includes(q) ||
-            item.email.toLowerCase().includes(q)
-        );
-    });
-});
 
 const pieChartStyle = (question: NonNullable<QuizFormPayload['responses']>['questions'][number]) => {
     if (!question.total || !question.options.length) {
@@ -3220,169 +3201,8 @@ watch(
                             </div>
                         </div>
 
-                        <!-- Rekapitulasi Nilai Siswa Table -->
-                        <div class="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5">
-                                <div>
-                                    <h3 class="text-base font-bold text-slate-900">Rekapitulasi Nilai Siswa</h3>
-                                    <p class="text-xs text-slate-500">Daftar skor dan status pengerjaan seluruh responden.</p>
-                                </div>
-                                <div class="flex w-full items-center gap-2 sm:w-auto">
-                                    <input
-                                        v-model="gradebookSearch"
-                                        type="text"
-                                        placeholder="Cari siswa / NIS / kelas..."
-                                        class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none sm:w-auto sm:py-1.5"
-                                    />
-                                    <a
-                                        v-if="responseCount"
-                                        :href="exportResponsesUrl"
-                                        class="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:inline-flex"
-                                    >
-                                        <Download class="h-3.5 w-3.5" />
-                                        Unduh Excel
-                                    </a>
-                                </div>
-                            </div>
-
-                            <!-- Phones: one card per student instead of a wide table -->
-                            <ul class="divide-y divide-slate-100 sm:hidden">
-                                <li v-for="(item, idx) in filteredGradebook" :key="`grade-card-${item.id}`" class="flex items-center gap-3 px-4 py-3">
-                                    <span class="w-5 shrink-0 text-xs font-semibold text-slate-400">{{ idx + 1 }}</span>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="flex min-w-0 items-center gap-1.5">
-                                            <span class="truncate text-sm font-bold text-slate-900">{{ item.name }}</span>
-                                            <span v-if="item.isGuest" class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Tamu</span>
-                                            <span
-                                                v-if="item.duplicateName"
-                                                class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
-                                                title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
-                                                >Nama ganda</span
-                                            >
-                                            <span
-                                                v-if="(item.attempts ?? 1) > 1"
-                                                class="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
-                                                :title="`Percobaan ke-${item.attempt} dari ${item.attempts} percobaan siswa ini`"
-                                                >Percobaan {{ item.attempt }}/{{ item.attempts }}</span
-                                            >
-                                        </p>
-                                        <p class="truncate text-[11px] text-slate-500">
-                                            <span class="font-mono">{{ item.nis }}</span> · {{ item.kelas }} · {{ item.formattedDate }}
-                                        </p>
-                                    </div>
-                                    <div class="shrink-0 text-right">
-                                        <span
-                                            :class="[
-                                                'inline-block rounded-full px-2.5 py-0.5 text-xs font-bold',
-                                                item.percentage >= 75
-                                                    ? 'bg-emerald-100 text-emerald-800'
-                                                    : item.percentage >= 60
-                                                      ? 'bg-amber-100 text-amber-800'
-                                                      : 'bg-rose-100 text-rose-800',
-                                            ]"
-                                        >
-                                            {{ item.percentage }}
-                                        </span>
-                                        <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ item.score }} / {{ item.maxScore ?? maxScore }} poin</p>
-                                        <p
-                                            :class="['text-[10px] font-extrabold uppercase', item.is_timeout ? 'text-rose-600' : 'text-emerald-600']"
-                                            :title="item.is_auto_submitted ? autoSubmittedHint : undefined"
-                                        >
-                                            {{ responseStatusLabel(item) }}
-                                        </p>
-                                    </div>
-                                </li>
-                                <li v-if="filteredGradebook.length === 0" class="px-4 py-8 text-center text-xs text-slate-400">
-                                    {{
-                                        gradebook.length === 0
-                                            ? 'Belum ada tanggapan masuk untuk kuis ini.'
-                                            : 'Tidak ada data siswa yang cocok dengan pencarian.'
-                                    }}
-                                </li>
-                            </ul>
-
-                            <div class="hidden overflow-x-auto sm:block">
-                                <table class="w-full text-left text-xs text-slate-600">
-                                    <thead
-                                        class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
-                                    >
-                                        <tr>
-                                            <th class="px-4 py-3">No</th>
-                                            <th class="px-4 py-3">NIS</th>
-                                            <th class="px-4 py-3">Nama Siswa</th>
-                                            <th class="px-4 py-3">Kelas / Cohort</th>
-                                            <th class="px-4 py-3 text-center">Poin Benar</th>
-                                            <th class="px-4 py-3 text-center" title="Poin benar ÷ total poin soal berkunci × 100">Nilai (0-100)</th>
-                                            <th class="px-4 py-3">Status</th>
-                                            <th class="px-4 py-3">Waktu Selesai</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-100">
-                                        <tr v-for="(item, idx) in filteredGradebook" :key="item.id" class="transition-colors hover:bg-slate-50/80">
-                                            <td class="px-4 py-3 font-semibold text-slate-400">{{ idx + 1 }}</td>
-                                            <td class="px-4 py-3 font-mono font-medium text-slate-700">{{ item.nis }}</td>
-                                            <td class="px-4 py-3 font-bold text-slate-900">
-                                                {{ item.name }}
-                                                <span v-if="item.isGuest" class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Tamu</span>
-                                                <span
-                                                    v-if="item.duplicateName"
-                                                    class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
-                                                    title="Nama dan kelas yang sama mengirim lebih dari satu jawaban"
-                                                    >Nama ganda</span
-                                                >
-                                                <span
-                                                    v-if="(item.attempts ?? 1) > 1"
-                                                    class="ml-1 whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700"
-                                                    :title="`Percobaan ke-${item.attempt} dari ${item.attempts} percobaan siswa ini`"
-                                                    >Percobaan {{ item.attempt }}/{{ item.attempts }}</span
-                                                >
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{{ item.kelas }}</span>
-                                            </td>
-                                            <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ item.score }} / {{ item.maxScore ?? maxScore }}</td>
-                                            <td class="px-4 py-3 text-center">
-                                                <span
-                                                    :class="[
-                                                        'inline-block rounded-full px-2.5 py-0.5 font-bold',
-                                                        item.percentage >= 75
-                                                            ? 'bg-emerald-100 text-emerald-800'
-                                                            : item.percentage >= 60
-                                                              ? 'bg-amber-100 text-amber-800'
-                                                              : 'bg-rose-100 text-rose-800',
-                                                    ]"
-                                                >
-                                                    {{ item.percentage }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span
-                                                    :class="[
-                                                        'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase',
-                                                        item.is_timeout
-                                                            ? 'border border-rose-200 bg-rose-50 text-rose-700'
-                                                            : 'border border-emerald-200 bg-emerald-50 text-emerald-700',
-                                                    ]"
-                                                    :title="item.is_auto_submitted ? autoSubmittedHint : undefined"
-                                                >
-                                                    {{ responseStatusLabel(item) }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3 text-slate-400">{{ item.formattedDate }}</td>
-                                        </tr>
-                                        <tr v-if="filteredGradebook.length === 0">
-                                            <td colspan="8" class="py-8 text-center text-slate-400">
-                                                {{
-                                                    gradebook.length === 0
-                                                        ? 'Belum ada tanggapan masuk untuk kuis ini.'
-                                                        : 'Tidak ada data siswa yang cocok dengan pencarian.'
-                                                }}
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <!-- Rekapitulasi Nilai Siswa: every column sortable, A–Z initials like Moodle -->
+                        <GradebookTable :rows="gradebook" :max-score="maxScore" :export-url="exportResponsesUrl" />
 
                         <ItemAnalysisPanel
                             v-if="itemAnalysis"
