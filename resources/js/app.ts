@@ -8,6 +8,7 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ConnectionLostNotice from './components/ConnectionLostNotice.vue';
 import { initializeTheme } from './composables/useAppearance';
 import { setupDeviceHints } from './lib/deviceHints';
+import { setupRequestTimeouts } from './lib/requestTimeouts';
 
 // Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
@@ -43,3 +44,6 @@ initializeTheme();
 
 // The device each request comes from, for the activity report (see lib/deviceHints.ts).
 setupDeviceHints();
+
+// A page visit that stalls on weak Wi-Fi fails after a while and is tried again, instead of loading forever.
+setupRequestTimeouts();

@@ -20,9 +20,11 @@ const form = useForm({
     remember: false,
 });
 
+// The password is cleared once the server has answered (a wrong password), not when the request
+// never got through on weak Wi-Fi: the student then just presses Masuk again.
 const submit = () => {
     form.post(route('login'), {
-        onFinish: () => form.reset('password'),
+        onError: () => form.reset('password'),
     });
 };
 </script>

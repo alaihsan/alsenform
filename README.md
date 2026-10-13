@@ -143,7 +143,12 @@ Perintah `php artisan lan:serve` menyiapkan semuanya untuk hari ujian:
 - Memperbarui database dan cache secara otomatis setelah aplikasi di-update.
 - Bisa berjalan di latar belakang (`--daemon`), dengan `lan:status` dan `lan:stop` untuk mengelolanya. Kalau port sedang dipakai, perintah ini menawarkan untuk menghentikan proses lama atau pindah ke port lain.
 
-Supaya halaman tetap cepat di jaringan yang padat, aset dikompresi gzip dan disimpan di cache browser, font dari internet tidak menghambat tampilan saat offline, dan alamat media tidak terikat pada IP server.
+Supaya halaman tetap cepat di jaringan yang padat:
+
+- Aset dikompresi gzip dan disimpan di cache browser, dan alamat media tidak terikat pada IP server.
+- Font dari internet baru diambil setelah halaman selesai dimuat. Di intranet tanpa internet, permintaan ke Google Fonts bisa menggantung lama; dulu itu membuat halaman terus "loading". Sekarang halaman langsung selesai dengan font bawaan perangkat.
+- Pindah halaman di dalam aplikasi menunggu paling lama 15 detik (kirim formulir, termasuk login, 20 detik). Kalau koneksi Wi-Fi tersendat, halaman dicoba lagi otomatis dua kali sambil menampilkan "Koneksi lambat, mencoba lagi...", lalu ada tombol Coba Lagi. Login yang gagal tersambung tidak menghapus password, jadi siswa cukup menekan Masuk lagi.
+- `php artisan exam:optimize` menurunkan `BCRYPT_ROUNDS` di `.env` menjadi 10 (bawaan PHP). Pemeriksaan password saat login turun dari sekitar 230 ms menjadi 60 ms waktu prosesor, sehingga satu kelas yang login bersamaan tidak membuat server sibuk. Password lama otomatis disimpan ulang dengan pengaturan baru saat pemiliknya login.
 
 ### Hal kecil yang membantu
 

@@ -16,7 +16,15 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex">
         <title>{{ $page['title'] }} - {{ config('app.name', 'Alsenform') }}</title>
-        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" media="print" onload="this.media='all'" />
+        {{-- Optional web font, fetched once the page has loaded so a missing internet connection never delays it. --}}
+        <script>
+            window.addEventListener('load', function () {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://fonts.bunny.net/css?family=instrument-sans:400,500,600';
+                document.head.appendChild(link);
+            });
+        </script>
         <style>
             *, *::before, *::after { box-sizing: border-box; }
             body {

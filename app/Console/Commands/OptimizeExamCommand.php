@@ -17,6 +17,11 @@ class OptimizeExamCommand extends Command
     protected $signature = 'exam:optimize {--production : Set APP_DEBUG=false secara otomatis di .env}';
 
     /**
+     * Bcrypt cost of passwords: the PHP default, light enough for a whole class logging in at once.
+     */
+    public const BCRYPT_ROUNDS = 10;
+
+    /**
      * The console command description.
      *
      * @var string
@@ -45,6 +50,17 @@ class OptimizeExamCommand extends Command
             $this->warn('⚠️  APP_DEBUG masih bernilai true. Untuk performa maksimal saat ujian ramai, jalankan dengan flag: php artisan exam:optimize --production');
         } else {
             $this->info('✓ Mode produksi aktif (APP_DEBUG=false).');
+        }
+
+        // Password check at login: a whole class logs in at the same moment. Cost 10 (the PHP
+        // default, ~60 ms of CPU per login) instead of 12 (~230 ms) keeps the server responsive;
+        // existing passwords are re-hashed at the next login.
+        $rounds = (int) config('hashing.bcrypt.rounds', 12);
+        if ($rounds > self::BCRYPT_ROUNDS) {
+            $this->setEnvValue('BCRYPT_ROUNDS', (string) self::BCRYPT_ROUNDS);
+            $this->info('✓ Login dipercepat (BCRYPT_ROUNDS='.self::BCRYPT_ROUNDS.'): satu kelas yang login bersamaan tidak lagi membuat server sibuk.');
+        } else {
+            $this->info("✓ Pemeriksaan password saat login sudah ringan (BCRYPT_ROUNDS={$rounds}).");
         }
 
         // 2. Check Database & Max Connections
