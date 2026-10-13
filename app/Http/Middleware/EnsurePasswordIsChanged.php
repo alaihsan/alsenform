@@ -29,6 +29,9 @@ class EnsurePasswordIsChanged
                 'forms.public.unlock-requests.store',
                 'forms.public.unlock-requests.status',
                 'forms.public.unlock-verify',
+                'connection-check',
+                'connection-check.ping',
+                'connection-check.download',
             ];
 
             $currentRouteName = $request->route()?->getName();

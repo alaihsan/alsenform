@@ -120,7 +120,11 @@ const studentArticles: HelpArticle[] = [
         points: [
             {
                 title: 'Wi-Fi terputus',
-                text: 'Muncul pita kuning di atas halaman. Tetap lanjutkan mengerjakan: jawaban aman di perangkat dan dikirim otomatis begitu koneksi pulih.',
+                text: 'Muncul pemberitahuan kecil "Koneksi terputus" di layar. Tetap lanjutkan mengerjakan: jawaban aman di perangkat dan dikirim otomatis begitu koneksi pulih.',
+            },
+            {
+                title: 'Halaman lambat terbuka',
+                text: 'Buka halaman Cek Koneksi (tautan di halaman login, atau alamat server ditambah /cek-koneksi) di perangkat yang lambat. Tes 10 detiknya menunjukkan apakah masalahnya di server, di Wi-Fi, atau di pengaturan perangkat, beserta sarannya.',
             },
             {
                 title: 'Perangkat mati atau rusak',

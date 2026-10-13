@@ -904,6 +904,59 @@ class ServeLanCommand extends Command
     }
 
     /**
+     * Where to check a slow device, and the server's network set-ups that make pages slow.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function outputNetworkAdvice(array $interfaces, int $port): void
+    {
+        $firstIp = $interfaces !== [] ? reset($interfaces) : 'localhost';
+        $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>http://{$firstIp}:{$port}/cek-koneksi</> di perangkat itu.");
+
+        foreach ($this->networkWarnings($interfaces) as $warning) {
+            $this->output->writeln(" <fg=yellow;options=bold>⚠️  {$warning}</>");
+        }
+
+        $this->newLine();
+    }
+
+    /**
+     * Set-ups of the server that make pages slow or drop connections for everyone using it.
+     *
+     * @param  array<string, string>  $interfaces  Address by interface label.
+     * @return list<string>
+     */
+    protected function networkWarnings(array $interfaces): array
+    {
+        $isWifi = fn (string $label): bool => (bool) preg_match('/wi-?fi|airport|wlan/i', $label);
+        $wifiLabels = array_filter(array_keys($interfaces), $isWifi);
+        $warnings = [];
+
+        if ($interfaces !== [] && count($wifiLabels) === count($interfaces)) {
+            $warnings[] = 'Server hanya terhubung lewat Wi-Fi: semua siswa berbagi satu radio Wi-Fi server. Sambungkan server ke router/access point dengan kabel LAN agar halaman tidak lambat atau terputus.';
+        }
+
+        if ($wifiLabels !== [] && $this->isAwdlActive()) {
+            $warnings[] = 'AirDrop/Handoff (AWDL) aktif di server: Wi-Fi Mac tersendat setiap beberapa detik. Matikan AirDrop dan Handoff selama ujian, atau jalankan: sudo ifconfig awdl0 down';
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Whether macOS AWDL (AirDrop, Handoff, Sidecar) is active: it takes the Wi-Fi radio to other
+     * channels several times a second, which delays and drops the server's Wi-Fi traffic.
+     */
+    protected function isAwdlActive(): bool
+    {
+        if (PHP_OS_FAMILY !== 'Darwin') {
+            return false;
+        }
+
+        return str_contains((string) @shell_exec('ifconfig awdl0 2>/dev/null'), 'status: active');
+    }
+
+    /**
      * Print banner when running as background daemon.
      *
      * @param  array<string, string>  $interfaces
@@ -938,6 +991,7 @@ class ServeLanCommand extends Command
             $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
         }
         $this->newLine();
+        $this->outputNetworkAdvice($interfaces, $port);
 
         $this->output->writeln(' <fg=white;options=bold>🕹️ Perintah Manajemen Server:</>');
         $this->output->writeln('   • Cek status server : <fg=yellow>php artisan lan:status</> atau <fg=yellow>php artisan lan:serve --status</>');
@@ -996,6 +1050,7 @@ class ServeLanCommand extends Command
         $this->output->writeln("   👉 <fg=white>http://localhost:{$port}</> <fg=gray>(Hanya di komputer ini)</>");
 
         $this->newLine();
+        $this->outputNetworkAdvice($interfaces, $port);
         $this->output->writeln(' <fg=white;options=bold>📋 Petunjuk Pemakaian di Kelas / Lab:</>');
         $this->output->writeln('   1. Pastikan perangkat siswa terhubung ke Wi-Fi / kabel router yang sama.');
         $this->output->writeln('   2. Siswa cukup membuka browser (Chrome/Safari) dan mengetik URL di atas.');

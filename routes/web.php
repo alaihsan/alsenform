@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ActivityReportController;
 use App\Http\Controllers\CohortController;
+use App\Http\Controllers\ConnectionCheckController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\ExamProgressController;
@@ -19,6 +20,11 @@ use App\Services\DocxImportTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+// Cek Koneksi: measured from a slow device, also before login.
+Route::get('cek-koneksi', [ConnectionCheckController::class, 'page'])->name('connection-check');
+Route::get('cek-koneksi/ping', [ConnectionCheckController::class, 'ping'])->middleware('throttle:connection-check-ping')->name('connection-check.ping');
+Route::get('cek-koneksi/unduh', [ConnectionCheckController::class, 'download'])->middleware('throttle:connection-check-download')->name('connection-check.download');
 
 Route::get('/', function () {
     if (auth()->check()) {

@@ -85,6 +85,9 @@ const submit = () => {
             </div>
 
             <div class="text-center text-xs text-muted-foreground">Akun dikelola oleh Administrator Sekolah.</div>
+            <div class="text-center text-xs">
+                <TextLink :href="route('connection-check')" class="text-xs">Halaman lambat terbuka? Cek koneksi</TextLink>
+            </div>
         </form>
     </AuthBase>
 </template>
