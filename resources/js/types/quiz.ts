@@ -50,6 +50,8 @@ export type QuizFormPayload = {
     canInstallAddonsForEveryone?: boolean;
     /** Token Ujian add-on: the current token for the proctor. */
     examTokenUrl?: string;
+    /** Peta Kelas: every student of the exam while it runs. */
+    classMapUrl?: string;
     /** A remedial or enrichment exam (Remedial & Pengayaan add-on): what it follows up, and for whom. */
     followUp?: {
         kind: 'remedial' | 'pengayaan';

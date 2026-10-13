@@ -302,6 +302,36 @@ class QuizForm extends Model
         return $unlocked;
     }
 
+    /**
+     * The ids among the given ones that are questions of this quiz (and of the student's draw, when
+     * given), as strings without repeats: the questions a student marked "Ragu-ragu".
+     *
+     * @param  list<int|string>|null  $assignedIds
+     * @return list<string>
+     */
+    public function questionIdsAmong(mixed $ids, ?array $assignedIds = null): array
+    {
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        $known = collect(is_array($this->questions) ? $this->questions : [])
+            ->filter(fn (mixed $question): bool => is_array($question) && isset($question['id']))
+            ->map(fn (array $question): string => (string) $question['id']);
+
+        if ($assignedIds !== null) {
+            $known = $known->intersect(array_map('strval', $assignedIds));
+        }
+
+        return collect($ids)
+            ->filter(fn (mixed $id): bool => is_int($id) || (is_string($id) && $id !== ''))
+            ->map(fn (int|string $id): string => (string) $id)
+            ->intersect($known->all())
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     public function isRestrictedToCohorts(): bool
     {
         return $this->cohorts()->exists();

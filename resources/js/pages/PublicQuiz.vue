@@ -12,6 +12,7 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    Flag,
     KeyRound,
     Send,
     LayoutGrid,
@@ -107,6 +108,8 @@ const props = defineProps<{
         is_locked?: boolean;
         draft_answers?: Record<string, any> | null;
         draft_saved_at?: string | null;
+        /** The questions marked "Ragu-ragu" in this attempt (kept on the server with the draft). */
+        doubtful_question_ids?: string[];
     };
     /** Attempts handed in before this one, and how many the teacher allows (null: no limit). */
     attempts?: {
@@ -119,6 +122,26 @@ const props = defineProps<{
 }>();
 
 const answers = ref<Record<number, any>>({});
+
+/*
+ * "Ragu-ragu", as in ANBK: a student marks the questions they are not sure of, to come back to
+ * them before handing in. The marks are kept on the device and with the draft on the server, and
+ * handed in with the answers (the teacher's Peta Miskonsepsi tells guesses from misconceptions).
+ */
+const doubtsKey = `alsen_doubts_${props.quizForm.id}_${props.session?.token ?? 'tamu'}`;
+const doubtfulIds = ref<string[]>(
+    (() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(doubtsKey) || 'null');
+            if (Array.isArray(saved)) {
+                return saved.map(String);
+            }
+        } catch {
+            // ignore storage access error
+        }
+        return (props.session?.doubtful_question_ids ?? []).map(String);
+    })(),
+);
 const email = ref('');
 const displayQuestions = ref<Question[]>([]);
 const isSubmitted = ref(false);
@@ -388,6 +411,7 @@ const syncDraftToServer = async () => {
                 session_token: props.session?.token,
                 respondent_identifier: respondentIdentifier,
                 answers: answers.value,
+                doubts: doubtfulIds.value,
             },
             { timeout: REQUEST_TIMEOUT_MS },
         );
@@ -436,6 +460,7 @@ const clearDraft = () => {
         localStorage.removeItem(draftEmailKey);
         localStorage.removeItem(draftSavedAtKey);
         localStorage.removeItem(draftIdentityKey);
+        localStorage.removeItem(doubtsKey);
         autoSaveStatus.value = 'idle';
     } catch {
         // ignore
@@ -1110,6 +1135,12 @@ const examRules = computed<string[]>(() => {
             : 'Tidak ada batas waktu. Setelah selesai, tekan "Kirim Jawaban" agar jawaban tercatat.',
     );
 
+    if (canMarkDoubt.value) {
+        rules.push(
+            'Belum yakin dengan jawaban? Tekan "Ragu-ragu" pada soal itu: nomornya menjadi kuning di panel Nomor Soal agar mudah diperiksa lagi. Tandai dengan jujur, karena guru memakainya untuk melihat bagian yang belum dipahami.',
+        );
+    }
+
     if (examRequiredCount.value > 0) {
         rules.push(`Soal bertanda * wajib dijawab (${examRequiredCount.value} soal) sebelum jawaban dapat dikirim.`);
     }
@@ -1422,6 +1453,41 @@ const goToFirstUnansweredRequired = () => {
     goToQuestion(target.id);
 };
 
+const canMarkDoubt = computed<boolean>(() => props.quizForm.settings.isQuiz !== false);
+const isDoubtful = (question: Question) => doubtfulIds.value.includes(String(question.id));
+const doubtfulQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => isDoubtful(question)));
+
+const toggleDoubt = (question: Question) => {
+    // While locked the attempt stays as it was when the student left.
+    if (isLocked.value || isSubmitted.value || isSubmitting.value) {
+        return;
+    }
+    const id = String(question.id);
+    doubtfulIds.value = isDoubtful(question) ? doubtfulIds.value.filter((doubtful) => doubtful !== id) : [...doubtfulIds.value, id];
+};
+
+watch(doubtfulIds, (ids) => {
+    if (isSubmitted.value) {
+        return;
+    }
+    try {
+        localStorage.setItem(doubtsKey, JSON.stringify(ids));
+    } catch {
+        // ignore storage error
+    }
+    hasUnsyncedDraft = true;
+    scheduleServerDraftSync();
+});
+
+const goToFirstDoubtful = () => {
+    const target = doubtfulQuestions.value[0];
+    if (!target) {
+        return;
+    }
+    showSubmitConfirmModal.value = false;
+    goToQuestion(target.id);
+};
+
 const showSubmitConfirmModal = ref(false);
 
 const openSubmitConfirmation = () => {
@@ -1723,6 +1789,7 @@ const submissionPayload = (isTimeout: boolean) => ({
     email: email.value || null,
     ...identityPayload(),
     answers: answers.value,
+    doubts: doubtfulIds.value,
     respondent_identifier: respondentIdentifier,
     session_token: props.session?.token ?? null,
     is_timeout: isTimeout,
@@ -2090,6 +2157,22 @@ const submitAnotherResponse = () => {
                             {{ question.points }} Poin
                         </span>
                         <span v-if="question.required" class="text-xs font-bold text-red-500">* Wajib</span>
+                        <button
+                            v-if="canMarkDoubt"
+                            type="button"
+                            :aria-pressed="isDoubtful(question)"
+                            :disabled="isLocked"
+                            :class="[
+                                'ml-auto inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold transition disabled:opacity-50',
+                                isDoubtful(question)
+                                    ? 'border-amber-300 bg-amber-100 text-amber-800'
+                                    : 'border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-700',
+                            ]"
+                            @click="toggleDoubt(question)"
+                        >
+                            <Flag :class="['h-3.5 w-3.5', isDoubtful(question) ? 'fill-current' : '']" />
+                            Ragu-ragu
+                        </button>
                     </div>
                     <h2
                         class="mt-3 text-[17px] font-medium leading-relaxed text-slate-900 sm:text-lg"
@@ -2560,12 +2643,14 @@ const submitAnotherResponse = () => {
                         type="button"
                         :class="[
                             'relative flex aspect-square w-full items-center justify-center rounded-xl text-xs font-bold tabular-nums transition',
-                            isQuestionAnswered(q)
-                                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                            isDoubtful(q)
+                                ? 'bg-amber-400 text-amber-950 hover:bg-amber-500'
+                                : isQuestionAnswered(q)
+                                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
                             activeQuestionId === q.id ? 'ring-2 ring-indigo-600' : '',
                         ]"
-                        :title="`Soal ${idx + 1}: ${isQuestionAnswered(q) ? 'Sudah Dijawab' : (q.required ? 'Belum Dijawab (Wajib)' : 'Belum Dijawab')}`"
+                        :title="`Soal ${idx + 1}: ${isQuestionAnswered(q) ? 'Sudah Dijawab' : (q.required ? 'Belum Dijawab (Wajib)' : 'Belum Dijawab')}${isDoubtful(q) ? ' · Ragu-ragu' : ''}`"
                         :aria-current="activeQuestionId === q.id ? 'step' : undefined"
                         @click="goToQuestion(q.id)"
                     >
@@ -2586,6 +2671,10 @@ const submitAnotherResponse = () => {
                 <span class="inline-flex items-center gap-1.5">
                     <span class="h-3 w-3 rounded-md bg-slate-200"></span>
                     <span>Belum</span>
+                </span>
+                <span v-if="canMarkDoubt" class="inline-flex items-center gap-1.5">
+                    <span class="h-3 w-3 rounded-md bg-amber-400"></span>
+                    <span>Ragu-ragu</span>
                 </span>
                 <span class="inline-flex items-center gap-1.5">
                     <span class="h-2 w-2 rounded-full bg-red-500"></span>
@@ -2836,6 +2925,28 @@ const submitAnotherResponse = () => {
                 <p class="mt-1 text-xs text-emerald-700 pl-7">
                     Pastikan Anda sudah yakin dengan semua pilihan jawaban sebelum mengirim.
                 </p>
+            </div>
+
+            <!-- Questions still marked "Ragu-ragu" -->
+            <div v-if="doubtfulQuestions.length" class="mt-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900">
+                <div class="flex items-start gap-2.5 text-sm font-bold text-amber-800">
+                    <Flag class="h-5 w-5 shrink-0 fill-current text-amber-500" />
+                    <span>
+                        {{ doubtfulQuestions.length }} soal masih ditandai ragu-ragu: nomor
+                        {{ doubtfulQuestions.map((question) => getQuestionNumber(question.id)).join(', ') }}.
+                    </span>
+                </div>
+                <p class="mt-1.5 pl-7 leading-relaxed text-amber-800">Periksa lagi bila masih ada waktu. Jika dikirim sekarang, jawabannya terkirim apa adanya.</p>
+                <div class="mt-3 pl-7">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-400"
+                        @click="goToFirstDoubtful"
+                    >
+                        <span>Periksa Soal Ragu-ragu</span>
+                        <ChevronRight class="h-3.5 w-3.5" />
+                    </button>
+                </div>
             </div>
 
             <!-- Action Buttons -->

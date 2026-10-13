@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { Building2, Check, ChevronDown, Eye, FlaskConical, GraduationCap, KeyRound, Plus, Puzzle, Sparkles, Trash2 } from 'lucide-vue-next';
+import { Brain, Building2, Check, ChevronDown, Eye, FlaskConical, GraduationCap, KeyRound, Plus, Puzzle, Sparkles, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 export type AddonEntry = {
@@ -32,7 +32,7 @@ const emit = defineEmits<{
     'update:addons': [addons: AddonEntry[]];
 }>();
 
-const ICONS: Record<string, unknown> = { 'flask-conical': FlaskConical, 'key-round': KeyRound, 'graduation-cap': GraduationCap };
+const ICONS: Record<string, unknown> = { 'flask-conical': FlaskConical, 'key-round': KeyRound, 'graduation-cap': GraduationCap, brain: Brain };
 
 const openKey = ref<string | null>(props.addons.length === 1 ? props.addons[0].key : null);
 const busyKey = ref<string | null>(null);

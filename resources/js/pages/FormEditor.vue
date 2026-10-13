@@ -4,6 +4,7 @@ import RichContent from '@/components/RichContent.vue';
 import AddonExamSwitches from '@/components/addons/AddonExamSwitches.vue';
 import AddonGallery, { type AddonEntry } from '@/components/addons/AddonGallery.vue';
 import ExamTokenCard from '@/components/addons/ExamTokenCard.vue';
+import MisconceptionPanel, { type MisconceptionMap } from '@/components/addons/MisconceptionPanel.vue';
 import RemedialPanel, { type RemedialOverview } from '@/components/addons/RemedialPanel.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import GradebookTable from '@/components/form-editor/GradebookTable.vue';
@@ -11,6 +12,7 @@ import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
 import QuestionDrawSettings, { type QuestionDraw } from '@/components/form-editor/QuestionDrawSettings.vue';
+import ClassMapPanel, { type ClassMapStudent } from '@/components/form-editor/ClassMapPanel.vue';
 import ItemAnalysisPanel, { type ItemAnalysis } from '@/components/form-editor/ItemAnalysisPanel.vue';
 import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
@@ -385,6 +387,10 @@ const unlockStudent = async (entry: UnlockPanelEntry) => {
     }
 };
 
+/** Unlock a student from their card on the Peta Kelas. */
+const unlockFromClassMap = (student: ClassMapStudent) =>
+    unlockStudent({ id: `map-${student.id}`, session_id: student.id, request_id: null, name: student.name } as UnlockPanelEntry);
+
 const unlockAllStudents = async () => {
     if (!props.quizForm?.id || isUnlockingAll.value) {
         return;
@@ -489,6 +495,7 @@ const isAddonOnForExam = (addon: AddonEntry) => Boolean(addon.installedForOwner)
 const itemAnalysisAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'item-analysis') ?? null);
 const examTokenAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'exam-token') ?? null);
 const remedialAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'remedial') ?? null);
+const misconceptionAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'misconception') ?? null);
 
 const setAddonForExam = (addon: AddonEntry, on: boolean) => {
     form.settings.addons = { ...form.settings.addons, [addon.key]: on };
@@ -1309,6 +1316,9 @@ const savingLabelsOf = ref<string | null>(null);
 /* Analisis butir soal (Responses tab), and its difficulty applied to the labels. */
 const itemAnalysis = computed<ItemAnalysis | null>(() => (props.quizForm?.responses as { analysis?: ItemAnalysis } | undefined)?.analysis ?? null);
 const remedialOverview = computed<RemedialOverview | null>(() => (props.quizForm?.responses as { remedial?: RemedialOverview } | undefined)?.remedial ?? null);
+const misconceptionMap = computed<MisconceptionMap | null>(
+    () => (props.quizForm?.responses as { misconceptions?: MisconceptionMap } | undefined)?.misconceptions ?? null,
+);
 const followUp = computed(() => props.quizForm?.followUp ?? null);
 const isApplyingDifficulty = ref(false);
 const applyDifficultyMessage = ref('');
@@ -3318,6 +3328,28 @@ watch(
                             </button>
                         </div>
 
+                        <MisconceptionPanel v-if="misconceptionMap && responseCount" :map="misconceptionMap" />
+                        <div
+                            v-else-if="responseCount && misconceptionAddon && form.settings.isQuiz !== false"
+                            class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
+                        >
+                            <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                {{
+                                    misconceptionAddon.installedForOwner
+                                        ? 'Add-on Peta Miskonsepsi dimatikan untuk ujian ini.'
+                                        : 'Siswa yang menebak, belum paham, atau yakin pada konsep keliru? Pasang add-on Peta Miskonsepsi.'
+                                }}
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
+                                @click="misconceptionAddon.installedForOwner ? setAddonForExam(misconceptionAddon, true) : (isAddonGalleryOpen = true)"
+                            >
+                                {{ misconceptionAddon.installedForOwner ? 'Aktifkan' : 'Lihat add-on' }}
+                            </button>
+                        </div>
+
                         <RemedialPanel v-if="remedialOverview && responseCount" :overview="remedialOverview" />
                         <div
                             v-else-if="responseCount && remedialAddon"
@@ -4074,6 +4106,7 @@ watch(
                         @toggle="(on) => examTokenAddon && setAddonForExam(examTokenAddon, on)"
                         @open-gallery="isAddonGalleryOpen = true"
                     />
+                    <ClassMapPanel v-if="quizForm?.classMapUrl" :url="quizForm.classMapUrl" :busy-ids="unlockingIds" @unlock="unlockFromClassMap" />
                     <UnlockRequestsPanel
                         :unlock-requests="unlockRequests"
                         :lock-on-blur="Boolean(form.settings.lockOnBlur)"

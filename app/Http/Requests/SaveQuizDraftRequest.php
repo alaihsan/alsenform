@@ -38,6 +38,8 @@ class SaveQuizDraftRequest extends FormRequest
             'session_token' => ['required', 'string', 'max:100'],
             'respondent_identifier' => ['nullable', 'string', 'max:100'],
             'answers' => ['present', 'array', 'max:500'],
+            // The questions marked "Ragu-ragu".
+            'doubts' => ['sometimes', 'nullable', 'array', 'max:500'],
         ];
     }
 

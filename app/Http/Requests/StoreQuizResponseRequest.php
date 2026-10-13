@@ -36,6 +36,8 @@ class StoreQuizResponseRequest extends FormRequest
             // When the time ran out the answers may be empty: nothing was answered yet.
             'answers' => [$this->boolean('is_timeout') ? 'present' : 'required', 'array', 'max:500'],
             'answers.*' => ['nullable'],
+            // The questions marked "Ragu-ragu".
+            'doubts' => ['sometimes', 'nullable', 'array', 'max:500'],
             // A guest's name, class and email (the fields the teacher picked). Not required again
             // when the exam session holds them already, nor when the time ran out.
             ...($quizForm ? app(RespondentIdentity::class)->rules($quizForm, $this->user(), $this->examSession($quizForm), required: ! $this->boolean('is_timeout')) : []),

@@ -125,6 +125,7 @@ class SubmitExpiredAttempts
                 'respondent_class' => $isAccount ? null : $attempt->respondent_class,
                 'email' => $attempt->respondent_email ?? $session->user?->email,
                 'answers' => $answers,
+                'doubtful_question_ids' => $attempt->doubtful_question_ids,
                 'question_ids' => $assignedIds,
                 'score' => $this->scoring->score($questions, $answers),
                 'is_timeout' => true,

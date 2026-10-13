@@ -9,6 +9,7 @@ use App\Models\QuizResponse;
 use App\Models\User;
 use App\Services\Addons;
 use App\Services\ItemAnalysis;
+use App\Services\Misconceptions;
 use App\Services\QuestionBank;
 use App\Services\Remedial;
 use Illuminate\Support\Collection;
@@ -62,6 +63,7 @@ class QuizFormPayloads
             ],
             'canInstallAddonsForEveryone' => (bool) auth()->user()?->isAdmin(),
             'examTokenUrl' => route('forms.exam-token', $quizForm),
+            'classMapUrl' => route('forms.class-map', $quizForm),
             // A remedial or enrichment exam: the exam it follows up and the students chosen for it.
             'followUp' => $quizForm->follow_up_kind !== null ? $this->followUp($quizForm) : null,
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
@@ -204,7 +206,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'doubtful_question_ids', 'question_ids', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
@@ -279,6 +281,10 @@ class QuizFormPayloads
             'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
             // Remedial & Pengayaan: the students below and above the KKM, and their follow-up exams.
             'remedial' => $quizForm->usesAddon(Addon::Remedial) ? app(Remedial::class)->overview($quizForm) : null,
+            // Peta Miskonsepsi: right or wrong, sure or "Ragu-ragu", per question.
+            'misconceptions' => $quizForm->usesAddon(Addon::Misconception)
+                ? app(Misconceptions::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
+                : null,
         ];
     }
 

@@ -161,6 +161,7 @@ class QuizResponseController extends Controller
                 'server_time' => now()->toISOString(),
                 'is_locked' => $quizSession->isEffectivelyLocked($quizForm),
                 'draft_answers' => $hasServerDraft ? $quizSession->draft_answers : null,
+                'doubtful_question_ids' => $quizSession->submitted_at === null ? ($quizSession->doubtful_question_ids ?? []) : [],
                 'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
             'attempts' => [
@@ -338,6 +339,11 @@ class QuizResponseController extends Controller
             ? $session->savedAnswersFor($quizForm, $assignedIds)
             : $this->onlyAssigned($validated['answers'], $assignedIds);
 
+        // The questions marked "Ragu-ragu", from the same source as the answers that count.
+        $doubts = ! $countsSavedAnswers && $request->has('doubts')
+            ? $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)
+            : $session?->doubtful_question_ids;
+
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
 
@@ -356,6 +362,7 @@ class QuizResponseController extends Controller
             'respondent_class' => $identity['respondent_class'],
             'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
             'answers' => $answers,
+            'doubtful_question_ids' => $doubts,
             'question_ids' => $assignedIds,
             'score' => $score,
             'is_timeout' => $isTimeout,
@@ -677,6 +684,7 @@ class QuizResponseController extends Controller
 
         $autoSubmitted->update([
             'answers' => $answers,
+            ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($request->input('doubts'), $examLayout->assignedIds($quizForm, $session->layout))] : []),
             'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
             'is_auto_submitted' => false,
             'late_seconds' => $this->secondsLate($session),
@@ -755,8 +763,11 @@ class QuizResponseController extends Controller
             return response()->json(['saved' => false]);
         }
 
+        $assignedIds = app(ExamLayout::class)->assignedIds($quizForm, $session->layout);
+
         $session->update([
-            'draft_answers' => $this->onlyAssigned($validated['answers'], app(ExamLayout::class)->assignedIds($quizForm, $session->layout)),
+            'draft_answers' => $this->onlyAssigned($validated['answers'], $assignedIds),
+            ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)] : []),
             'draft_saved_at' => now(),
         ]);
 

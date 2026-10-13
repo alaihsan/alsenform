@@ -22,6 +22,7 @@ class QuizResponse extends Model
         'respondent_class',
         'email',
         'answers',
+        'doubtful_question_ids',
         'question_ids',
         'score',
         'is_timeout',
@@ -38,6 +39,7 @@ class QuizResponse extends Model
     {
         return [
             'answers' => 'array',
+            'doubtful_question_ids' => 'array',
             'question_ids' => 'array',
             'late_seconds' => 'integer',
             'score' => 'integer',

@@ -53,6 +53,9 @@ class QuizResultsReport
         if ($quizForm->usesAddon(Addon::Remedial)) {
             $workbook->addSheet('Remedial & Pengayaan', ...$this->remedialSheet($quizForm, $kkm));
         }
+        if ($quizForm->usesAddon(Addon::Misconception)) {
+            $workbook->addSheet('Peta Miskonsepsi', ...$this->misconceptionSheet($quizForm));
+        }
 
         $workbook->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
     }
@@ -332,6 +335,73 @@ class QuizResultsReport
             'autoFilter' => "A4:{$lastColumn}{$lastRow}",
             'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
             'rowHeights' => [1 => 28, 2 => 20],
+            'repeatRows' => [4, 4],
+        ]];
+    }
+
+    /**
+     * Peta Miskonsepsi: per question the four groups of the CRI method, then per student the
+     * questions with a misconception and those not understood.
+     *
+     * @return array{0: list<list<mixed>|null>, 1: array<string, mixed>}
+     */
+    protected function misconceptionSheet(QuizForm $quizForm): array
+    {
+        $map = app(Misconceptions::class)->analyze($quizForm);
+        $headers = ['No', 'Soal', 'Peserta', 'Paham', 'Menebak', 'Belum Paham', 'Miskonsepsi', '% Miskonsepsi', 'Jawaban Keliru Paling Diyakini', 'Catatan'];
+        $lastColumn = XlsxWriter::columnLetter(count($headers));
+
+        $rows = [
+            [XlsxWriter::cell('Peta Miskonsepsi: '.$this->plainText((string) $quizForm->title), 'title')],
+            [XlsxWriter::cell(implode('   •   ', array_filter([
+                $map['respondents'].' peserta (percobaan pertama)',
+                "{$map['usedDoubt']} memakai tombol Ragu-ragu",
+                'Paham = benar & yakin; Menebak = benar & ragu; Belum paham = salah & ragu atau kosong; Miskonsepsi = salah & yakin',
+                'Ditandai miskonsepsi bila ≥ '.(int) (Misconceptions::FLAG_SHARE * 100).'% peserta salah tapi yakin (minimal '.Misconceptions::MIN_TAKERS.' peserta)',
+                $map['trustworthy'] ? null : 'PERHATIAN: sedikit siswa memakai tombol Ragu-ragu, sehingga miskonsepsi bisa terlalu tinggi',
+            ])), 'subtitle')],
+            null,
+            array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $headers),
+        ];
+
+        foreach ($map['questions'] as $question) {
+            $rows[] = [
+                XlsxWriter::cell($question['number'], 'integer'),
+                XlsxWriter::cell($question['title'], 'text'),
+                XlsxWriter::cell($question['takers'], 'integer'),
+                XlsxWriter::cell($question['paham'], 'integer'),
+                XlsxWriter::cell($question['menebak'], 'integer'),
+                XlsxWriter::cell($question['belumPaham'], 'integer'),
+                XlsxWriter::cell($question['miskonsepsi'], $question['flagged'] ? 'fail' : 'integer'),
+                XlsxWriter::cell($question['shares']['miskonsepsi'], 'summaryPercent'),
+                XlsxWriter::cell($question['commonWrong'] !== null ? "{$question['commonWrong']['answer']} ({$question['commonWrong']['count']} siswa)" : '-', 'text'),
+                XlsxWriter::cell($question['note'] ?? '', 'text'),
+            ];
+        }
+
+        $lastQuestionRow = max(4, count($rows));
+
+        // Per student: where to follow up.
+        $rows[] = null;
+        $studentHeaderRow = count($rows) + 1;
+        $rows[] = array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), ['No', 'Nama Lengkap', 'NIS', 'Kelas', 'Soal Miskonsepsi', 'Soal Belum Paham']);
+        foreach ($map['students'] as $index => $student) {
+            $rows[] = [
+                XlsxWriter::cell($index + 1, 'integer'),
+                XlsxWriter::cell($student['name'], 'text'),
+                XlsxWriter::cell($student['nis'], 'textCenter'),
+                XlsxWriter::cell($student['kelas'], 'textCenter'),
+                XlsxWriter::cell($student['miskonsepsi'] === [] ? '-' : implode(', ', $student['miskonsepsi']), $student['miskonsepsi'] === [] ? 'textCenter' : 'fail'),
+                XlsxWriter::cell($student['belumPaham'] === [] ? '-' : implode(', ', $student['belumPaham']), 'textCenter'),
+            ];
+        }
+
+        return [$rows, [
+            'columns' => [5, 48, 9, 9, 10, 12, 12, 13, 34, 48],
+            'freeze' => 'C5',
+            'autoFilter' => "A4:{$lastColumn}{$lastQuestionRow}",
+            'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
+            'rowHeights' => [1 => 28, 2 => 34, $studentHeaderRow => 20],
             'repeatRows' => [4, 4],
         ]];
     }
