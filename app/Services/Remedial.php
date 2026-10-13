@@ -355,7 +355,7 @@ class Remedial
         return $exam->responses()
             ->with('user:id,name,nis,kelas')
             ->orderBy('id')
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'answers', 'question_ids', 'score']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'answers', 'question_ids', 'score', 'manual_scores']);
     }
 
     /**
@@ -376,12 +376,12 @@ class Remedial
      */
     protected function gradeOf(array $questions, int $maxScore, QuizResponse $response): float
     {
-        $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
-        $max = $response->question_ids !== null
-            ? $this->scoring->maxPoints($this->scoring->questionsGiven($questions, $response->question_ids))
-            : $maxScore;
+        if (! is_array($response->answers)) {
+            return $this->scoring->grade((int) ($response->score ?? 0), $maxScore);
+        }
 
-        return $this->scoring->grade($score, $max);
+        // With what the teacher graded by hand (essays, files).
+        return $this->scoring->result($questions, $response->answers, $response->question_ids, $response->manual_scores)['grade'];
     }
 
     /**

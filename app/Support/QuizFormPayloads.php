@@ -206,7 +206,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'doubtful_question_ids', 'question_ids', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
 
@@ -225,12 +225,12 @@ class QuizFormPayloads
         // A student may take the quiz more than once: every attempt keeps its own answers and grade.
         $attemptNumbers = QuizResponse::attemptNumbers($responses);
 
-        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $maxScore, $guestNameCounts, $attemptNumbers): array {
-            $score = is_array($response->answers) ? $scoring->score($formQuestions, $response->answers) : (int) ($response->score ?? 0);
-            // With questions drawn per student, the maximum is that of the questions they got.
-            $responseMax = $response->question_ids !== null
-                ? $scoring->maxPoints($scoring->questionsGiven($formQuestions, $response->question_ids))
-                : $maxScore;
+        $gradebook = $responses->map(function (QuizResponse $response) use ($scoring, $formQuestions, $guestNameCounts, $attemptNumbers): array {
+            // Scored against the current keys, with what the teacher graded by hand. With questions
+            // drawn per student, the maximum is that of the questions they got.
+            $result = $scoring->result($formQuestions, is_array($response->answers) ? $response->answers : [], $response->question_ids, $response->manual_scores);
+            $score = is_array($response->answers) ? $result['score'] : (int) ($response->score ?? 0);
+            $responseMax = $result['max'];
             $percentage = $scoring->grade($score, $responseMax);
             $isGuest = $response->user_id === null;
 
@@ -246,6 +246,8 @@ class QuizFormPayloads
                 'score' => $score,
                 'maxScore' => $responseMax,
                 'percentage' => $percentage,
+                // Essays and files the teacher has not graded yet: the grade is provisional.
+                'ungraded' => $result['ungraded'],
                 'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                 'attempt' => $attemptNumbers[$response->id]['attempt'] ?? 1,
                 'attempts' => $attemptNumbers[$response->id]['attempts'] ?? 1,
@@ -279,6 +281,10 @@ class QuizFormPayloads
                 ? app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
                 : null,
             'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
+            // Grading by hand: essays and files still waiting for the teacher, over every answer.
+            'gradingUrl' => route('forms.grading.index', $quizForm),
+            'ungradedTotal' => array_sum(array_column($gradebook, 'ungraded')),
+            'hasGradableQuestions' => collect($formQuestions)->contains(fn (mixed $question): bool => is_array($question) && $scoring->isGradableByHand($question)),
             // Remedial & Pengayaan: the students below and above the KKM, and their follow-up exams.
             'remedial' => $quizForm->usesAddon(Addon::Remedial) ? app(Remedial::class)->overview($quizForm) : null,
             // Peta Miskonsepsi: right or wrong, sure or "Ragu-ragu", per question.

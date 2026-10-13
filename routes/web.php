@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ActivityReportController;
 use App\Http\Controllers\AddonController;
+use App\Http\Controllers\AnswerFileController;
 use App\Http\Controllers\ClassMapController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\ConnectionCheckController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\ExamProgressController;
 use App\Http\Controllers\ExamTokenController;
 use App\Http\Controllers\FollowUpExamController;
+use App\Http\Controllers\GradingController;
 use App\Http\Controllers\QuestionBankController;
 use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
@@ -17,6 +19,7 @@ use App\Http\Controllers\QuizFormCollaboratorController;
 use App\Http\Controllers\QuizFormController;
 use App\Http\Controllers\QuizResponseController;
 use App\Http\Controllers\QuizResponseExportController;
+use App\Http\Controllers\QuizResultController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
@@ -75,6 +78,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('forms/{quizForm}/progress', ExamProgressController::class)->name('forms.progress');
         Route::get('forms/{quizForm}/exam-token', ExamTokenController::class)->name('forms.exam-token');
         Route::get('forms/{quizForm}/class-map', ClassMapController::class)->name('forms.class-map');
+        Route::get('forms/{quizForm}/grading', [GradingController::class, 'index'])->name('forms.grading.index');
+        Route::patch('forms/{quizForm}/responses/{quizResponse}/grade', [GradingController::class, 'update'])->name('forms.grading.update');
+        Route::get('forms/{quizForm}/answer-files/{answerFile}', [AnswerFileController::class, 'show'])->name('forms.answer-files.show');
         Route::post('forms/{quizForm}/follow-ups', [FollowUpExamController::class, 'store'])->name('forms.follow-ups.store');
         Route::get('questions/import/template', [QuestionImportController::class, 'template'])->name('questions.import.template');
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
@@ -140,6 +146,8 @@ Route::get('forms/{quizForm:slug}', [QuizResponseController::class, 'show'])->na
 Route::post('forms/{quizForm:slug}/responses', [QuizResponseController::class, 'store'])->middleware('throttle:quiz-submissions')->name('forms.responses.store');
 Route::post('forms/{quizForm:slug}/start', [QuizResponseController::class, 'start'])->middleware('throttle:quiz-activity')->name('forms.responses.start');
 Route::post('forms/{quizForm:slug}/draft', [QuizResponseController::class, 'saveDraft'])->middleware('throttle:quiz-activity')->name('forms.responses.draft');
+Route::post('forms/{quizForm:slug}/answer-files', [AnswerFileController::class, 'store'])->middleware('throttle:quiz-activity')->name('forms.answer-files.store');
+Route::get('forms/{quizForm:slug}/hasil', [QuizResultController::class, 'show'])->name('forms.results');
 Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:quiz-activity')->name('forms.responses.lock');
 Route::get('forms/{quizForm:slug}/status', [QuizResponseController::class, 'examStatus'])->middleware('throttle:quiz-activity')->name('forms.responses.status');
 Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-requests.store');

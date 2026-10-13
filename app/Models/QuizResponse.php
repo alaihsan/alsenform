@@ -25,6 +25,8 @@ class QuizResponse extends Model
         'doubtful_question_ids',
         'question_ids',
         'score',
+        'manual_scores',
+        'feedback',
         'is_timeout',
         'is_auto_submitted',
         'late_seconds',
@@ -40,6 +42,8 @@ class QuizResponse extends Model
         return [
             'answers' => 'array',
             'doubtful_question_ids' => 'array',
+            'manual_scores' => 'array',
+            'feedback' => 'array',
             'question_ids' => 'array',
             'late_seconds' => 'integer',
             'score' => 'integer',

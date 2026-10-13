@@ -14,6 +14,7 @@ use App\Support\ActivityRecorder;
 use App\Support\Addon;
 use App\Support\ExamLayout;
 use App\Support\ExamToken;
+use App\Support\FileAnswers;
 use App\Support\MediaUrl;
 use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
@@ -81,6 +82,7 @@ class QuizResponseController extends Controller
                     'questions' => [],
                     'settings' => $quizForm->settings,
                     'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
+                    'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
                 ],
                 'accessRestricted' => true,
                 'restrictionReason' => $quizForm->noAttemptsLeftMessage(),
@@ -94,6 +96,36 @@ class QuizResponseController extends Controller
         // timer only starts once the student confirms the rules (see start()). After an attempt
         // was handed in (more than one allowed), the next one is a new attempt with its own timer.
         $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
+
+        // Jadwal ujian: before it opens and after it closes no attempt starts. A student already
+        // working goes on (their time runs out at the closing time); the exam's teachers try it any time.
+        $isRunning = $quizSession !== null && $quizSession->started_at !== null && $quizSession->submitted_at === null;
+        $scheduleState = $quizForm->scheduleState();
+
+        if (! $isRunning && $scheduleState !== 'open' && ! $quizForm->canBeEditedBy($user)) {
+            $opensAt = $quizForm->opensAt();
+            $closesAt = $quizForm->closesAt();
+
+            return Inertia::render('PublicQuiz', [
+                'quizForm' => [
+                    'id' => $quizForm->id,
+                    'slug' => $quizForm->slug,
+                    'title' => $quizForm->title,
+                    'description' => $quizForm->description,
+                    'questions' => [],
+                    'settings' => $quizForm->settings,
+                    'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
+                    'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
+                ],
+                'accessRestricted' => true,
+                'restrictionTitle' => $scheduleState === 'not_yet' ? 'Ujian Belum Dibuka' : 'Ujian Sudah Ditutup',
+                'restrictionReason' => $scheduleState === 'not_yet'
+                    ? 'Ujian ini dibuka '.$quizForm->scheduleLabel($opensAt).'.'
+                    : 'Ujian ini ditutup '.$quizForm->scheduleLabel($closesAt).'. Hubungi guru bila Anda belum mengerjakannya.',
+                'opensAt' => $scheduleState === 'not_yet' ? $opensAt?->toISOString() : null,
+                'serverTime' => now()->toISOString(),
+            ]);
+        }
 
         if ($quizSession?->submitted_at !== null) {
             $quizSession = null;
@@ -143,6 +175,7 @@ class QuizResponseController extends Controller
                 'respondentClasses' => RespondentIdentity::CLASSES,
                 // Token Ujian add-on: the token from the proctor is typed on the confirmation screen.
                 'requiresExamToken' => $this->requiresExamToken($quizForm, $user),
+                'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
             ],
             'examSummary' => [
                 'questionCount' => count($sanitizedQuestions),
@@ -207,6 +240,12 @@ class QuizResponseController extends Controller
         if ($session->started_at === null) {
             abort_if($quizForm->hasNoAttemptsLeftFor($request->user(), $session->respondent_identifier), 403, $quizForm->noAttemptsLeftMessage());
 
+            if (! $quizForm->canBeEditedBy($request->user()) && ($state = $quizForm->scheduleState()) !== 'open') {
+                abort(403, $state === 'not_yet'
+                    ? 'Ujian belum dibuka. Ujian dibuka '.$quizForm->scheduleLabel($quizForm->opensAt()).'.'
+                    : 'Ujian sudah ditutup '.$quizForm->scheduleLabel($quizForm->closesAt()).'.');
+            }
+
             if ($this->requiresExamToken($quizForm, $request->user())) {
                 $this->checkExamToken($request, $quizForm, $session);
             }
@@ -226,7 +265,8 @@ class QuizResponseController extends Controller
                 ->whereNull('started_at')
                 ->update([
                     'started_at' => $now,
-                    'expires_at' => $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null,
+                    // The time limit, but no later than the closing time of the schedule.
+                    'expires_at' => $quizForm->attemptExpiresAt($now, $timeLimitMinutes),
                     ...($request->user() ? [] : $identity->fromInput($quizForm, $identityInput, $session)),
                 ]);
 
@@ -338,6 +378,8 @@ class QuizResponseController extends Controller
         $answers = $countsSavedAnswers
             ? $session->savedAnswersFor($quizForm, $assignedIds)
             : $this->onlyAssigned($validated['answers'], $assignedIds);
+        // Files count only when this attempt handed them in.
+        $answers = app(FileAnswers::class)->sanitize($quizForm, $session, $answers);
 
         // The questions marked "Ragu-ragu", from the same source as the answers that count.
         $doubts = ! $countsSavedAnswers && $request->has('doubts')
@@ -427,12 +469,12 @@ class QuizResponseController extends Controller
             'session_token' => Str::random(40),
         ];
 
-        $startNow = function () use ($attributes, $timeLimitMinutes): QuizSession {
+        $startNow = function () use ($quizForm, $attributes, $timeLimitMinutes): QuizSession {
             $now = now();
 
             return QuizSession::create($attributes + [
                 'started_at' => $now,
-                'expires_at' => $timeLimitMinutes ? (clone $now)->addMinutes($timeLimitMinutes) : null,
+                'expires_at' => $quizForm->attemptExpiresAt($now, $timeLimitMinutes),
             ]);
         };
 
@@ -462,8 +504,9 @@ class QuizResponseController extends Controller
     protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl, ?array $layout = null): array
     {
         return array_values(array_map(function ($question) {
+            // The key and the pembahasan stay on the server while the exam runs.
             if (is_array($question)) {
-                unset($question['answer']);
+                unset($question['answer'], $question['explanation']);
             }
 
             return $question;
@@ -677,7 +720,7 @@ class QuizResponseController extends Controller
         $answers = array_replace(
             is_array($autoSubmitted->answers) ? $autoSubmitted->answers : [],
             array_filter(
-                $this->onlyAssigned($deviceAnswers, $examLayout->assignedIds($quizForm, $session->layout)),
+                app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($deviceAnswers, $examLayout->assignedIds($quizForm, $session->layout))),
                 fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== [],
             ),
         );
@@ -766,7 +809,7 @@ class QuizResponseController extends Controller
         $assignedIds = app(ExamLayout::class)->assignedIds($quizForm, $session->layout);
 
         $session->update([
-            'draft_answers' => $this->onlyAssigned($validated['answers'], $assignedIds),
+            'draft_answers' => app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($validated['answers'], $assignedIds)),
             ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)] : []),
             'draft_saved_at' => now(),
         ]);

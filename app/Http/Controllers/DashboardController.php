@@ -72,6 +72,11 @@ class DashboardController extends Controller
                     'updatedLabel' => $quizForm->published_at?->diffForHumans() ?? '',
                     'updatedAt' => (string) $quizForm->published_at,
                     'hasSubmitted' => $hasSubmitted,
+                    // The student's results, once the teacher shows them.
+                    'resultsUrl' => $hasSubmitted && ! empty($quizForm->settings['showResultsSummary'])
+                        ? route('forms.results', ['quizForm' => $quizForm->slug])
+                        : null,
+                    'scheduleLabel' => $this->scheduleLabel($quizForm),
                 ];
             });
 
@@ -135,5 +140,19 @@ class DashboardController extends Controller
             'createFolderUrl' => route('folders.store'),
             'stats' => $stats,
         ]);
+    }
+
+    /**
+     * Jadwal ujian on a student's card: when it opens, until when it is open, or that it closed.
+     */
+    protected function scheduleLabel(QuizForm $quizForm): ?string
+    {
+        $format = fn ($time): string => $time->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('D, j M H.i');
+
+        return match ($quizForm->scheduleState()) {
+            'not_yet' => 'Dibuka '.$format($quizForm->opensAt()),
+            'closed' => 'Sudah ditutup',
+            default => $quizForm->closesAt() !== null ? 'Ditutup '.$format($quizForm->closesAt()) : null,
+        };
     }
 }

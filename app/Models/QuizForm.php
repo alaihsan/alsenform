@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Services\Addons;
 use App\Support\Addon;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\QuizFormFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -106,6 +108,67 @@ class QuizForm extends Model
     public function followUps(): HasMany
     {
         return $this->hasMany(self::class, 'follow_up_of_id');
+    }
+
+    /**
+     * Jadwal ujian: when students may start, from the exam settings (null: no limit).
+     */
+    public function opensAt(): ?CarbonImmutable
+    {
+        return $this->scheduleTime('opensAt');
+    }
+
+    public function closesAt(): ?CarbonImmutable
+    {
+        return $this->scheduleTime('closesAt');
+    }
+
+    /**
+     * Whether students may start now: "open", "not_yet" (before it opens) or "closed".
+     */
+    public function scheduleState(?CarbonInterface $at = null): string
+    {
+        $at ??= now();
+
+        return match (true) {
+            $this->opensAt()?->gt($at) ?? false => 'not_yet',
+            $this->closesAt()?->lte($at) ?? false => 'closed',
+            default => 'open',
+        };
+    }
+
+    /**
+     * A time of the schedule as students read it, in the school's time zone.
+     */
+    public function scheduleLabel(CarbonInterface $time): string
+    {
+        return $time->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('l, j F Y \p\u\k\u\l H.i');
+    }
+
+    /**
+     * When an attempt started now runs out: its time limit, but no later than the closing time.
+     */
+    public function attemptExpiresAt(CarbonInterface $start, ?int $timeLimitMinutes): ?CarbonInterface
+    {
+        $byLimit = $timeLimitMinutes ? $start->copy()->addMinutes($timeLimitMinutes) : null;
+        $closesAt = $this->closesAt();
+
+        return match (true) {
+            $closesAt === null => $byLimit,
+            $byLimit === null => $closesAt,
+            default => $closesAt->lt($byLimit) ? $closesAt : $byLimit,
+        };
+    }
+
+    protected function scheduleTime(string $key): ?CarbonImmutable
+    {
+        $value = (is_array($this->settings) ? $this->settings : [])['schedule'][$key] ?? null;
+
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        return rescue(fn (): CarbonImmutable => CarbonImmutable::parse($value), null, report: false);
     }
 
     /**

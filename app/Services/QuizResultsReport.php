@@ -96,7 +96,7 @@ class QuizResultsReport
                 XlsxWriter::cell($student['name'], 'text'),
                 XlsxWriter::cell($student['kelas'], 'textCenter'),
                 XlsxWriter::cell($student['email'], 'text'),
-                XlsxWriter::cell($student['score'], 'integer'),
+                XlsxWriter::cell($student['score'], floor($student['score']) === (float) $student['score'] ? 'integer' : 'decimal'),
                 XlsxWriter::cell($student['maxScore'], 'integer'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
                 XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
@@ -105,7 +105,7 @@ class QuizResultsReport
                     $student['lateMinutes'] !== null => "Waktu habis (terlambat {$student['lateMinutes']} menit)",
                     $student['isTimeout'] => 'Waktu habis',
                     default => 'Selesai',
-                }, 'textCenter'),
+                }.($student['ungraded'] > 0 ? "; {$student['ungraded']} esai/berkas belum dinilai (nilai sementara)" : ''), 'textCenter'),
                 XlsxWriter::cell($student['submittedAt'], 'datetime'),
                 XlsxWriter::cell("{$student['attempt']} dari {$student['attempts']}", 'textCenter'),
             ];
@@ -167,6 +167,14 @@ class QuizResultsReport
                 $answer = $student['answers'][$question['id']] ?? null;
                 $text = $this->answerText($question, $answer);
                 $isCorrect = $this->scoring->isCorrect($question, $answer);
+                $manual = $student['manualScores'][$question['id']] ?? null;
+
+                // Graded by the teacher: that grade decides, and is shown with the answer.
+                if (is_numeric($manual)) {
+                    $points = $this->scoring->points($question);
+                    $isCorrect = (float) $manual >= $points ? true : ((float) $manual <= 0 ? false : null);
+                    $text = trim(($text === '' ? '(tidak dijawab)' : $text)."\nNilai guru: ".$this->decimal((float) $manual)."/{$points}");
+                }
 
                 if ($isCorrect === true) {
                     $correctCounts[$questionIndex]++;
@@ -418,19 +426,19 @@ class QuizResultsReport
 
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'manual_scores', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
 
         // Every attempt of a student is listed, numbered in the order they were handed in.
         $attemptNumbers = QuizResponse::attemptNumbers($responses);
 
         return $responses
-            ->map(function (QuizResponse $response) use ($questions, $maxScore, $timezone, $attemptNumbers): array {
-                // Scored against the current answer keys, so a corrected key re-grades earlier answers.
-                $score = is_array($response->answers) ? $this->scoring->score($questions, $response->answers) : (int) ($response->score ?? 0);
-                // With questions drawn per student, the maximum is that of the questions they got.
-                $studentMax = $response->question_ids !== null
-                    ? $this->scoring->maxPoints($this->scoring->questionsGiven($questions, $response->question_ids))
-                    : $maxScore;
+            ->map(function (QuizResponse $response) use ($questions, $timezone, $attemptNumbers): array {
+                // Scored against the current answer keys, so a corrected key re-grades earlier answers,
+                // with what the teacher graded by hand. With questions drawn per student, the maximum
+                // is that of the questions they got.
+                $result = $this->scoring->result($questions, is_array($response->answers) ? $response->answers : [], $response->question_ids, $response->manual_scores);
+                $score = is_array($response->answers) ? $result['score'] : (int) ($response->score ?? 0);
+                $studentMax = $result['max'];
 
                 return [
                     'nis' => $response->user?->nis ?: '-',
@@ -447,6 +455,8 @@ class QuizResultsReport
                     'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
                     'answers' => is_array($response->answers) ? $response->answers : [],
+                    'manualScores' => is_array($response->manual_scores) ? $response->manual_scores : [],
+                    'ungraded' => $result['ungraded'],
                     'attempt' => $attemptNumbers[$response->id]['attempt'] ?? 1,
                     'attempts' => $attemptNumbers[$response->id]['attempts'] ?? 1,
                 ];
@@ -482,7 +492,7 @@ class QuizResultsReport
     /**
      * @param  array<string, mixed>  $question
      */
-    protected function answerKeyText(array $question): string
+    public function answerKeyText(array $question): string
     {
         $key = $question['answer'] ?? null;
         $options = is_array($question['options'] ?? null) ? $question['options'] : [];
@@ -507,7 +517,7 @@ class QuizResultsReport
      *
      * @param  array<string, mixed>  $question
      */
-    protected function answerText(array $question, mixed $answer): string
+    public function answerText(array $question, mixed $answer): string
     {
         if ($answer === null || $answer === '' || $answer === []) {
             return '';
@@ -528,6 +538,14 @@ class QuizResultsReport
             }
 
             return implode("\n", $lines);
+        }
+
+        // A file handed in for a "File upload" question.
+        if (($question['type'] ?? '') === 'File upload' && is_array($answer)) {
+            return implode(', ', array_map(
+                fn (mixed $file): string => is_array($file) ? $this->plainText((string) ($file['name'] ?? 'berkas')) : '',
+                array_is_list($answer) ? $answer : [$answer],
+            ));
         }
 
         if (is_array($answer)) {

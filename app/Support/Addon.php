@@ -66,7 +66,7 @@ enum Addon: string
     {
         return match ($this) {
             self::ItemAnalysis => [
-                'Tab Responses: panel Analisis Butir Soal di bawah rekap nilai.',
+                'Tab Jawaban: panel Analisis Butir Soal di bawah rekap nilai.',
                 'Laporan Excel: lembar ketiga "Analisis Butir Soal".',
                 'Tombol "Jadikan label kesulitan" untuk mengisi label tingkat kesulitan di Bank Soal.',
             ],
@@ -75,12 +75,12 @@ enum Addon: string
                 'Layar konfirmasi ujian: kolom Token yang wajib diisi siswa sebelum "Kerjakan Sekarang".',
             ],
             self::Remedial => [
-                'Tab Responses: panel Remedial & Pengayaan berisi siswa Belum Tuntas dan Tuntas beserta nilai tindak lanjutnya.',
+                'Tab Jawaban: panel Remedial & Pengayaan berisi siswa Belum Tuntas dan Tuntas beserta nilai tindak lanjutnya.',
                 'Tombol "Buat ujian remedial" dan "Buat ujian pengayaan": ujian baru (draf) khusus siswa yang dipilih.',
                 'Laporan Excel: lembar "Remedial & Pengayaan" dengan nilai asli, nilai remedial dan nilai akhir.',
             ],
             self::Misconception => [
-                'Tab Responses: panel Peta Miskonsepsi berisi empat kelompok jawaban per soal dan jawaban keliru yang paling diyakini.',
+                'Tab Jawaban: panel Peta Miskonsepsi berisi empat kelompok jawaban per soal dan jawaban keliru yang paling diyakini.',
                 'Laporan Excel: lembar "Peta Miskonsepsi" per soal dan per siswa.',
             ],
         };

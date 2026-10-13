@@ -13,6 +13,7 @@ import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
 import QuestionDrawSettings, { type QuestionDraw } from '@/components/form-editor/QuestionDrawSettings.vue';
 import ClassMapPanel, { type ClassMapStudent } from '@/components/form-editor/ClassMapPanel.vue';
+import GradingPanel from '@/components/form-editor/GradingPanel.vue';
 import ItemAnalysisPanel, { type ItemAnalysis } from '@/components/form-editor/ItemAnalysisPanel.vue';
 import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
@@ -57,6 +58,7 @@ import {
     Palette,
     PanelTop,
     PlusCircle,
+    PenLine,
     Puzzle,
     Redo2,
     School,
@@ -106,8 +108,16 @@ const form = reactive({
             columns: q.columns ? [...q.columns] : [],
             answer: q.answer,
             required: Boolean(q.required),
-            media: (q.media ?? []).map((m: any) => ({ type: m.type, url: m.url ?? '' })),
+            // Width, alignment and caption of the media are kept too; not the state of an upload.
+            media: (q.media ?? []).map((m: any) => {
+                const kept = { ...m, type: m.type, url: m.url ?? '' };
+                delete kept.isUploading;
+                delete kept.uploadError;
+                return kept;
+            }),
             points: q.points ?? 1,
+            // Kept, or every save would drop it.
+            ...(q.explanation ? { explanation: q.explanation } : {}),
         })) ?? [
             {
                 id: 1,
@@ -135,18 +145,23 @@ const form = reactive({
             perDifficulty: { mudah: 0, sedang: 0, sulit: 0, ...(props.quizForm?.settings?.questionDraw?.perDifficulty ?? {}) },
         } as QuestionDraw,
         isQuiz: props.quizForm?.settings?.isQuiz ?? true,
-        emailCollectionMode: props.quizForm?.settings?.emailCollectionMode ?? (props.quizForm?.settings?.collectEmail ? 'responder' : 'none'),
-        sendResponseCopy: props.quizForm?.settings?.sendResponseCopy ?? 'off',
-        allowResponseEditing: props.quizForm?.settings?.allowResponseEditing ?? false,
+        // "verified" was never verified: it asks the email like "responder".
+        emailCollectionMode: (props.quizForm?.settings?.emailCollectionMode ?? (props.quizForm?.settings?.collectEmail ? 'responder' : 'none')) === 'none' ? 'none' : 'responder',
         limitOneResponse: props.quizForm?.settings?.limitOneResponse ?? false,
         maxAttempts: props.quizForm?.settings?.maxAttempts ?? (props.quizForm?.settings?.limitOneResponse ? 1 : 0),
         // Add-ons switched on or off for this exam (absent: the add-on's default).
         addons: { ...(props.quizForm?.settings?.addons ?? {}) } as Record<string, boolean>,
-        confirmationMessage: props.quizForm?.settings?.confirmationMessage ?? 'Your response has been recorded',
+        confirmationMessage: props.quizForm?.settings?.confirmationMessage ?? 'Jawaban Anda sudah tercatat.',
         showSubmitAnotherResponse: props.quizForm?.settings?.showSubmitAnotherResponse ?? true,
         showResultsSummary: props.quizForm?.settings?.showResultsSummary ?? false,
+        // What students see once results are shown: the grade only, or also the key and pembahasan.
+        resultsDetail: (props.quizForm?.settings?.resultsDetail ?? 'score') as 'score' | 'full',
+        // When students may start the exam (ISO times, empty: any time).
+        schedule: {
+            opensAt: props.quizForm?.settings?.schedule?.opensAt ?? null,
+            closesAt: props.quizForm?.settings?.schedule?.closesAt ?? null,
+        } as { opensAt: string | null; closesAt: string | null },
         disableRespondentAutosave: props.quizForm?.settings?.disableRespondentAutosave ?? false,
-        defaultCollectEmailMode: props.quizForm?.settings?.defaultCollectEmailMode ?? 'none',
         defaultQuestionRequired: props.quizForm?.settings?.defaultQuestionRequired ?? false,
         defaultQuestionPoints: props.quizForm?.settings?.defaultQuestionPoints ?? 1,
         maxUploadSize: Math.min(props.quizForm?.settings?.maxUploadSize ?? 20, 40),
@@ -163,6 +178,7 @@ const form = reactive({
 });
 
 const activeTab = ref<'questions' | 'responses' | 'settings' | 'keamanan'>('questions');
+const TAB_LABELS: Record<string, string> = { questions: 'Soal', responses: 'Jawaban', settings: 'Pengaturan', keamanan: 'Keamanan' };
 const activeQuestionId = ref(1);
 const selectedCohortIds = ref<number[]>([...(props.quizForm?.cohortIds ?? [])]);
 const isCohortRestricted = ref(selectedCohortIds.value.length > 0);
@@ -187,7 +203,6 @@ const setCohortRestriction = (restricted: boolean) => {
 const showPreview = ref(false);
 const showPublish = ref(false);
 const showMoreMenu = ref(false);
-const showPalette = ref(false);
 const openTypeMenuQuestionId = ref<number | null>(null);
 const editingAnswerKeyQuestionId = ref<number | null>(null);
 const draggedQuestionId = ref<number | null>(null);
@@ -221,7 +236,6 @@ const openLightbox = (media: any) => {
         caption: media.caption ?? '',
     };
 };
-const fileInput = ref<HTMLInputElement | null>(null);
 const docxFileInput = ref<HTMLInputElement | null>(null);
 const examviewFileInput = ref<HTMLInputElement | null>(null);
 const importSource = ref<'examview' | 'docx' | 'bank'>('examview');
@@ -344,9 +358,7 @@ const isPublished = ref(props.quizForm?.isPublished ?? false);
 const showStatusMenu = ref(false);
 const isResponsesSettingsOpen = ref(true);
 const isPresentationSettingsOpen = ref(true);
-const isFormDefaultsOpen = ref(true);
 const isQuestionDefaultsOpen = ref(true);
-const isSecuritySettingsOpen = ref(true);
 
 const unlockRequests = ref<UnlockPanelEntry[]>([]);
 const lockedStudentCount = computed(() => unlockRequests.value.filter((entry) => entry.state === 'locked').length);
@@ -520,6 +532,54 @@ watch(
     },
 );
 
+/*
+ * Jadwal ujian: shown and typed in the device's local time (the school's), stored as ISO times.
+ */
+const toLocalDateTime = (iso: string | null) => {
+    if (!iso) {
+        return '';
+    }
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+const setSchedule = (key: 'opensAt' | 'closesAt', value: string) => {
+    form.settings.schedule = { ...form.settings.schedule, [key]: value ? new Date(value).toISOString() : null };
+    markSettingsChanged();
+};
+const clearSchedule = () => {
+    form.settings.schedule = { opensAt: null, closesAt: null };
+    markSettingsChanged();
+};
+const formatScheduleTime = (iso: string) =>
+    new Date(iso).toLocaleString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+const scheduleProblem = computed(() => {
+    const { opensAt, closesAt } = form.settings.schedule;
+    return opensAt && closesAt && new Date(closesAt) <= new Date(opensAt) ? 'Waktu tutup harus sesudah waktu buka.' : '';
+});
+const scheduleSummary = computed(() => {
+    const { opensAt, closesAt } = form.settings.schedule;
+    return [opensAt ? `Dibuka ${formatScheduleTime(opensAt)}` : 'Dibuka kapan saja', closesAt ? `ditutup ${formatScheduleTime(closesAt)}` : 'tanpa waktu tutup'].join(', ') + '.';
+});
+/** Whether students can start the exam now: published and within its schedule. */
+const acceptingNow = computed(() => {
+    const { opensAt, closesAt } = form.settings.schedule;
+    const now = Date.now();
+    if (!isPublished.value) {
+        return { on: false, label: 'Tidak', hint: 'Belum diterbitkan' };
+    }
+    if (opensAt && new Date(opensAt).getTime() > now) {
+        return { on: false, label: 'Belum', hint: `Dibuka ${formatScheduleTime(opensAt)}` };
+    }
+    if (closesAt && new Date(closesAt).getTime() <= now) {
+        return { on: false, label: 'Tidak', hint: 'Jadwal ujian sudah ditutup' };
+    }
+    return { on: true, label: 'Ya', hint: closesAt ? `Ditutup ${formatScheduleTime(closesAt)}` : 'Tanpa waktu tutup' };
+});
+
 /** How many times a student may take the quiz (0 is no limit); the older one-response switch follows it. */
 const updateMaxAttempts = () => {
     form.settings.limitOneResponse = form.settings.maxAttempts === 1;
@@ -619,42 +679,6 @@ const markChanged = (message = 'Draft updated') => {
 
 const normalizePublicSlug = () => {
     publicSlug.value = publicSlug.value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'untitled-form';
-    slugWarning.value = '';
-};
-
-const generateComplexSlug = (): string => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-
-    while (result.length < 59) {
-        const remaining = 59 - result.length;
-        let groupSize = Math.floor(Math.random() * (10 - 7 + 1)) + 7;
-
-        if (groupSize >= remaining) {
-            groupSize = remaining;
-        } else if (remaining - groupSize <= 2) {
-            groupSize = remaining;
-        }
-
-        let group = '';
-        for (let i = 0; i < groupSize; i++) {
-            group += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-
-        result += group;
-        if (result.length < 59) {
-            result += '-';
-        }
-    }
-
-    if (result.length > 59) {
-        result = result.substring(0, 59);
-    }
-    return result;
-};
-
-const handleGenerateSlug = () => {
-    publicSlug.value = generateComplexSlug();
     slugWarning.value = '';
 };
 
@@ -935,7 +959,7 @@ const addOption = (question: Question, label = `Option ${question.options.length
     markChanged('Option added');
 };
 
-const handleOptionKeydown = (event: KeyboardEvent, question: Question, optionIndex: number) => {
+const handleOptionKeydown = (event: KeyboardEvent, question: Question) => {
     if (event.key === 'Enter') {
         if (event.shiftKey) {
             setTimeout(() => autoResize(event.target as HTMLTextAreaElement), 0);
@@ -955,10 +979,6 @@ const handleOptionKeydown = (event: KeyboardEvent, question: Question, optionInd
     }
 };
 
-const updateOption = (question: Question, optionIndex: number, value: string) => {
-    question.options[optionIndex] = value;
-    markChanged('Option updated');
-};
 
 const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
@@ -1320,6 +1340,16 @@ const misconceptionMap = computed<MisconceptionMap | null>(
     () => (props.quizForm?.responses as { misconceptions?: MisconceptionMap } | undefined)?.misconceptions ?? null,
 );
 const followUp = computed(() => props.quizForm?.followUp ?? null);
+
+/* Grading by hand: essays, files, and short answers whose key judged too strictly. */
+const isGradingOpen = ref(false);
+const closeGrading = (changed: boolean) => {
+    isGradingOpen.value = false;
+    // The gradebook, the Excel numbers and the add-on panels follow the new grades.
+    if (changed) {
+        router.reload({ only: ['quizForm'] });
+    }
+};
 const isApplyingDifficulty = ref(false);
 const applyDifficultyMessage = ref('');
 const applyAnalysedDifficulty = async () => {
@@ -1951,7 +1981,7 @@ watch(
                             class="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-700 lg:px-6"
                             @click="showStatusMenu = !showStatusMenu"
                         >
-                            <span>{{ isPublished ? 'Published' : 'Draft' }}</span>
+                            <span>{{ isPublished ? 'Terbit' : 'Draf' }}</span>
                             <ChevronDown class="h-4 w-4" />
                         </button>
                         <div
@@ -1964,7 +1994,7 @@ watch(
                                 @click="requestPublish"
                             >
                                 <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                                <span>Publish</span>
+                                <span>Terbitkan</span>
                             </button>
                             <button
                                 type="button"
@@ -1972,7 +2002,7 @@ watch(
                                 @click="setStatus(false)"
                             >
                                 <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-                                <span>Draft</span>
+                                <span>Jadikan draf</span>
                             </button>
                         </div>
                     </div>
@@ -2047,7 +2077,7 @@ watch(
                     ]"
                     @click="activeTab = tab as 'questions' | 'responses' | 'settings' | 'keamanan'"
                 >
-                    {{ tab === 'keamanan' ? 'keamanan' : tab }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span
+                    {{ TAB_LABELS[tab] }}<span v-if="tab === 'keamanan'" class="hidden sm:inline">&nbsp;&amp; kunci</span
                     ><span
                         v-if="tab === 'responses' && (isPublished || examProgress.submitted > 0)"
                         class="ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[11px] font-bold text-white"
@@ -2740,12 +2770,10 @@ watch(
                                             v-else-if="question.type === 'File upload'"
                                             class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4"
                                         >
-                                            <button
-                                                type="button"
-                                                class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600"
-                                            >
-                                                Add file
-                                            </button>
+                                            <p class="text-sm text-slate-600">
+                                                Siswa mengunggah foto atau berkas (PDF, Word, Excel, PowerPoint), paling besar
+                                                {{ form.settings.maxUploadSize ?? 20 }} MB per berkas. Jawabannya dinilai guru di tab Jawaban.
+                                            </p>
                                         </div>
 
                                         <div
@@ -2997,7 +3025,7 @@ watch(
                                                         class="w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
                                                         :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                                         @input="handleAutoResize($event); markChanged('Option updated')"
-                                                        @keydown="handleOptionKeydown($event, question, optionIndex)"
+                                                        @keydown="handleOptionKeydown($event, question)"
                                                     ></textarea>
                                                     <div
                                                         v-if="hasMathOrArabic(question.options[optionIndex])"
@@ -3124,6 +3152,24 @@ watch(
                                         </div>
                                     </aside>
 
+                                    <!-- Pembahasan: shown to students with their results (when shown in full) -->
+                                    <div v-if="form.settings.isQuiz && (activeQuestionId === question.id || question.explanation)" class="lg:col-span-2">
+                                        <label :for="`explanation-${question.id}`" class="text-xs font-bold uppercase tracking-wider text-slate-500"
+                                            >Pembahasan (opsional)</label
+                                        >
+                                        <textarea
+                                            :id="`explanation-${question.id}`"
+                                            v-model="question.explanation"
+                                            v-auto-resize
+                                            data-auto-resize
+                                            rows="1"
+                                            maxlength="5000"
+                                            placeholder="Jelaskan jawaban yang benar. Siswa melihatnya di halaman hasil bila hasil lengkap ditampilkan."
+                                            class="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:bg-white"
+                                            @input="markChanged('Pembahasan diperbarui')"
+                                        ></textarea>
+                                    </div>
+
                                     <div class="border-t border-slate-200 pt-4 lg:col-span-2">
                                         <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 text-slate-600 sm:gap-5">
                                             <QuestionLabelsEditor
@@ -3162,7 +3208,7 @@ watch(
                                             </button>
                                             <span v-if="form.settings.isQuiz" class="hidden h-8 border-l border-slate-200 sm:block"></span>
                                             <span class="flex items-center gap-2">
-                                                <span class="text-sm font-medium">Required</span>
+                                                <span class="text-sm font-medium">Wajib</span>
                                                 <button
                                                     type="button"
                                                     aria-label="Toggle required"
@@ -3281,11 +3327,12 @@ watch(
                                 </p>
                             </div>
                             <div class="rounded-2xl bg-slate-50 p-5">
-                                <p class="text-sm font-bold text-slate-500">Accepting</p>
-                                <p class="mt-2 text-xl font-bold text-emerald-600">On</p>
+                                <p class="text-sm font-bold text-slate-500">Menerima jawaban</p>
+                                <p :class="['mt-2 text-xl font-bold', acceptingNow.on ? 'text-emerald-600' : 'text-rose-600']">{{ acceptingNow.label }}</p>
+                                <p class="mt-1 text-xs font-semibold text-slate-500">{{ acceptingNow.hint }}</p>
                             </div>
                             <div class="min-w-0 rounded-2xl bg-slate-50 p-5">
-                                <p class="text-sm font-bold text-slate-500">Share URL</p>
+                                <p class="text-sm font-bold text-slate-500">Tautan ujian</p>
                                 <button
                                     type="button"
                                     class="mt-2 max-w-full truncate text-left text-sm font-bold text-indigo-600"
@@ -3295,6 +3342,32 @@ watch(
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Grading by hand: essays and files wait for the teacher -->
+                        <div
+                            v-if="responseCount && quizForm?.responses?.hasGradableQuestions && quizForm.responses.gradingUrl"
+                            :class="[
+                                'mt-6 flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3',
+                                quizForm.responses.ungradedTotal ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white',
+                            ]"
+                        >
+                            <PenLine :class="['h-5 w-5 shrink-0', quizForm.responses.ungradedTotal ? 'text-amber-600' : 'text-slate-400']" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                <template v-if="quizForm.responses.ungradedTotal">
+                                    <b>{{ quizForm.responses.ungradedTotal }} jawaban esai/berkas belum dinilai.</b> Nilai siswa yang bersangkutan masih
+                                    sementara.
+                                </template>
+                                <template v-else>Semua esai dan berkas sudah dinilai. Jawaban isian singkat juga bisa dikoreksi manual.</template>
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
+                                @click="isGradingOpen = true"
+                            >
+                                Nilai esai & isian
+                            </button>
+                        </div>
+                        <GradingPanel v-if="isGradingOpen && quizForm?.responses?.gradingUrl" :url="quizForm.responses.gradingUrl" @close="closeGrading" />
 
                         <!-- Rekapitulasi Nilai Siswa: every column sortable, A–Z initials like Moodle -->
                         <GradebookTable :rows="gradebook" :max-score="maxScore" :export-url="exportResponsesUrl" />
@@ -3373,11 +3446,11 @@ watch(
                         </div>
 
                         <div v-if="latestResponses.length" class="mt-6 rounded-2xl border border-slate-200">
-                            <div class="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">Recent submissions</div>
+                            <div class="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">Kiriman terbaru</div>
                             <div class="divide-y divide-slate-100">
                                 <div v-for="response in latestResponses" :key="response.id" class="flex items-center justify-between gap-4 px-4 py-3">
                                     <span class="min-w-0 truncate text-sm font-semibold text-slate-700">
-                                        {{ response.name ?? response.email ?? 'Anonymous respondent' }}
+                                        {{ response.name ?? response.email ?? 'Responden anonim' }}
                                     </span>
                                     <span class="shrink-0 text-xs font-semibold text-slate-500">{{ response.submittedAt }}</span>
                                 </div>
@@ -3444,14 +3517,14 @@ watch(
                 <template v-else-if="activeTab === 'settings'">
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-5 py-6 sm:px-7 sm:py-7">
-                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Settings</h2>
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Pengaturan</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
 
                             <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-16">
                                 <div>
-                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Make this a quiz</h3>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Jadikan kuis (dinilai)</h3>
                                     <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
-                                        Assign point values, set answers and automatically provide feedback
+                                        Beri poin dan kunci jawaban: jawaban dinilai otomatis, esai dan berkas dinilai guru
                                     </p>
                                 </div>
                                 <button
@@ -3480,9 +3553,9 @@ watch(
                                     @click="isResponsesSettingsOpen = !isResponsesSettingsOpen"
                                 >
                                     <span>
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Responses</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Jawaban</span>
                                         <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
-                                            >Manage how responses are collected and protected</span
+                                            >Atur cara jawaban dikumpulkan</span
                                         >
                                     </span>
                                     <ChevronDown
@@ -3492,64 +3565,21 @@ watch(
 
                                 <div v-if="isResponsesSettingsOpen" class="mt-8 space-y-8 sm:mt-10 sm:space-y-9">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
-                                        <label class="text-base font-normal text-slate-950 sm:text-xl" for="emailCollectionMode"
-                                            >Collect email addresses</label
-                                        >
+                                        <span>
+                                            <label class="block text-base font-normal text-slate-950 sm:text-xl" for="emailCollectionMode"
+                                                >Kumpulkan alamat email</label
+                                            >
+                                            <span class="mt-1 block text-sm text-slate-500">Untuk peserta tamu; siswa dengan akun sudah dikenali dari akunnya.</span>
+                                        </span>
                                         <select
                                             id="emailCollectionMode"
                                             v-model="form.settings.emailCollectionMode"
                                             class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 focus:border-indigo-500 focus:ring-indigo-500 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
                                             @change="markSettingsChanged"
                                         >
-                                            <option value="none">Do not collect</option>
-                                            <option value="responder">Responder input</option>
-                                            <option value="verified">Verified email</option>
+                                            <option value="none">Tidak dikumpulkan</option>
+                                            <option value="responder">Diisi peserta</option>
                                         </select>
-                                    </div>
-
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11">
-                                        <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl"
-                                                >Send responders a copy of their response</span
-                                            >
-                                            <span class="mt-1 block text-sm text-slate-600 sm:text-base"
-                                                >Requires <strong>Collect email addresses</strong></span
-                                            >
-                                        </span>
-                                        <select
-                                            v-model="form.settings.sendResponseCopy"
-                                            :disabled="form.settings.emailCollectionMode === 'none'"
-                                            class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 disabled:bg-slate-50 disabled:text-slate-400 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
-                                            @change="markSettingsChanged"
-                                        >
-                                            <option value="off">Off</option>
-                                            <option value="request">When requested</option>
-                                            <option value="always">Always</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
-                                        <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Allow response editing</span>
-                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg"
-                                                >Responses can be changed after being submitted</span
-                                            >
-                                        </span>
-                                        <button
-                                            type="button"
-                                            :class="[
-                                                'relative h-5 w-11 shrink-0 rounded-full transition',
-                                                form.settings.allowResponseEditing ? 'bg-indigo-500' : 'bg-slate-300',
-                                            ]"
-                                            @click="toggleSetting('allowResponseEditing')"
-                                        >
-                                            <span
-                                                :class="[
-                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
-                                                    form.settings.allowResponseEditing ? 'left-5' : '-left-1',
-                                                ]"
-                                            ></span>
-                                        </button>
                                     </div>
 
                                     <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Kesempatan mengerjakan</p>
@@ -3725,9 +3755,9 @@ watch(
                                     @click="isPresentationSettingsOpen = !isPresentationSettingsOpen"
                                 >
                                     <span>
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Presentation</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Tampilan</span>
                                         <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
-                                            >Manage how the form and responses are presented</span
+                                            >Atur tampilan soal dan halaman setelah mengirim</span
                                         >
                                     </span>
                                     <ChevronDown
@@ -3736,9 +3766,9 @@ watch(
                                 </button>
 
                                 <div v-if="isPresentationSettingsOpen" class="mt-8 space-y-8 sm:mt-10 sm:space-y-9">
-                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Form presentation</p>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Tampilan soal</p>
                                     <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Show progress bar</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Tampilkan bilah kemajuan</span>
                                         <button
                                             type="button"
                                             :class="[
@@ -3757,7 +3787,7 @@ watch(
                                     </div>
 
                                     <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Shuffle question order</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Acak urutan soal</span>
                                         <button
                                             type="button"
                                             :class="[
@@ -3837,10 +3867,10 @@ watch(
                                         "
                                     />
 
-                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">After submission</p>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Setelah mengirim</p>
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:pl-11">
                                         <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Confirmation message</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Pesan konfirmasi</span>
                                             <span class="mt-1 block text-sm italic text-slate-600 sm:mt-2 sm:text-lg">{{
                                                 form.settings.confirmationMessage
                                             }}</span>
@@ -3855,7 +3885,7 @@ watch(
 
                                     <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
                                         <span class="block text-base font-normal text-slate-950 sm:text-xl"
-                                            >Show link to submit another response</span
+                                            >Tampilkan tautan untuk mengirim jawaban lagi</span
                                         >
                                         <button
                                             type="button"
@@ -3874,32 +3904,67 @@ watch(
                                         </button>
                                     </div>
 
-                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
-                                        <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">View results summary</span>
-                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Share results summary with respondents.</span>
-                                        </span>
-                                        <button
-                                            type="button"
-                                            :class="[
-                                                'relative h-5 w-11 shrink-0 rounded-full transition',
-                                                form.settings.showResultsSummary ? 'bg-indigo-500' : 'bg-slate-300',
-                                            ]"
-                                            @click="toggleSetting('showResultsSummary')"
-                                        >
-                                            <span
+                                    <div class="sm:pl-11">
+                                        <div class="flex items-center justify-between gap-4 sm:gap-8">
+                                            <span>
+                                                <span class="block text-base font-normal text-slate-950 sm:text-xl">Tampilkan hasil ke siswa</span>
+                                                <span class="mt-1 block text-sm text-slate-600 sm:text-lg"
+                                                    >Siswa melihat nilainya di layar selesai dan di halaman hasil. Bisa dinyalakan kapan saja, juga setelah
+                                                    ujian.</span
+                                                >
+                                            </span>
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                :aria-checked="Boolean(form.settings.showResultsSummary)"
+                                                aria-label="Tampilkan hasil ke siswa"
                                                 :class="[
-                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
-                                                    form.settings.showResultsSummary ? 'left-5' : '-left-1',
+                                                    'relative h-5 w-11 shrink-0 rounded-full transition',
+                                                    form.settings.showResultsSummary ? 'bg-indigo-500' : 'bg-slate-300',
                                                 ]"
-                                            ></span>
-                                        </button>
+                                                @click="toggleSetting('showResultsSummary')"
+                                            >
+                                                <span
+                                                    :class="[
+                                                        'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                                        form.settings.showResultsSummary ? 'left-5' : '-left-1',
+                                                    ]"
+                                                ></span>
+                                            </button>
+                                        </div>
+                                        <div v-if="form.settings.showResultsSummary" class="mt-4 space-y-2 rounded-2xl bg-slate-50 p-4">
+                                            <label class="flex cursor-pointer items-start gap-3">
+                                                <input
+                                                    v-model="form.settings.resultsDetail"
+                                                    type="radio"
+                                                    value="score"
+                                                    class="mt-1 h-4 w-4 text-indigo-600"
+                                                    @change="markSettingsChanged"
+                                                />
+                                                <span class="text-sm text-slate-700"><b>Nilai saja.</b> Kunci jawaban tetap rahasia.</span>
+                                            </label>
+                                            <label class="flex cursor-pointer items-start gap-3">
+                                                <input
+                                                    v-model="form.settings.resultsDetail"
+                                                    type="radio"
+                                                    value="full"
+                                                    class="mt-1 h-4 w-4 text-indigo-600"
+                                                    @change="markSettingsChanged"
+                                                />
+                                                <span class="text-sm text-slate-700"
+                                                    ><b>Nilai, jawaban benar, pembahasan, dan komentar guru</b> untuk setiap soal.</span
+                                                >
+                                            </label>
+                                            <p v-if="form.settings.resultsDetail === 'full'" class="text-xs font-semibold text-amber-700">
+                                                Nyalakan setelah semua siswa selesai agar kunci jawaban tidak tersebar ke siswa yang belum mengerjakan.
+                                            </p>
+                                        </div>
                                     </div>
 
-                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Restrictions</p>
+                                    <p class="text-sm font-bold uppercase tracking-widest text-slate-600 sm:pl-11">Pembatasan</p>
                                     <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
                                         <span class="block text-base font-normal text-slate-950 sm:text-xl"
-                                            >Disable auto-save for all respondents</span
+                                            >Matikan simpan otomatis jawaban siswa</span
                                         >
                                         <button
                                             type="button"
@@ -3924,14 +3989,14 @@ watch(
 
                     <section class="mt-5 rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-5 py-6 sm:px-7 sm:py-7">
-                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Security & Limits</h2>
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Keamanan & Batas</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
 
                             <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-12">
                                 <div>
-                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Lock quiz on tab switch</h3>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Kunci saat siswa pindah tab</h3>
                                     <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
-                                        Automatically lock attempt if respondent switches tab or blurs window. Requires approval to unlock.
+                                        Ujian langsung terkunci bila siswa meninggalkan halaman ujian; pengawas yang membukanya.
                                     </p>
                                 </div>
                                 <button
@@ -3971,50 +4036,50 @@ watch(
                                     <span class="text-sm text-slate-600 sm:text-lg">menit</span>
                                 </div>
                             </div>
+
+                            <div class="border-t border-slate-200"></div>
+
+                            <!-- When students may start: closed before, and the time runs out at the closing time -->
+                            <div class="py-8 sm:px-11 sm:py-12">
+                                <h3 class="text-base font-normal text-slate-950 sm:text-xl">Jadwal ujian</h3>
+                                <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
+                                    Siswa hanya dapat mulai di antara waktu buka dan tutup. Saat ujian ditutup, waktu siswa yang masih mengerjakan habis dan
+                                    jawabannya terkirim otomatis.
+                                </p>
+                                <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                                    <label class="block text-sm font-semibold text-slate-700">
+                                        Dibuka
+                                        <input
+                                            type="datetime-local"
+                                            :value="toLocalDateTime(form.settings.schedule.opensAt)"
+                                            class="mt-1 h-11 w-full rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500"
+                                            @change="setSchedule('opensAt', ($event.target as HTMLInputElement).value)"
+                                        />
+                                    </label>
+                                    <label class="block text-sm font-semibold text-slate-700">
+                                        Ditutup
+                                        <input
+                                            type="datetime-local"
+                                            :value="toLocalDateTime(form.settings.schedule.closesAt)"
+                                            class="mt-1 h-11 w-full rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500"
+                                            @change="setSchedule('closesAt', ($event.target as HTMLInputElement).value)"
+                                        />
+                                    </label>
+                                </div>
+                                <p v-if="scheduleProblem" class="mt-2 text-sm font-semibold text-rose-700" role="alert">{{ scheduleProblem }}</p>
+                                <p v-else-if="form.settings.schedule.opensAt || form.settings.schedule.closesAt" class="mt-2 text-sm text-slate-500">
+                                    {{ scheduleSummary }}
+                                    <button type="button" class="ml-1 font-bold text-indigo-600 hover:underline" @click="clearSchedule">Hapus jadwal</button>
+                                </p>
+                                <p v-else class="mt-2 text-sm text-slate-500">Tanpa jadwal: ujian dapat dimulai kapan saja selama diterbitkan.</p>
+                            </div>
                         </div>
                     </section>
 
                     <section class="rounded-xl border border-slate-300 bg-white shadow-sm">
                         <div class="px-5 py-6 sm:px-7 sm:py-7">
-                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Defaults</h2>
+                            <h2 class="text-xl font-normal text-slate-950 sm:text-2xl">Bawaan</h2>
                             <div class="mt-7 border-t border-slate-200"></div>
-
-                            <section class="py-8 sm:px-11 sm:py-12">
-                                <button
-                                    type="button"
-                                    class="flex w-full items-start justify-between gap-5 text-left"
-                                    @click="isFormDefaultsOpen = !isFormDefaultsOpen"
-                                >
-                                    <span>
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Form defaults</span>
-                                        <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
-                                            >Settings applied to this form and new forms</span
-                                        >
-                                    </span>
-                                    <ChevronDown :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isFormDefaultsOpen ? 'rotate-180' : '']" />
-                                </button>
-
-                                <div
-                                    v-if="isFormDefaultsOpen"
-                                    class="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:pl-11"
-                                >
-                                    <label class="text-base font-normal text-slate-950 sm:text-xl" for="defaultCollectEmailMode"
-                                        >Collect email addresses by default</label
-                                    >
-                                    <select
-                                        id="defaultCollectEmailMode"
-                                        v-model="form.settings.defaultCollectEmailMode"
-                                        class="h-12 w-full rounded border border-slate-300 bg-white px-4 text-base text-slate-950 focus:border-indigo-500 focus:ring-indigo-500 sm:h-14 sm:w-64 sm:px-5 sm:text-lg"
-                                        @change="markSettingsChanged"
-                                    >
-                                        <option value="none">Do not collect</option>
-                                        <option value="responder">Responder input</option>
-                                        <option value="verified">Verified email</option>
-                                    </select>
-                                </div>
-                            </section>
-
-                            <div class="border-t border-slate-200"></div>
 
                             <section class="py-8 sm:px-11 sm:py-12">
                                 <button
@@ -4023,9 +4088,9 @@ watch(
                                     @click="isQuestionDefaultsOpen = !isQuestionDefaultsOpen"
                                 >
                                     <span>
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Question defaults</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Bawaan soal baru</span>
                                         <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg"
-                                            >Settings applied to all new questions</span
+                                            >Berlaku untuk soal yang ditambahkan ke ujian ini</span
                                         >
                                     </span>
                                     <ChevronDown
@@ -4035,7 +4100,7 @@ watch(
 
                                 <div v-if="isQuestionDefaultsOpen" class="mt-8 space-y-8 sm:mt-10 sm:pl-11">
                                     <div v-if="form.settings.isQuiz" class="flex items-center justify-between gap-4 sm:gap-8">
-                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Make questions required by default</span>
+                                        <span class="block text-base font-normal text-slate-950 sm:text-xl">Soal baru wajib dijawab</span>
                                         <button
                                             type="button"
                                             :class="[
@@ -4055,8 +4120,8 @@ watch(
 
                                     <div class="flex items-center justify-between gap-4 sm:gap-8">
                                         <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Default quiz points</span>
-                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Applied when adding new questions.</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Poin bawaan soal</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Dipakai saat menambah soal baru.</span>
                                         </span>
                                         <div class="flex shrink-0 items-center gap-2">
                                             <input
@@ -4067,15 +4132,15 @@ watch(
                                                 class="h-11 w-20 rounded border border-slate-300 px-3 text-base focus:border-indigo-500 focus:ring-indigo-500 sm:h-12 sm:w-28 sm:px-4 sm:text-lg"
                                                 @change="markSettingsChanged"
                                             />
-                                            <span class="text-sm text-slate-600 sm:text-lg">points</span>
+                                            <span class="text-sm text-slate-600 sm:text-lg">poin</span>
                                         </div>
                                     </div>
 
                                     <div class="flex items-center justify-between gap-4 sm:gap-8">
                                         <span>
-                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Media upload limit</span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Batas ukuran berkas</span>
                                             <span class="mt-1 block text-sm text-slate-600 sm:text-lg"
-                                                >Maximum image/video upload size in the editor.</span
+                                                >Untuk gambar/video di editor dan berkas jawaban siswa (soal Unggah berkas).</span
                                             >
                                         </span>
                                         <div class="flex shrink-0 items-center gap-2">
@@ -4124,8 +4189,8 @@ watch(
         <div v-if="showPreview" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
                 <div class="mb-5 flex items-center justify-between">
-                    <h2 class="text-2xl font-bold">Preview</h2>
-                    <button type="button" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100" @click="showPreview = false">Close</button>
+                    <h2 class="text-2xl font-bold">Pratinjau</h2>
+                    <button type="button" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100" @click="showPreview = false">Tutup</button>
                 </div>
                 <div :class="['mb-5 h-3 rounded-full', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
                 <h3 class="text-3xl font-semibold"><RichContent :content="form.title" /></h3>
@@ -4748,10 +4813,10 @@ Jawaban: A, C</pre
 
         <div v-if="showPublish" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-                <h2 class="text-2xl font-bold">Publish form</h2>
+                <h2 class="text-2xl font-bold">Terbitkan ujian</h2>
                 <p class="mt-2 text-slate-500">Form siap dibagikan. Link tetap memakai slug ini meskipun judul quiz diganti.</p>
                 <div class="mt-5 rounded-2xl bg-slate-50 p-4">
-                    <label class="text-sm font-bold text-slate-500" for="public-slug">Public link</label>
+                    <label class="text-sm font-bold text-slate-500" for="public-slug">Tautan publik</label>
                     <div class="mt-2 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center">
                         <span class="text-sm font-semibold text-slate-500">{{ `${appOrigin}/forms/` }}</span>
                         <input

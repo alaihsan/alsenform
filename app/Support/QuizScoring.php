@@ -33,6 +33,73 @@ class QuizScoring
     }
 
     /**
+     * The result of a response, with what the teacher graded by hand: a question the teacher graded
+     * counts with that grade (an essay, a file, or a short answer the key judged too strictly). An
+     * essay or file not graded yet is left out of both the points and the maximum, and counted as
+     * waiting, so the grade is provisional until then.
+     *
+     * @param  array<int, mixed>  $questions  All questions of the quiz.
+     * @param  array<int|string, mixed>  $answers
+     * @param  list<int|string>|null  $questionIds  The questions the student got, when drawn.
+     * @param  array<int|string, mixed>|null  $manualScores  Points by question id.
+     * @return array{score: int|float, max: int, grade: float, ungraded: int}
+     */
+    public function result(array $questions, array $answers, ?array $questionIds = null, ?array $manualScores = null): array
+    {
+        $score = 0.0;
+        $max = 0;
+        $ungraded = 0;
+
+        foreach ($this->questionsGiven($questions, $questionIds) as $question) {
+            $id = $question['id'] ?? null;
+            if ($id === null) {
+                continue;
+            }
+
+            $points = max(0, $this->points($question));
+            $manual = $manualScores[$id] ?? null;
+
+            if (is_numeric($manual)) {
+                $score += min($points, max(0, (float) $manual));
+                $max += $points;
+            } elseif ($this->isAutoScored($question)) {
+                $max += $points;
+                if (array_key_exists($id, $answers) && $this->isCorrect($question, $answers[$id]) === true) {
+                    $score += $points;
+                }
+            } elseif ($this->needsGrading($question)) {
+                $ungraded++;
+            }
+        }
+
+        // Whole points stay whole (only half points from the teacher make a fraction).
+        $score = round($score, 2);
+        $score = floor($score) === $score ? (int) $score : $score;
+
+        return ['score' => $score, 'max' => $max, 'grade' => $this->grade($score, $max), 'ungraded' => $ungraded];
+    }
+
+    /**
+     * Questions only the teacher can grade: essays and files, worth points.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function needsGrading(array $question): bool
+    {
+        return in_array($question['type'] ?? '', ['Paragraph', 'File upload'], true) && $this->points($question) > 0;
+    }
+
+    /**
+     * Questions the teacher may grade by hand: those, and short answers, whose key may be too strict.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function isGradableByHand(array $question): bool
+    {
+        return $this->needsGrading($question) || (($question['type'] ?? '') === 'Short answer' && $this->points($question) > 0);
+    }
+
+    /**
      * Points a question is worth (1 when not set).
      *
      * @param  array<string, mixed>  $question

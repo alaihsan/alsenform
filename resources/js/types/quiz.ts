@@ -27,6 +27,8 @@ export type Question = {
     required: boolean;
     media: { type: 'image' | 'video'; url: string; sourceType?: 'upload' | 'link'; isUploading?: boolean; uploadError?: string; width?: string; align?: 'left' | 'center' | 'right'; caption?: string }[];
     points: number;
+    /** Pembahasan: why the answer is right, shown to students with their results. */
+    explanation?: string;
 };
 
 export type PreviewAnswer = string | string[] | Record<number, any>;
@@ -82,6 +84,8 @@ export type QuizFormPayload = {
         confirmationMessage?: string;
         showSubmitAnotherResponse?: boolean;
         showResultsSummary?: boolean;
+        resultsDetail?: 'score' | 'full';
+        schedule?: { opensAt?: string | null; closesAt?: string | null };
         disableRespondentAutosave?: boolean;
         defaultCollectEmailMode?: 'none' | 'verified' | 'responder';
         defaultQuestionRequired?: boolean;
@@ -104,6 +108,10 @@ export type QuizFormPayload = {
         progressUrl?: string;
         maxScore?: number;
         exportUrl?: string;
+        /** Grading by hand (essays, files, short answers). */
+        gradingUrl?: string;
+        ungradedTotal?: number;
+        hasGradableQuestions?: boolean;
         latest: {
             id: number;
             name?: string | null;
@@ -125,6 +133,8 @@ export type QuizFormPayload = {
             /** The points this student could earn: their own when questions are drawn per student. */
             maxScore?: number;
             percentage: number;
+            /** Essays and files the teacher has not graded yet: the grade is provisional. */
+            ungraded?: number;
             /** Answers that arrived after the time ran out (a page offline at the end). */
             lateMinutes?: number | null;
             /** Attempt number of this response (1 is the first) and the student's attempts in all. */
@@ -219,6 +229,9 @@ export type RecentForm = {
     isCollaborator?: boolean;
     ownerName?: string;
     hasSubmitted?: boolean;
+    /** Students: their results, once the teacher shows them; and the exam's schedule. */
+    resultsUrl?: string | null;
+    scheduleLabel?: string | null;
 };
 
 export type QuizFolder = {

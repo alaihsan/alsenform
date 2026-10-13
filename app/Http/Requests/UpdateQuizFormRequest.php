@@ -54,6 +54,8 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.required' => ['nullable', 'boolean'],
             'questions.*.media' => ['nullable', 'array'],
             'questions.*.points' => ['nullable', 'integer', 'min:0'],
+            // Pembahasan: shown to students with their results, when the teacher shows them in full.
+            'questions.*.explanation' => ['nullable', 'string', 'max:5000'],
             'settings' => ['required', 'array'],
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],
@@ -66,6 +68,11 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.limitOneResponse' => ['nullable', 'boolean'],
             // How many times a student may take the quiz; 0 is no limit.
             'settings.maxAttempts' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'settings.resultsDetail' => ['nullable', 'string', Rule::in(['score', 'full'])],
+            // Jadwal ujian: when students may start (ISO times).
+            'settings.schedule' => ['nullable', 'array:opensAt,closesAt'],
+            'settings.schedule.opensAt' => ['nullable', 'date'],
+            'settings.schedule.closesAt' => ['nullable', 'date', 'after:settings.schedule.opensAt'],
             // Add-ons switched on or off for this exam, by add-on key.
             'settings.addons' => ['nullable', 'array:'.implode(',', array_column(Addon::cases(), 'value'))],
             'settings.addons.*' => ['boolean'],

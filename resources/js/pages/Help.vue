@@ -553,15 +553,16 @@ const selectTopic = (id: string) => {
                                     <h4 class="mb-2 text-xs font-bold uppercase tracking-wider text-slate-800">Penetapan Skor & Poin</h4>
                                     <p class="text-xs leading-relaxed text-slate-600">
                                         Setiap soal bernilai <strong>1 poin</strong> secara bawaan dan dapat diganti angka lain per soal (atau lewat
-                                        Settings › Default quiz points). Nilai akhir murid selalu berada pada rentang <strong>0–100</strong>:
+                                        Pengaturan › Bawaan › Poin bawaan soal). Nilai akhir murid selalu berada pada rentang <strong>0–100</strong>:
                                     </p>
                                     <p class="mt-2 rounded-xl bg-white px-3 py-2 text-center font-mono text-xs font-bold text-indigo-700">
-                                        Nilai = poin soal yang dijawab benar ÷ total poin soal berkunci jawaban × 100
+                                        Nilai = poin yang diperoleh ÷ total poin soal yang dinilai × 100
                                     </p>
                                     <p class="mt-2 text-xs leading-relaxed text-slate-600">
-                                        Contoh: 20 soal masing-masing 1 poin, 15 benar → nilai 75. Soal uraian dan soal tanpa kunci jawaban (misalnya
-                                        survei) tidak ikut dihitung. Nilai dihitung ulang dari kunci terbaru, jadi kunci yang diperbaiki langsung
-                                        memperbarui nilai murid.
+                                        Contoh: 20 soal masing-masing 1 poin, 15 benar → nilai 75. Soal esai dan unggah berkas dinilai guru lewat tab
+                                        Jawaban › "Nilai esai & isian"; sebelum dinilai, soal itu belum dihitung dan nilai murid ditandai "sementara".
+                                        Soal tanpa kunci jawaban (misalnya survei) tidak ikut dihitung. Nilai dihitung ulang dari kunci terbaru, jadi
+                                        kunci yang diperbaiki langsung memperbarui nilai murid.
                                     </p>
                                 </div>
                             </div>

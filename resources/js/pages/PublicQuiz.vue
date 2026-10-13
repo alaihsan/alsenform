@@ -12,6 +12,7 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    FileText,
     Flag,
     KeyRound,
     Send,
@@ -25,6 +26,7 @@ import {
     ListChecks,
     Play,
     ScrollText,
+    Upload,
     UserRound,
     Wifi,
     WifiOff,
@@ -71,6 +73,7 @@ const props = defineProps<{
             shuffleQuestions: boolean;
             confirmationMessage?: string;
             showSubmitAnotherResponse?: boolean;
+            showResultsSummary?: boolean;
             questionFont?: string;
             answerFont?: string;
             themeColorClass?: string;
@@ -81,6 +84,8 @@ const props = defineProps<{
             questionsPerPage?: string | number;
             disableRespondentAutosave?: boolean;
             limitOneResponse?: boolean;
+            /** Megabytes per file a student may hand in for a "File upload" question. */
+            maxUploadSize?: number;
         };
         submitUrl: string;
         startUrl?: string;
@@ -89,6 +94,8 @@ const props = defineProps<{
         respondentClasses?: string[];
         /** Token Ujian add-on: the token shown by the proctor is needed to start. */
         requiresExamToken?: boolean;
+        /** The student's results, once the teacher shows them. */
+        resultsUrl?: string;
     };
     examSummary?: {
         questionCount: number;
@@ -117,8 +124,12 @@ const props = defineProps<{
         max: number | null;
     };
     accessRestricted?: boolean;
+    restrictionTitle?: string;
     restrictionReason?: string;
     allowedCohorts?: string[];
+    /** Jadwal ujian: the exam opens at this time (the page reloads then). */
+    opensAt?: string | null;
+    serverTime?: string;
 }>();
 
 const answers = ref<Record<number, any>>({});
@@ -1488,7 +1499,116 @@ const goToFirstDoubtful = () => {
     goToQuestion(target.id);
 };
 
+/*
+ * "File upload" questions: photos of work on paper, documents. Each file goes to the server at
+ * once; the answer is the list of files, saved with the draft and handed in with the answers.
+ */
+const ANSWER_FILE_ACCEPT = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt';
+const MAX_ANSWER_FILES = 5;
+type AnswerFileValue = { id: string; name: string; size: number; type: string | null };
+const maxUploadMb = computed<number>(() => {
+    const limit = Number(props.quizForm.settings.maxUploadSize);
+    return limit >= 1 ? Math.min(40, limit) : 10;
+});
+const uploadProgress = reactive<Record<string, number>>({});
+const uploadErrors = reactive<Record<string, string>>({});
+const filesOf = (question: Question): AnswerFileValue[] => (Array.isArray(answers.value[question.id]) ? answers.value[question.id] : []);
+const isUploadingFor = (question: Question) => uploadProgress[question.id] !== undefined;
+const formatFileSize = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+const uploadAnswerFiles = async (question: Question, event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const picked = Array.from(input.files ?? []);
+    input.value = '';
+    if (!picked.length || isLocked.value || isSubmitted.value || !props.session?.token) {
+        return;
+    }
+    uploadErrors[question.id] = '';
+
+    for (const file of picked) {
+        if (filesOf(question).length >= MAX_ANSWER_FILES) {
+            uploadErrors[question.id] = `Paling banyak ${MAX_ANSWER_FILES} berkas per soal.`;
+            break;
+        }
+        if (file.size > maxUploadMb.value * 1024 * 1024) {
+            uploadErrors[question.id] = `${file.name} terlalu besar: paling besar ${maxUploadMb.value} MB.`;
+            continue;
+        }
+
+        const body = new FormData();
+        body.append('session_token', props.session.token);
+        body.append('question_id', String(question.id));
+        body.append('file', file);
+        uploadProgress[question.id] = 0;
+        try {
+            const response = await axios.post(`/forms/${props.quizForm.slug}/answer-files`, body, {
+                timeout: 120000,
+                onUploadProgress: (progress) => {
+                    if (progress.total) {
+                        uploadProgress[question.id] = Math.round((progress.loaded / progress.total) * 100);
+                    }
+                },
+            });
+            answers.value = { ...answers.value, [question.id]: [...filesOf(question), response.data.file] };
+            markServerReachable(true);
+        } catch (error: any) {
+            if (error?.response?.status === 419) {
+                await refreshCsrfToken();
+            }
+            const data = error?.response?.data;
+            uploadErrors[question.id] =
+                data?.errors?.file?.[0] ??
+                data?.message ??
+                (isNetworkFailure(error) ? 'Berkas belum terkirim: periksa koneksi Wi-Fi, lalu pilih berkasnya lagi.' : 'Berkas belum terkirim. Coba lagi.');
+        } finally {
+            delete uploadProgress[question.id];
+        }
+    }
+};
+
+const removeAnswerFile = (question: Question, fileId: string) => {
+    if (isLocked.value || isSubmitted.value) {
+        return;
+    }
+    const remaining = filesOf(question).filter((file) => file.id !== fileId);
+    const next = { ...answers.value };
+    if (remaining.length) {
+        next[question.id] = remaining;
+    } else {
+        delete next[question.id];
+    }
+    answers.value = next;
+};
+
 const showSubmitConfirmModal = ref(false);
+
+/* Jadwal ujian: until the exam opens the page counts down, then loads the exam. */
+const opensIn = ref<number | null>(null);
+const opensInLabel = computed(() => {
+    if (opensIn.value === null) {
+        return '';
+    }
+    const seconds = Math.ceil(opensIn.value / 1000);
+    const days = Math.floor(seconds / 86400);
+    const rest = seconds % 86400;
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const clock = `${pad(Math.floor(rest / 3600))}:${pad(Math.floor((rest % 3600) / 60))}:${pad(rest % 60)}`;
+    return days > 0 ? `${days} hari ${clock}` : clock;
+});
+if (props.opensAt) {
+    const offset = props.serverTime ? new Date(props.serverTime).getTime() - Date.now() : 0;
+    const tick = () => {
+        const remaining = new Date(props.opensAt as string).getTime() - (Date.now() + offset);
+        opensIn.value = Math.max(0, remaining);
+        if (remaining <= 0) {
+            window.location.reload();
+        } else {
+            setTimeout(tick, 1000);
+        }
+    };
+    onMounted(tick);
+}
+const canSeeResults = computed<boolean>(() => Boolean(props.quizForm.resultsUrl && props.quizForm.settings.showResultsSummary));
 
 const openSubmitConfirmation = () => {
     if (identityEditable.value && !validateIdentity()) {
@@ -2000,10 +2120,14 @@ const submitAnotherResponse = () => {
                 <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50 text-amber-600 mb-4 ring-8 ring-amber-50">
                     <ShieldAlert class="h-8 w-8" />
                 </div>
-                <h1 class="text-2xl font-black text-slate-900">Akses Kuis Dibatasi</h1>
+                <h1 class="text-2xl font-black text-slate-900">{{ restrictionTitle || 'Akses Kuis Dibatasi' }}</h1>
                 <p class="mt-2 text-sm text-slate-600 leading-relaxed">
                     {{ restrictionReason || 'Kuis ini hanya dapat diakses oleh murid yang terdaftar dalam kelompok (Cohort) tertentu.' }}
                 </p>
+                <p v-if="opensIn !== null" class="mt-4 font-mono text-3xl font-black tabular-nums text-slate-900" aria-live="polite" data-testid="opens-in">
+                    {{ opensInLabel }}
+                </p>
+                <p v-if="opensIn !== null" class="mt-1 text-xs text-slate-500">Halaman ini terbuka sendiri saat ujian dimulai.</p>
 
                 <div v-if="allowedCohorts && allowedCohorts.length > 0" class="mt-5 rounded-2xl bg-slate-50 p-4 border border-slate-200/80 text-left">
                     <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">
@@ -2022,6 +2146,14 @@ const submitAnotherResponse = () => {
                 </div>
 
                 <div class="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <a
+                        v-if="canSeeResults"
+                        :href="quizForm.resultsUrl"
+                        class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition"
+                    >
+                        <ListChecks class="h-4 w-4" />
+                        <span>Lihat Hasil</span>
+                    </a>
                     <Link
                         :href="route('dashboard')"
                         class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 transition"
@@ -2037,15 +2169,22 @@ const submitAnotherResponse = () => {
             <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
             <div class="p-6 sm:p-8">
                 <h1 class="text-2xl font-semibold leading-tight sm:text-3xl" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
-                    {{ quizForm.settings.confirmationMessage ?? 'Your response has been recorded' }}
+                    {{ quizForm.settings.confirmationMessage ?? 'Jawaban Anda sudah tercatat.' }}
                 </h1>
+                <a
+                    v-if="canSeeResults"
+                    :href="quizForm.resultsUrl"
+                    class="mt-6 inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-indigo-700"
+                >
+                    <ListChecks class="h-4 w-4" /> Lihat Hasil
+                </a>
                 <button
                     v-if="(quizForm.settings.showSubmitAnotherResponse ?? true) && attemptsLeftAfterThis !== 0"
                     type="button"
                     class="mt-6 rounded-2xl border border-slate-300 px-5 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
                     @click="submitAnotherResponse"
                 >
-                    {{ attemptsLeftAfterThis === null ? 'Submit another response' : `Kerjakan lagi (sisa ${attemptsLeftAfterThis} kesempatan)` }}
+                    {{ attemptsLeftAfterThis === null ? 'Kirim jawaban lagi' : `Kerjakan lagi (sisa ${attemptsLeftAfterThis} kesempatan)` }}
                 </button>
                 <p v-else-if="maxAttempts !== null && maxAttempts > 1" class="mt-4 text-sm font-semibold text-slate-500">
                     Semua {{ maxAttempts }} kesempatan mengerjakan sudah dipakai.
@@ -2475,6 +2614,47 @@ const submitAnotherResponse = () => {
                         type="time"
                         class="mt-4 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5 sm:w-auto"
                     />
+                    <div v-else-if="question.type === 'File upload'" class="mt-4 sm:mt-5">
+                        <label
+                            :class="[
+                                'flex flex-col items-center gap-1.5 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition',
+                                isLocked || isUploadingFor(question) || filesOf(question).length >= MAX_ANSWER_FILES
+                                    ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-70'
+                                    : 'cursor-pointer border-indigo-200 bg-indigo-50/40 hover:border-indigo-400',
+                            ]"
+                        >
+                            <Upload class="h-6 w-6 text-indigo-500" />
+                            <span class="text-sm font-bold text-indigo-700">
+                                {{ isUploadingFor(question) ? `Mengirim berkas... ${uploadProgress[question.id]}%` : 'Pilih berkas atau ambil foto' }}
+                            </span>
+                            <span class="text-xs text-slate-500">Foto, PDF, Word, Excel atau PowerPoint · maks. {{ maxUploadMb }} MB per berkas · {{ MAX_ANSWER_FILES }} berkas</span>
+                            <input
+                                type="file"
+                                class="sr-only"
+                                multiple
+                                :accept="ANSWER_FILE_ACCEPT"
+                                :disabled="isLocked || isUploadingFor(question) || filesOf(question).length >= MAX_ANSWER_FILES"
+                                :aria-label="`Unggah berkas untuk soal ${getQuestionNumber(question.id)}`"
+                                @change="uploadAnswerFiles(question, $event)"
+                            />
+                        </label>
+                        <ul v-if="filesOf(question).length" class="mt-3 space-y-2">
+                            <li v-for="file in filesOf(question)" :key="file.id" class="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                                <FileText class="h-4 w-4 shrink-0 text-slate-400" />
+                                <span class="min-w-0 flex-1 truncate font-semibold text-slate-800">{{ file.name }}</span>
+                                <span class="shrink-0 text-xs text-slate-400">{{ formatFileSize(file.size) }}</span>
+                                <button
+                                    type="button"
+                                    class="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                                    :disabled="isLocked"
+                                    @click="removeAnswerFile(question, file.id)"
+                                >
+                                    Hapus
+                                </button>
+                            </li>
+                        </ul>
+                        <p v-if="uploadErrors[question.id]" class="mt-2 text-sm font-semibold text-rose-700" role="alert">{{ uploadErrors[question.id] }}</p>
+                    </div>
                     <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
                 </article>
 

@@ -1549,7 +1549,7 @@ function closeDonationModal(): void {
                                                       : 'border border-amber-200 bg-amber-50 text-amber-700',
                                             ]"
                                         >
-                                            {{ form.isTrashed ? 'Trash' : form.isPublished ? 'Published' : 'Draft' }}
+                                            {{ form.isTrashed ? 'Sampah' : form.isPublished ? 'Terbit' : 'Draf' }}
                                         </span>
                                     </template>
                                 </div>
@@ -1559,7 +1559,10 @@ function closeDonationModal(): void {
                                     <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
                                         <ClipboardList class="h-3.5 w-3.5" />
                                     </span>
-                                    <span v-if="isStudent && form.ownerName" class="truncate text-[11px] font-semibold text-slate-600">
+                                    <span v-if="isStudent && form.scheduleLabel" class="truncate text-[11px] font-bold text-amber-700">
+                                        {{ form.scheduleLabel }}
+                                    </span>
+                                    <span v-else-if="isStudent && form.ownerName" class="truncate text-[11px] font-semibold text-slate-600">
                                         Guru: {{ form.ownerName }}
                                     </span>
                                     <span v-else class="truncate text-[11px]">
@@ -1568,7 +1571,14 @@ function closeDonationModal(): void {
                                 </div>
 
                                 <!-- Action button for Student -->
-                                <div v-if="isStudent" class="shrink-0">
+                                <div v-if="isStudent" class="flex shrink-0 items-center gap-1.5">
+                                    <a
+                                        v-if="form.resultsUrl"
+                                        :href="form.resultsUrl"
+                                        class="shadow-xs inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-indigo-700"
+                                    >
+                                        Lihat Hasil
+                                    </a>
                                     <a
                                         :href="form.publicUrl"
                                         target="_blank"

@@ -313,6 +313,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                     <span :class="['inline-block rounded-full px-2.5 py-0.5 text-xs font-bold', gradeTone(row.percentage)]">{{
                         row.percentage
                     }}</span>
+                    <p v-if="row.ungraded" class="text-[10px] font-bold text-amber-700">sementara · {{ row.ungraded }} belum dinilai</p>
                     <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ row.score }} / {{ row.maxScore ?? maxScore }} poin</p>
                     <p
                         :class="['text-[10px] font-extrabold uppercase', row.is_timeout ? 'text-rose-600' : 'text-emerald-600']"
@@ -418,6 +419,12 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                             <span :class="['inline-block rounded-full px-2.5 py-0.5 font-bold', gradeTone(row.percentage)]">{{
                                 row.percentage
                             }}</span>
+                            <span
+                                v-if="row.ungraded"
+                                class="mt-1 block text-[10px] font-bold text-amber-700"
+                                :title="`${row.ungraded} esai/berkas belum dinilai: nilai ini sementara`"
+                                >sementara</span
+                            >
                         </td>
                         <td class="px-4 py-3">
                             <span
