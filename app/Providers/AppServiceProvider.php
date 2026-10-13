@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\Addons;
 use App\Support\ActivityRecorder;
 use App\Support\ErrorPage;
 use Illuminate\Auth\Events\Login;
@@ -24,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // One instance per request: the error page remembers whether it just updated the database.
         $this->app->scoped(ErrorPage::class);
+
+        // Which add-ons are installed is looked up once per request.
+        $this->app->scoped(Addons::class);
     }
 
     /**

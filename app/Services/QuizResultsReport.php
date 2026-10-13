@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Support\Addon;
 use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
 use Illuminate\Support\Carbon;
@@ -43,11 +44,16 @@ class QuizResultsReport
         $kkm = $this->kkm($quizForm);
         $students = $this->students($quizForm, $questions, $maxScore);
 
-        (new XlsxWriter)
+        $workbook = (new XlsxWriter)
             ->addSheet('Rekap Nilai', ...$this->scoreSheet($quizForm, $students, $maxScore, $kkm))
-            ->addSheet('Jawaban Siswa', ...$this->answerSheet($quizForm, $questions, $students))
-            ->addSheet('Analisis Butir Soal', ...$this->analysisSheet($quizForm))
-            ->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
+            ->addSheet('Jawaban Siswa', ...$this->answerSheet($quizForm, $questions, $students));
+
+        // Sheets of the add-ons that are on for this exam.
+        if ($quizForm->usesAddon(Addon::ItemAnalysis)) {
+            $workbook->addSheet('Analisis Butir Soal', ...$this->analysisSheet($quizForm));
+        }
+
+        $workbook->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
     }
 
     /**

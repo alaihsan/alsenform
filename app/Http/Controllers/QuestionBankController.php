@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\QuizForm;
 use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
+use App\Support\Addon;
 use App\Support\ExamLayout;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -154,6 +155,7 @@ class QuestionBankController extends Controller
     public function applyAnalysedDifficulty(Request $request, QuizForm $quizForm, ItemAnalysis $itemAnalysis, QuestionBank $questionBank): JsonResponse
     {
         abort_unless($quizForm->canBeEditedBy($request->user()), 403);
+        abort_unless($quizForm->usesAddon(Addon::ItemAnalysis), 403, 'Add-on Analisis Butir Soal tidak aktif untuk ujian ini.');
 
         $labelled = 0;
         foreach ($itemAnalysis->analyze($quizForm)['questions'] as $question) {

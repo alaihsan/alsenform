@@ -1,3 +1,4 @@
+import type { AddonEntry } from '@/components/addons/AddonGallery.vue';
 import type { Component } from 'vue';
 
 export type QuestionType =
@@ -43,6 +44,10 @@ export type QuizFormPayload = {
     questionLabels?: Record<string, { subject?: string | null; grade?: string | null; topic?: string | null; difficulty?: string | null }>;
     labelSuggestions?: { subjects: string[]; grades: string[]; topics: string[] };
     labelsUrl?: string;
+    /** The add-ons of the teacher looking at the exam, with whether each is on for it. */
+    addons?: AddonEntry[];
+    addonUrls?: { gallery: string; install: string; uninstall: string };
+    canInstallAddonsForEveryone?: boolean;
     settings: {
         collectEmail: boolean;
         showProgress: boolean;
@@ -62,6 +67,8 @@ export type QuizFormPayload = {
         limitOneResponse?: boolean;
         /** How many times a student may take the quiz; 0 is no limit. */
         maxAttempts?: number;
+        /** Add-ons switched on or off for this exam, by add-on key. */
+        addons?: Record<string, boolean>;
         confirmationMessage?: string;
         showSubmitAnotherResponse?: boolean;
         showResultsSummary?: boolean;

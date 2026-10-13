@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AccountMenu from '@/components/AccountMenu.vue';
 import RichContent from '@/components/RichContent.vue';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import AddonExamSwitches from '@/components/addons/AddonExamSwitches.vue';
+import AddonGallery, { type AddonEntry } from '@/components/addons/AddonGallery.vue';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import GradebookTable from '@/components/form-editor/GradebookTable.vue';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
 import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
@@ -134,6 +136,8 @@ const form = reactive({
         allowResponseEditing: props.quizForm?.settings?.allowResponseEditing ?? false,
         limitOneResponse: props.quizForm?.settings?.limitOneResponse ?? false,
         maxAttempts: props.quizForm?.settings?.maxAttempts ?? (props.quizForm?.settings?.limitOneResponse ? 1 : 0),
+        // Add-ons switched on or off for this exam (absent: the add-on's default).
+        addons: { ...(props.quizForm?.settings?.addons ?? {}) } as Record<string, boolean>,
         confirmationMessage: props.quizForm?.settings?.confirmationMessage ?? 'Your response has been recorded',
         showSubmitAnotherResponse: props.quizForm?.settings?.showSubmitAnotherResponse ?? true,
         showResultsSummary: props.quizForm?.settings?.showResultsSummary ?? false,
@@ -470,6 +474,40 @@ const markSettingsChanged = () => {
     form.settings.collectEmail = form.settings.emailCollectionMode !== 'none';
     markChanged('Settings updated');
 };
+
+/*
+ * Add-ons, like in Google Workspace: installed once per teacher (or by an admin for every teacher)
+ * in the gallery, then switched on or off for this exam. An add-on works on an exam while the
+ * exam's owner has it installed and the exam has not switched it off.
+ */
+const addonCatalog = ref<AddonEntry[]>(props.quizForm?.addons ?? []);
+const isAddonGalleryOpen = ref(false);
+const examAddons = computed(() => addonCatalog.value.filter((addon) => addon.installed || addon.installedForOwner));
+const isAddonOnForExam = (addon: AddonEntry) => Boolean(addon.installedForOwner) && (form.settings.addons[addon.key] ?? addon.onByDefault);
+const itemAnalysisAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'item-analysis') ?? null);
+
+const setAddonForExam = (addon: AddonEntry, on: boolean) => {
+    form.settings.addons = { ...form.settings.addons, [addon.key]: on };
+    markSettingsChanged();
+};
+
+/** Installed or removed in the gallery: the exam is loaded again for what the add-on adds or takes away. */
+const onAddonsChanged = (addons: AddonEntry[]) => {
+    const previous = new Map(addonCatalog.value.map((addon) => [addon.key, addon]));
+    addonCatalog.value = addons.map((addon) => ({ ...previous.get(addon.key), ...addon }));
+    if (!isSaveInFlight) {
+        router.reload({ only: ['quizForm'] });
+    }
+};
+
+watch(
+    () => props.quizForm?.addons,
+    (addons) => {
+        if (addons) {
+            addonCatalog.value = addons;
+        }
+    },
+);
 
 /** How many times a student may take the quiz (0 is no limit); the older one-response switch follows it. */
 const updateMaxAttempts = () => {
@@ -1814,17 +1852,24 @@ watch(
                                 <Puzzle class="h-5 w-5" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" class="z-50 mt-1.5 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-                            <div class="flex items-start gap-3">
+                        <DropdownMenuContent align="end" class="z-50 mt-1.5 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                            <div class="flex items-center justify-between px-2 pb-1 pt-1.5">
+                                <p class="text-sm font-bold text-slate-900">Add-ons</p>
+                                <DropdownMenuItem
+                                    class="cursor-pointer rounded-lg px-2 py-1 text-xs font-bold text-indigo-600 focus:bg-indigo-50 focus:text-indigo-700"
+                                    @select="isAddonGalleryOpen = true"
+                                >
+                                    Jelajahi add-on
+                                </DropdownMenuItem>
+                            </div>
+                            <AddonExamSwitches v-if="examAddons.length" :addons="examAddons" :is-on="isAddonOnForExam" @toggle="setAddonForExam" />
+                            <div v-else class="flex items-start gap-3 px-2 py-2">
                                 <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                                     <Sparkles class="h-5 w-5" />
                                 </div>
-                                <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-900">Add-ons</p>
-                                    <p class="mt-1 text-sm leading-relaxed text-slate-600">
-                                        Hal Magic sedang dibuat, kamu akan menerima notifikasi. Ditunggu ya!
-                                    </p>
-                                </div>
+                                <p class="text-sm leading-relaxed text-slate-600">
+                                    Belum ada add-on terpasang. Tambahkan kemampuan seperti Analisis Butir Soal lewat <b>Jelajahi add-on</b>.
+                                </p>
                             </div>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -1945,6 +1990,17 @@ watch(
                             </button>
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="openPreview">
                                 Open preview
+                            </button>
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50 lg:hidden"
+                                @click="
+                                    isAddonGalleryOpen = true;
+                                    showMoreMenu = false;
+                                "
+                            >
+                                <Puzzle class="h-4 w-4 text-indigo-600" />
+                                Add-ons
                             </button>
                             <button
                                 type="button"
@@ -3211,6 +3267,27 @@ watch(
                             :apply-message="applyDifficultyMessage"
                             @apply-difficulty="applyAnalysedDifficulty"
                         />
+                        <!-- The analysis is an add-on: a quiet pointer when it is not on for this exam -->
+                        <div
+                            v-else-if="responseCount && itemAnalysisAddon"
+                            class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
+                        >
+                            <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                {{
+                                    itemAnalysisAddon.installedForOwner
+                                        ? 'Add-on Analisis Butir Soal dimatikan untuk ujian ini.'
+                                        : 'Ingin tahu soal mana yang perlu diperbaiki? Pasang add-on Analisis Butir Soal.'
+                                }}
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
+                                @click="itemAnalysisAddon.installedForOwner ? setAddonForExam(itemAnalysisAddon, true) : (isAddonGalleryOpen = true)"
+                            >
+                                {{ itemAnalysisAddon.installedForOwner ? 'Aktifkan' : 'Lihat add-on' }}
+                            </button>
+                        </div>
 
                         <div v-if="latestResponses.length" class="mt-6 rounded-2xl border border-slate-200">
                             <div class="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">Recent submissions</div>
@@ -4349,6 +4426,48 @@ Jawaban: A, C</pre
         </div>
 
         <!-- Modal Kolaborasi Kuis (Antar Guru) -->
+        <div v-if="isAddonGalleryOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+            <section
+                class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl duration-150 animate-in fade-in zoom-in-95"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="addon-gallery-title"
+            >
+                <div class="flex items-start justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                            <Puzzle class="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h2 id="addon-gallery-title" class="text-xl font-extrabold text-slate-900">Add-ons</h2>
+                            <p class="text-xs text-slate-500">Pasang sekali, lalu nyalakan atau matikan untuk tiap ujian.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                        aria-label="Tutup"
+                        @click="isAddonGalleryOpen = false"
+                    >
+                        <X class="h-5 w-5" />
+                    </button>
+                </div>
+                <div class="space-y-5 overflow-y-auto p-5 sm:p-6">
+                    <div v-if="examAddons.length" class="rounded-2xl border border-slate-200 p-2">
+                        <p class="px-2 pb-1 pt-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Di ujian ini</p>
+                        <AddonExamSwitches :addons="examAddons" :is-on="isAddonOnForExam" @toggle="setAddonForExam" />
+                    </div>
+                    <AddonGallery
+                        :addons="addonCatalog"
+                        :can-install-for-everyone="Boolean(quizForm?.canInstallAddonsForEveryone)"
+                        :install-url="quizForm?.addonUrls?.install ?? ''"
+                        :uninstall-url="quizForm?.addonUrls?.uninstall ?? ''"
+                        @update:addons="onAddonsChanged"
+                    />
+                </div>
+            </section>
+        </div>
+
         <div v-if="isCollaboratorModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section class="w-full max-w-lg space-y-5 rounded-3xl bg-white p-6 shadow-2xl duration-150 animate-in fade-in zoom-in-95">
                 <div class="flex items-start justify-between gap-4">

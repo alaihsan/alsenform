@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActivityReportController;
+use App\Http\Controllers\AddonController;
 use App\Http\Controllers\CohortController;
 use App\Http\Controllers\ConnectionCheckController;
 use App\Http\Controllers\DashboardController;
@@ -73,6 +74,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('questions/import', [QuestionImportController::class, 'import'])->name('questions.import');
         Route::post('questions/import-examview', [QuestionImportController::class, 'importExamView'])->name('questions.import.examview');
         Route::get('bank-soal', [QuestionBankController::class, 'page'])->name('question-bank.page');
+        Route::get('add-ons', [AddonController::class, 'index'])->name('addons.index');
+        Route::post('add-ons/{addon}', [AddonController::class, 'install'])->name('addons.install');
+        Route::delete('add-ons/{addon}', [AddonController::class, 'uninstall'])->name('addons.uninstall');
         Route::get('question-bank', [QuestionBankController::class, 'index'])->name('question-bank.index');
         Route::post('question-bank/questions', [QuestionBankController::class, 'questions'])->name('question-bank.questions');
         Route::patch('question-bank/labels', [QuestionBankController::class, 'labels'])->name('question-bank.labels');

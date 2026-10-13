@@ -66,9 +66,19 @@ Fitur editor lainnya:
 - **Bank soal.** Setiap soal yang ditulis guru tersimpan otomatis sebagai cadangan, juga setelah soal atau ujiannya dihapus. Di **Import Soal → Bank Soal**, guru mencari soal lamanya (teks soal atau pilihan jawaban), menyaring per tipe atau asal ujian, mencentang yang dibutuhkan, lalu menambahkannya lengkap dengan kunci, poin, dan gambar. Soal yang sudah ada di ujian yang sedang dibuka ditandai. Bank soal hanya terlihat oleh guru pemiliknya.
 - **Halaman Bank Soal** (menu akun atau dasbor) untuk mengelola semua soal: saring per mapel, kelas, topik, tingkat kesulitan, tipe, atau asal ujian; lihat soal beserta kuncinya; beri label ke banyak soal sekaligus; arsipkan soal yang tidak dipakai lagi; dan buat ujian baru langsung dari soal yang dicentang.
 - **Impor data murid** dari CSV atau tempel langsung dari Excel. Pemisah koma, titik koma, atau tab dikenali otomatis.
-- **Ekspor nilai ke Excel (.xlsx)** dengan tiga lembar: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai), jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal, dan analisis butir soal.
+- **Ekspor nilai ke Excel (.xlsx)**: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai) dan jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal, ditambah lembar dari add-on yang aktif (misalnya Analisis Butir Soal).
 - **Ekspor laporan aktivitas** ke Excel.
 - **Cadangan semua ujian** milik guru dalam satu berkas JSON.
+
+### Add-on
+
+Seperti add-on Google Workspace, kemampuan tambahan dipasang sekali lalu dinyalakan atau dimatikan per ujian.
+
+- **Galeri add-on**: tombol puzzle di editor (Jelajahi add-on), atau menu akun → Add-on. Setiap add-on menjelaskan apa yang ditambahkannya dan data apa yang dibacanya sebelum dipasang.
+- **Pasang** untuk diri sendiri; **admin** juga bisa memasang untuk semua guru (hanya admin yang bisa melepasnya).
+- **Per ujian**: tombol puzzle di editor menampilkan add-on yang terpasang dengan sakelar "Aktif di ujian ini". Yang menentukan adalah pemilik ujian: kolaborator melihat hasil yang sama, termasuk di berkas Excel.
+- **Melepas** add-on mematikannya di semua ujian pemiliknya tanpa menghapus data; saat dipasang lagi, pilihan tiap ujian kembali seperti semula.
+- Add-on pertama, **Analisis Butir Soal**, menambah panel analisis di tab Responses, lembar ketiga di berkas Excel, dan tombol "Jadikan label kesulitan". Saat tidak aktif, ketiganya hilang dan analisis tidak dihitung sama sekali; di tab Responses muncul petunjuk kecil untuk memasang atau mengaktifkannya.
 
 ### Pelaksanaan ujian
 
@@ -107,7 +117,7 @@ Fitur editor lainnya:
 - Rekap di aplikasi menampilkan poin dan nilai setiap murid serta ringkasan jawaban per soal. Rata-rata, KKM, dan status tuntas ada di berkas Excel.
 - **Rekap nilai** bisa diurutkan menurut setiap kolom (klik judul kolom: naik, klik lagi: turun), termasuk nama depan atau nama belakang. Tombol **A–Z** membuka saringan huruf awal nama depan dan nama belakang seperti di Moodle; huruf tanpa murid diredupkan, dan saringan yang aktif tampil sebagai label kecil yang bisa dihapus. Di HP, urutan dipilih dari menu Urutkan.
 - Tab **Responses** menampilkan jumlah murid yang sudah mengirim jawaban (tiap murid dihitung sekali) dan yang sedang mengerjakan. Angkanya diperbarui langsung setiap 5 detik, dan rekap nilai ikut bertambah tanpa memuat ulang halaman.
-- **Analisis butir soal** di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** beserta alasannya untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik.
+- **Analisis butir soal** (add-on, lihat di bawah) di tab hasil dan di berkas Excel: tingkat kesukaran (P), daya pembeda (D, kelompok atas dan bawah 27%), dan pengecoh yang tidak berfungsi (dipilih kurang dari 5% murid), lalu saran **Dipakai**, **Revisi**, atau **Ganti** beserta alasannya untuk tiap soal. Hasilnya bisa dijadikan label tingkat kesulitan di Bank Soal dengan satu klik.
   - Tiap soal dihitung dari murid yang mendapatnya. Daya pembeda, pengecoh, dan keputusan baru muncul setelah minimal 10 murid mengerjakan soal itu; di bawah itu hanya tingkat kesukaran yang ditampilkan, karena hasilnya masih untung-untungan.
   - Murid bernilai sama di batas kelompok atas atau bawah dihitung sebagian, jadi hasilnya selalu sama, tidak bergantung pada urutan masuknya jawaban, dan sama persis antara aplikasi dan berkas Excel.
 

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\QuizForm;
+use App\Support\Addon;
 use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -65,6 +66,9 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.limitOneResponse' => ['nullable', 'boolean'],
             // How many times a student may take the quiz; 0 is no limit.
             'settings.maxAttempts' => ['nullable', 'integer', 'min:0', 'max:100'],
+            // Add-ons switched on or off for this exam, by add-on key.
+            'settings.addons' => ['nullable', 'array:'.implode(',', array_column(Addon::cases(), 'value'))],
+            'settings.addons.*' => ['boolean'],
             'settings.confirmationMessage' => ['nullable', 'string', 'max:500'],
             'settings.showSubmitAnotherResponse' => ['nullable', 'boolean'],
             'settings.showResultsSummary' => ['nullable', 'boolean'],

@@ -4,8 +4,10 @@ use App\Models\QuestionBankItem;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Services\Addons;
 use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
+use App\Support\Addon;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
@@ -19,6 +21,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 beforeEach(function () {
     $choice = fn (int $id, int $key) => ['id' => $id, 'title' => "Soal {$id}", 'type' => 'Multiple choice', 'options' => ["A{$id}", "B{$id}", "C{$id}", "D{$id}", "E{$id}"], 'answer' => $key, 'points' => 1];
     $this->teacher = User::factory()->create(['role' => 'guru']);
+    app(Addons::class)->install(Addon::ItemAnalysis, $this->teacher);
     $this->exam = QuizForm::factory()->for($this->teacher)->create([
         'published_at' => now(),
         'questions' => [$choice(1, 0), $choice(2, 2), $choice(3, 0), $choice(4, 3), ['id' => 5, 'title' => 'Jelaskan', 'type' => 'Paragraph', 'answer' => '', 'points' => 5]],

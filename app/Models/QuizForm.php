@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Addons;
+use App\Support\Addon;
 use Database\Factories\QuizFormFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -147,6 +149,14 @@ class QuizForm extends Model
     public function locksOnBlur(): bool
     {
         return filter_var($this->settings['lockOnBlur'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Whether an add-on is on for this exam: installed for its owner and not switched off here.
+     */
+    public function usesAddon(Addon $addon): bool
+    {
+        return app(Addons::class)->isActiveFor($this, $addon);
     }
 
     /**

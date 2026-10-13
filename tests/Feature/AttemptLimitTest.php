@@ -3,7 +3,9 @@
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Services\Addons;
 use App\Services\ItemAnalysis;
+use App\Support\Addon;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
@@ -44,6 +46,7 @@ function takeExam(QuizForm $quizForm, User $student, array $answers): void
 
 test('a student takes the exam as often as allowed, and every attempt keeps its answers and grade', function () {
     $quizForm = attemptsExam(['maxAttempts' => 2]);
+    app(Addons::class)->install(Addon::ItemAnalysis, $quizForm->user);
     $student = User::factory()->create(['role' => 'siswa']);
 
     $this->actingAs($student)->get(route('forms.public', $quizForm->slug))

@@ -7,6 +7,7 @@ use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Services\Addons;
 use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
 use Illuminate\Support\Collection;
@@ -51,6 +52,14 @@ class QuizFormPayloads
             'questionLabels' => (object) rescue(fn (): array => app(QuestionBank::class)->labelsForExam($quizForm), [], report: false),
             'labelSuggestions' => rescue(fn (): array => app(QuestionBank::class)->labelSuggestions($quizForm->user), ['subjects' => [], 'grades' => [], 'topics' => []], report: false),
             'labelsUrl' => route('forms.questions.labels', ['quizForm' => $quizForm->id, 'questionId' => '__question__']),
+            // The add-ons of the teacher looking at the exam, and whether each is on for this exam.
+            'addons' => auth()->user() ? app(Addons::class)->catalog(auth()->user(), $quizForm) : [],
+            'addonUrls' => [
+                'gallery' => route('addons.index'),
+                'install' => route('addons.install', ['addon' => '__addon__']),
+                'uninstall' => route('addons.uninstall', ['addon' => '__addon__']),
+            ],
+            'canInstallAddonsForEveryone' => (bool) auth()->user()?->isAdmin(),
             'responses' => $includeResponses ? $this->responses($quizForm) : null,
             'updateUrl' => route('forms.update', $quizForm),
             'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
@@ -259,7 +268,10 @@ class QuizFormPayloads
             'gradebook' => $gradebook,
             'questions' => $questions,
             // Analisis butir soal: difficulty, discrimination and distractors of each question.
-            'analysis' => app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses),
+            // Only with the Analisis Butir Soal add-on on for this exam (not even computed otherwise).
+            'analysis' => $quizForm->usesAddon(Addon::ItemAnalysis)
+                ? app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
+                : null,
             'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
         ];
     }
