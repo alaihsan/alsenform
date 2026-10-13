@@ -4,8 +4,12 @@ namespace App\Console\Commands;
 
 use App\Actions\SubmitExpiredAttempts;
 use App\Support\PendingMigrations;
+use FilesystemIterator;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -84,9 +88,15 @@ class ServeLanCommand extends Command
             $this->call('exam:optimize');
         }
 
-        if ($this->option('build') || ! file_exists(public_path('build/manifest.json'))) {
-            $this->info('⚙️  Membuat bundle aset produksi (npm run build)...');
+        $hasBuild = file_exists($this->manifestPath());
+        $isBuildOutdated = $hasBuild && $this->assetsAreOutdated();
+
+        if ($this->option('build') || ! $hasBuild || $isBuildOutdated) {
+            $this->info($isBuildOutdated
+                ? '⚙️  Kode tampilan lebih baru daripada bundle aset (setelah git pull/merge): membuat ulang (npm run build)...'
+                : '⚙️  Membuat bundle aset produksi (npm run build)...');
             $buildProcess = new Process(['npm', 'run', 'build'], base_path());
+            $buildProcess->setTimeout(600);
             $buildProcess->run(function ($type, $buffer): void {
                 $this->output->write($buffer);
             });
@@ -94,7 +104,12 @@ class ServeLanCommand extends Command
             if (! $buildProcess->isSuccessful()) {
                 $this->error('Gagal melakukan build aset.');
 
-                return self::FAILURE;
+                // Pages still work with the previous bundle, only without the newest changes.
+                if (! $hasBuild) {
+                    return self::FAILURE;
+                }
+
+                $this->warn('Server tetap berjalan dengan tampilan lama: tombol atau fitur baru belum muncul sampai "npm run build" berhasil.');
             }
         }
 
@@ -322,6 +337,53 @@ class ServeLanCommand extends Command
             $this->callSilent('config:cache');
             $this->info('✓ Cache konfigurasi diperbarui sesuai kode terbaru.');
         }
+    }
+
+    protected function manifestPath(): string
+    {
+        return public_path('build/manifest.json');
+    }
+
+    /**
+     * The files the bundle in public/build is built from.
+     *
+     * @return list<string>
+     */
+    protected function assetSourcePaths(): array
+    {
+        return array_map(fn (string $path): string => base_path($path), ['resources/js', 'resources/css', 'vite.config.ts', 'tailwind.config.js', 'package.json']);
+    }
+
+    /**
+     * Whether the bundle is older than its sources: after "git pull" or a merge without "npm run
+     * build", browsers would still get the previous pages, whose new buttons do nothing.
+     */
+    protected function assetsAreOutdated(): bool
+    {
+        $builtAt = @filemtime($this->manifestPath());
+
+        if ($builtAt === false) {
+            return true;
+        }
+
+        foreach ($this->assetSourcePaths() as $path) {
+            if (is_file($path) && filemtime($path) > $builtAt) {
+                return true;
+            }
+
+            if (! is_dir($path)) {
+                continue;
+            }
+
+            /** @var SplFileInfo $file */
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)) as $file) {
+                if ($file->isFile() && $file->getMTime() > $builtAt) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

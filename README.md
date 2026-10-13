@@ -320,7 +320,7 @@ npm install
 npm run build
 ```
 
-Setelah itu, hentikan server (Ctrl+C) lalu jalankan lagi `php artisan lan:serve`. Perintah ini otomatis menjalankan migrasi database dan memperbarui cache. Kalau aplikasi dijalankan dengan cara lain (misalnya lewat Herd), jalankan `php artisan migrate --force` secara manual.
+Setelah itu, hentikan server (Ctrl+C) lalu jalankan lagi `php artisan lan:serve`. Perintah ini otomatis menjalankan migrasi database, memperbarui cache, dan membuat ulang tampilan (`npm run build`) bila kode tampilannya lebih baru daripada hasil build terakhir; tanpa itu, browser tetap memakai tampilan lama dan tombol baru (misalnya Add-ons) tidak berfungsi. Kalau aplikasi dijalankan dengan cara lain (misalnya lewat Herd), jalankan `php artisan migrate --force` dan `npm run build` secara manual.
 
 Kalau langkah itu terlewat, aplikasi memperbaikinya sendiri. Begitu ada halaman yang gagal karena tabel baru belum ada, database langsung diperbarui dan halaman dibuka ulang.
 

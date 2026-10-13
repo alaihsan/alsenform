@@ -4,6 +4,7 @@ use App\Console\Commands\ServeLanCommand;
 use App\Support\PendingMigrations;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Symfony\Component\Process\Process;
@@ -385,4 +386,54 @@ test('lan:serve brings the database and caches up to date before serving', funct
     DB::table('migrations')->where('migration', '2026_10_04_140547_make_started_at_nullable_on_quiz_sessions_table')->delete();
     $command->sync();
     expect($command->calls)->toBe(['migrate']);
+});
+
+test('lan:serve builds the pages again when the code is newer than the built bundle', function () {
+    $directory = storage_path('framework/testing/assets-'.uniqid());
+    mkdir("{$directory}/build", 0777, true);
+    mkdir("{$directory}/js/pages", 0777, true);
+    file_put_contents("{$directory}/js/pages/FormEditor.vue", '<template />');
+    file_put_contents("{$directory}/build/manifest.json", '{}');
+    touch("{$directory}/js/pages/FormEditor.vue", time() - 120);
+    touch("{$directory}/build/manifest.json", time() - 60);
+
+    $command = new class($directory) extends ServeLanCommand
+    {
+        public function __construct(public string $directory)
+        {
+            parent::__construct();
+        }
+
+        protected function manifestPath(): string
+        {
+            return "{$this->directory}/build/manifest.json";
+        }
+
+        protected function assetSourcePaths(): array
+        {
+            return ["{$this->directory}/js", "{$this->directory}/package.json"];
+        }
+
+        public function outdated(): bool
+        {
+            return $this->assetsAreOutdated();
+        }
+    };
+
+    try {
+        expect($command->outdated())->toBeFalse();
+
+        // A merge brings a changed page: the bundle no longer matches the code.
+        touch("{$directory}/js/pages/FormEditor.vue", time());
+        expect($command->outdated())->toBeTrue();
+
+        // Built again.
+        touch("{$directory}/build/manifest.json", time() + 1);
+        expect($command->outdated())->toBeFalse();
+
+        unlink("{$directory}/build/manifest.json");
+        expect($command->outdated())->toBeTrue();
+    } finally {
+        File::deleteDirectory($directory);
+    }
 });
