@@ -2282,7 +2282,7 @@ const submitAnotherResponse = () => {
                 <div :class="['af-header-bar h-3 rounded-t-3xl transition-all duration-300', themeClass]"></div>
                 <div class="p-5 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
-                        <div class="flex-1">
+                        <div class="min-w-0 basis-full sm:basis-0 sm:flex-1">
                             <div
                                 v-if="isPaginated && currentPagedQuestions[0]?.type !== 'Section'"
                                 class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700"
@@ -2299,7 +2299,10 @@ const submitAnotherResponse = () => {
                                 <RichContent :content="quizForm.title" />
                             </h1>
                         </div>
-                        <div v-if="autoSaveStatus !== 'idle'" class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-3 py-1 text-xs text-slate-500">
+                        <div
+                            v-if="autoSaveStatus !== 'idle'"
+                            class="order-first inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500 sm:order-none"
+                        >
                             <span v-if="autoSaveStatus === 'saving'" class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
                                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
                                 Menyimpan draft...

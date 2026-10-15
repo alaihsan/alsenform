@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RichContent from '@/components/RichContent.vue';
 import { ChevronDown, FlaskConical, Tag } from 'lucide-vue-next';
 import { ref } from 'vue';
 
@@ -140,9 +141,9 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                                             <ChevronDown
                                                 :class="['mt-0.5 h-3.5 w-3.5 shrink-0 transition', open.has(question.id) ? 'rotate-180' : '']"
                                             />
-                                            <span>{{ question.title }}</span>
+                                            <RichContent :content="question.title" />
                                         </button>
-                                        <span v-else class="font-semibold text-slate-800">{{ question.title }}</span>
+                                        <RichContent v-else :content="question.title" class="font-semibold text-slate-800" />
                                         <span v-if="question.note" class="mt-0.5 block text-[11px] text-slate-500">{{ question.note }}</span>
                                     </td>
                                     <td class="px-3 py-2.5 text-center text-slate-600">
@@ -183,9 +184,9 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
                                         <div class="space-y-1.5">
                                             <div v-for="option in question.options" :key="option.letter" class="flex items-center gap-2">
                                                 <span class="w-5 font-bold text-slate-500">{{ option.letter }}.</span>
-                                                <span :class="['w-56 truncate', option.isKey ? 'font-bold text-emerald-700' : 'text-slate-700']">{{
-                                                    option.text
-                                                }}</span>
+                                                <span :class="['w-56 truncate', option.isKey ? 'font-bold text-emerald-700' : 'text-slate-700']"
+                                                    ><RichContent :content="option.text" class="!whitespace-nowrap"
+                                                /></span>
                                                 <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
                                                     <div
                                                         :class="[

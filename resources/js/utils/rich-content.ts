@@ -108,18 +108,93 @@ function formatTagHtml(tag: string): string {
     return tag;
 }
 
-/** Plain text with its formatting: escaped, Arabic in the Mushaf font, the allowed tags kept. */
-function formatText(text: string): string {
-    return splitFormatting(text)
-        .map((piece, index) => {
-            if (index % 2 === 1) {
-                return formatTagHtml(piece);
-            }
-            const escaped = escapeHtml(piece);
+/** The name of a formatting tag: b, i, u or mark. */
+const tagName = (tag: string): string => tag.replace(/^<\/?([a-z]+)[\s\S]*$/, '$1');
 
-            return hasArabic(escaped) ? processArabicText(escaped) : escaped;
-        })
-        .join('');
+/** A piece of stored text: a formatting tag, Arabic, the spaces and brackets between Arabic words, or other text. */
+type TextPiece = { kind: 'tag' | 'arabic' | 'between' | 'other'; text: string };
+
+/**
+ * Plain text with its formatting: escaped, Arabic in the Mushaf font, the allowed tags kept.
+ *
+ * An Arabic phrase is one right-to-left box, also when part of it is formatted: a word highlighted
+ * inside "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ" must not split the phrase into boxes laid out left to right, which
+ * would put its words in the wrong order. Tags open around such a phrase are closed before its box
+ * and opened again inside it, so the markup stays well nested.
+ */
+function formatText(text: string): string {
+    const pieces: TextPiece[] = [];
+    splitFormatting(text).forEach((part, index) => {
+        if (index % 2 === 1) {
+            pieces.push({ kind: 'tag', text: part });
+
+            return;
+        }
+        part.split(ARABIC_BLOCK_REGEX).forEach((segment, at) => {
+            if (segment) {
+                pieces.push({ kind: at % 2 === 0 ? 'other' : hasArabic(segment) ? 'arabic' : 'between', text: segment });
+            }
+        });
+    });
+
+    const open: string[] = [];
+    const track = (tag: string) => {
+        if (!tag.startsWith('</')) {
+            open.push(tag);
+
+            return;
+        }
+        const at = open.map(tagName).lastIndexOf(tagName(tag));
+        if (at >= 0) {
+            open.splice(at, 1);
+        }
+    };
+    const closeOpen = () =>
+        [...open]
+            .reverse()
+            .map((tag) => `</${tagName(tag)}>`)
+            .join('');
+    const reopen = () => open.map(formatTagHtml).join('');
+
+    let html = '';
+    for (let index = 0; index < pieces.length; index++) {
+        const piece = pieces[index];
+        if (piece.kind === 'tag') {
+            html += formatTagHtml(piece.text);
+            track(piece.text);
+            continue;
+        }
+        if (piece.kind !== 'arabic') {
+            html += escapeHtml(piece.text);
+            continue;
+        }
+
+        // The phrase runs over tags and spaces up to its last Arabic word.
+        let end = index;
+        for (let next = index + 1; next < pieces.length && pieces[next].kind !== 'other'; next++) {
+            if (pieces[next].kind === 'arabic') {
+                end = next;
+            }
+        }
+        if (end === index) {
+            html += `${ARABIC_OPEN}${escapeHtml(piece.text)}</span>`;
+            continue;
+        }
+
+        html += closeOpen() + ARABIC_OPEN + reopen();
+        for (const inside of pieces.slice(index, end + 1)) {
+            if (inside.kind === 'tag') {
+                html += formatTagHtml(inside.text);
+                track(inside.text);
+            } else {
+                html += escapeHtml(inside.text);
+            }
+        }
+        html += `${closeOpen()}</span>${reopen()}`;
+        index = end;
+    }
+
+    return html;
 }
 
 /**
@@ -176,14 +251,5 @@ export function formatRichContent(rawContent?: string | null): string {
     return formattedParts.join('');
 }
 
-/**
- * Wrap Arabic segments in authentic Quran Madinah font typography.
- */
-function processArabicText(text: string): string {
-    return text.replace(ARABIC_BLOCK_REGEX, (match) => {
-        const trimmed = match.trim();
-        if (!trimmed || !hasArabic(trimmed)) return match;
-
-        return `<span class="font-quran text-[1.25em] leading-[2.2] tracking-wide inline-block px-1 align-baseline select-text" dir="rtl">${match}</span>`;
-    });
-}
+/** The box of an Arabic phrase: the Quran Madinah font, right to left. */
+const ARABIC_OPEN = '<span class="font-quran text-[1.25em] leading-[2.2] tracking-wide inline-block px-1 align-baseline select-text" dir="rtl">';
