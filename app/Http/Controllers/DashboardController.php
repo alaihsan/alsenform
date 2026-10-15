@@ -7,6 +7,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\UnlockRequest;
 use App\Support\QuizFormPayloads;
+use App\Support\QuizItems;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -68,7 +69,7 @@ class DashboardController extends Controller
                     'stripe' => 'bg-indigo-600',
                     'accent' => 'bg-indigo-500',
                     'ownerName' => $quizForm->user?->name ?? 'Guru',
-                    'questionsCount' => count($quizForm->questions ?? []),
+                    'questionsCount' => count(QuizItems::questions($quizForm->questions)),
                     'updatedLabel' => $quizForm->published_at?->diffForHumans() ?? '',
                     'updatedAt' => (string) $quizForm->published_at,
                     'hasSubmitted' => $hasSubmitted,

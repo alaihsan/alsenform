@@ -6,6 +6,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Support\ExamLayout;
+use App\Support\QuizItems;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -45,7 +46,7 @@ class ClassMap
     public function of(QuizForm $quizForm): array
     {
         $since = now()->subHours(self::WINDOW_HOURS);
-        $totalQuestions = count(array_filter(is_array($quizForm->questions) ? $quizForm->questions : [], fn (mixed $question): bool => is_array($question) && isset($question['id'])));
+        $totalQuestions = count(QuizItems::questions($quizForm->questions));
 
         $sessions = QuizSession::query()
             ->where('quiz_form_id', $quizForm->id)

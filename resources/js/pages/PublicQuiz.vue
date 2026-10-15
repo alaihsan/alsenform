@@ -36,6 +36,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
 import { deviceHintsHeader } from '@/lib/deviceHints';
+import { CONTENT_ITEM_TYPES } from '@/types/quiz';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
 
@@ -102,6 +103,8 @@ const props = defineProps<{
         requiredCount: number;
         totalPoints: number;
         timeLimitMinutes: number | null;
+        /** Sections of the exam (pages, like in Google Forms); 0 without sections. */
+        sectionCount?: number;
     };
     session?: {
         token?: string;
@@ -1165,11 +1168,14 @@ const examRules = computed<string[]>(() => {
     }
 
     const questionsPerPage = Number(settings.questionsPerPage);
-    const pageCount = questionsPerPage > 0 ? Math.ceil(examQuestionCount.value / questionsPerPage) : 1;
+    const sectionCount = props.examSummary?.sectionCount ?? 0;
+    const pageCount = sectionCount > 1 ? sectionCount : questionsPerPage > 0 ? Math.ceil(examQuestionCount.value / questionsPerPage) : 1;
     rules.push(
-        pageCount > 1
-            ? `Soal dibagi ke dalam ${pageCount} halaman. Gunakan panel Nomor Soal untuk berpindah soal.`
-            : 'Gunakan panel Nomor Soal untuk melompat ke soal mana pun.',
+        sectionCount > 1
+            ? `Ujian terdiri dari ${sectionCount} bagian. Tekan "Selanjutnya" untuk ke bagian selanjutnya, atau gunakan panel Nomor Soal.`
+            : pageCount > 1
+              ? `Soal dibagi ke dalam ${pageCount} halaman. Gunakan panel Nomor Soal untuk berpindah soal.`
+              : 'Gunakan panel Nomor Soal untuk melompat ke soal mana pun.',
     );
 
     if (maxAttempts.value === 1) {
@@ -1240,26 +1246,69 @@ const perPage = computed<number>(() => {
     return isNaN(parsed) || parsed <= 0 ? 0 : parsed;
 });
 
-const isPaginated = computed<boolean>(() => perPage.value > 0 && displayQuestions.value.length > perPage.value);
+/*
+ * Pages, like in Google Forms: with sections every section is a page, its title and description on
+ * top; without, the questions-per-page setting. Sections and "title and description" items are text
+ * only: never numbered, answered or counted.
+ */
+const isContentItem = (question: Question) => CONTENT_ITEM_TYPES.includes(question.type as (typeof CONTENT_ITEM_TYPES)[number]);
+const answerableQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => !isContentItem(question)));
+const hasSections = computed<boolean>(() => displayQuestions.value.some((question) => question.type === 'Section'));
+
+const pages = computed<Question[][]>(() => {
+    const items = displayQuestions.value;
+
+    if (hasSections.value) {
+        const result: Question[][] = [[]];
+        for (const item of items) {
+            if (item.type === 'Section' && result[result.length - 1].length > 0) {
+                result.push([]);
+            }
+            result[result.length - 1].push(item);
+        }
+        return result;
+    }
+
+    if (perPage.value > 0) {
+        // A "title and description" item goes with the question after it.
+        const result: Question[][] = [];
+        let page: Question[] = [];
+        let pending: Question[] = [];
+        let count = 0;
+        for (const item of items) {
+            if (isContentItem(item)) {
+                pending.push(item);
+                continue;
+            }
+            if (count === perPage.value) {
+                result.push(page);
+                page = [];
+                count = 0;
+            }
+            page.push(...pending, item);
+            pending = [];
+            count++;
+        }
+        page.push(...pending);
+        result.push(page);
+        return result;
+    }
+
+    return [items];
+});
+
+const isPaginated = computed<boolean>(() => pages.value.length > 1);
 
 const currentPage = ref(1);
 
-const totalPages = computed<number>(() => {
-    if (!isPaginated.value) {
-        return 1;
-    }
-    return Math.ceil(displayQuestions.value.length / perPage.value);
-});
+const totalPages = computed<number>(() => pages.value.length);
 
-const currentPagedQuestions = computed<Question[]>(() => {
-    if (!isPaginated.value) {
-        return displayQuestions.value;
-    }
-    const start = (currentPage.value - 1) * perPage.value;
-    return displayQuestions.value.slice(start, start + perPage.value);
-});
+const currentPagedQuestions = computed<Question[]>(() => pages.value[currentPage.value - 1] ?? []);
 
-const totalQuestionsCount = computed<number>(() => displayQuestions.value.length);
+/** The page an item is on (1 is the first). */
+const pageOf = (itemId: number): number => Math.max(1, pages.value.findIndex((page) => page.some((item) => item.id === itemId)) + 1);
+
+const totalQuestionsCount = computed<number>(() => answerableQuestions.value.length);
 
 const isQuestionAnswered = (question: Question): boolean => {
     const ans = answers.value[question.id];
@@ -1276,11 +1325,11 @@ const isQuestionAnswered = (question: Question): boolean => {
 };
 
 const totalAnsweredCount = computed<number>(() => {
-    return displayQuestions.value.filter((q) => isQuestionAnswered(q)).length;
+    return answerableQuestions.value.filter((q) => isQuestionAnswered(q)).length;
 });
 
 const unansweredRequiredQuestions = computed<Question[]>(() => {
-    return displayQuestions.value.filter((q) => q.required && !isQuestionAnswered(q));
+    return answerableQuestions.value.filter((q) => q.required && !isQuestionAnswered(q));
 });
 
 /*
@@ -1412,9 +1461,15 @@ onUnmounted(() => {
 });
 
 const getQuestionNumber = (questionId: number): number => {
-    const idx = displayQuestions.value.findIndex((q) => q.id === questionId);
+    const idx = answerableQuestions.value.findIndex((q) => q.id === questionId);
     return idx >= 0 ? idx + 1 : 1;
 };
+
+/** The numbers of the first and last question on the current page. */
+const currentPageRange = computed<[number, number] | null>(() => {
+    const questions = currentPagedQuestions.value.filter((question) => !isContentItem(question));
+    return questions.length ? [getQuestionNumber(questions[0].id), getQuestionNumber(questions[questions.length - 1].id)] : null;
+});
 
 const scrollToQuizTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1441,7 +1496,7 @@ const goToQuestion = (questionId: number) => {
     }
 
     if (isPaginated.value) {
-        currentPage.value = Math.floor(idx / perPage.value) + 1;
+        currentPage.value = pageOf(questionId);
     }
 
     activeQuestionId.value = questionId;
@@ -1660,17 +1715,17 @@ const handleShiftEnterKeydown = (event: KeyboardEvent) => {
 };
 
 const progress = computed(() => {
-    if (!displayQuestions.value.length) {
+    if (!answerableQuestions.value.length) {
         return 0;
     }
-    const answeredCount = displayQuestions.value.filter((q) => {
+    const answeredCount = answerableQuestions.value.filter((q) => {
         const ans = answers.value[q.id];
         if (Array.isArray(ans)) {
             return ans.length > 0;
         }
         return ans !== undefined && ans !== '';
     }).length;
-    return Math.round((answeredCount / displayQuestions.value.length) * 100);
+    return Math.round((answeredCount / answerableQuestions.value.length) * 100);
 });
 
 const toggleCheckbox = (questionId: number, option: string) => {
@@ -2198,7 +2253,10 @@ const submitAnotherResponse = () => {
                 <div class="p-5 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="flex-1">
-                            <div v-if="isPaginated" class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
+                            <div
+                                v-if="isPaginated && currentPagedQuestions[0]?.type !== 'Section'"
+                                class="mb-2.5 inline-flex items-center gap-2 rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700"
+                            >
                                 <span>Bagian {{ currentPage }} dari {{ totalPages }}</span>
                             </div>
                             <h1
@@ -2274,9 +2332,35 @@ const submitAnotherResponse = () => {
             </section>
 
             <section v-if="hasExamStarted" class="mx-auto mt-5 max-w-3xl space-y-4">
+                <template v-for="question in currentPagedQuestions" :key="question.id">
+                <!-- A section (page title) or a "title and description": text only, like in Google Forms -->
+                <section
+                    v-if="isContentItem(question)"
+                    class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                    data-testid="content-item"
+                >
+                    <div v-if="question.type === 'Section'" :class="['h-2', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+                    <div class="p-5 sm:p-6">
+                        <p v-if="question.type === 'Section'" class="text-xs font-bold uppercase tracking-wider text-indigo-700">
+                            Bagian {{ pageOf(question.id) }} dari {{ totalPages }}
+                        </p>
+                        <h2
+                            v-if="question.title"
+                            :class="['font-semibold leading-snug text-slate-900', question.type === 'Section' ? 'mt-1 text-xl sm:text-2xl' : 'text-lg']"
+                            :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                        >
+                            <RichContent :content="question.title" />
+                        </h2>
+                        <RichContent
+                            v-if="question.description"
+                            :content="question.description"
+                            as="p"
+                            class="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600"
+                        />
+                    </div>
+                </section>
                 <article
-                    v-for="question in currentPagedQuestions"
-                    :key="question.id"
+                    v-else
                     :id="`question-card-${question.id}`"
                     :data-question-id="question.id"
                     :class="[
@@ -2657,6 +2741,7 @@ const submitAnotherResponse = () => {
                     </div>
                     <div v-else class="mt-5 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Area jawaban</div>
                 </article>
+                </template>
 
                 <!-- Automatic retry progress -->
                 <div v-if="submissionNotice" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
@@ -2697,8 +2782,8 @@ const submitAnotherResponse = () => {
                     <!-- Indikator Halaman -->
                     <div v-if="isPaginated" class="text-center">
                         <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ currentPage }} dari {{ totalPages }}</span>
-                        <span class="text-xs font-semibold text-slate-600 mt-0.5 block">
-                            Soal {{ (currentPage - 1) * perPage + 1 }} - {{ Math.min(currentPage * perPage, totalQuestionsCount) }} dari {{ totalQuestionsCount }}
+                        <span v-if="currentPageRange" class="text-xs font-semibold text-slate-600 mt-0.5 block">
+                            Soal {{ currentPageRange[0] }}{{ currentPageRange[1] !== currentPageRange[0] ? ` - ${currentPageRange[1]}` : '' }} dari {{ totalQuestionsCount }}
                         </span>
                     </div>
 
@@ -2818,7 +2903,7 @@ const submitAnotherResponse = () => {
             <div class="min-h-0 flex-1 overflow-y-auto px-3 py-3">
                 <div class="grid grid-cols-5 gap-1.5 p-1">
                     <button
-                        v-for="(q, idx) in displayQuestions"
+                        v-for="(q, idx) in answerableQuestions"
                         :key="q.id"
                         type="button"
                         :class="[

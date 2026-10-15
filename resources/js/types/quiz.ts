@@ -13,7 +13,13 @@ export type QuestionType =
     | 'Multiple-choice grid'
     | 'Tick box grid'
     | 'Date'
-    | 'Time';
+    | 'Time'
+    // Not questions, like in Google Forms: a page break with a title, and a block of text.
+    | 'Section'
+    | 'Title and description';
+
+/** Items of a form that are not questions: never answered, numbered or scored. */
+export const CONTENT_ITEM_TYPES: QuestionType[] = ['Section', 'Title and description'];
 
 export type Question = {
     id: number;

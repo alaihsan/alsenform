@@ -6,6 +6,7 @@ use App\Models\QuestionBankItem;
 use App\Models\QuizForm;
 use App\Models\User;
 use App\Support\ExamLayout;
+use App\Support\QuizItems;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -455,6 +456,11 @@ class QuestionBank
      */
     protected function isWritten(array $question): bool
     {
+        // Sections and "title and description" items are not questions to reuse.
+        if (QuizItems::isContent($question)) {
+            return false;
+        }
+
         $title = mb_strtolower($this->plain($question['title'] ?? ''));
 
         return $title !== '' && ! in_array($title, self::PLACEHOLDER_TITLES, true);

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -47,10 +48,7 @@ class Misconceptions
      */
     public function analyze(QuizForm $quizForm): array
     {
-        $questions = array_values(array_filter(
-            is_array($quizForm->questions) ? $quizForm->questions : [],
-            fn (mixed $question): bool => is_array($question) && isset($question['id']),
-        ));
+        $questions = QuizItems::questions($quizForm->questions);
 
         $responses = $quizForm->responses()
             ->with('user:id,name,nis,kelas')

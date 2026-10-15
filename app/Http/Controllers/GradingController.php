@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AnswerFile;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -139,9 +140,7 @@ class GradingController extends Controller
      */
     protected function gradableQuestions(QuizForm $quizForm): Collection
     {
-        return collect(is_array($quizForm->questions) ? $quizForm->questions : [])
-            ->filter(fn (mixed $question): bool => is_array($question) && isset($question['id']))
-            ->values()
+        return collect(QuizItems::questions($quizForm->questions))
             ->map(fn (array $question, int $index): array => [...$question, 'number' => $index + 1, 'type' => $question['type'] ?? '', 'title' => $question['title'] ?? ''])
             ->filter(fn (array $question): bool => $this->scoring->isGradableByHand($question))
             ->values();

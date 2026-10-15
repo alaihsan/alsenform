@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Support\Addon;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
 use Illuminate\Support\Carbon;
@@ -32,10 +33,8 @@ class QuizResultsReport
      */
     public function save(QuizForm $quizForm, string $path): void
     {
-        $questions = collect($quizForm->questions ?? [])
-            ->filter(fn ($question) => is_array($question) && isset($question['id']))
-            ->values()
-            ->all();
+        // Sections and "title and description" items are not questions: no column, no points.
+        $questions = QuizItems::questions($quizForm->questions);
 
         // Only questions with an answer key can be earned, so a fully correct sheet is 100.
         $maxScore = $this->scoring->maxPoints($questions);

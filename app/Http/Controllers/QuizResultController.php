@@ -6,6 +6,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Services\QuizResultsReport;
 use App\Support\MediaUrl;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -33,7 +34,7 @@ class QuizResultController extends Controller
         $isShown = (bool) ($settings['showResultsSummary'] ?? false);
         $isFull = $isShown && ($settings['resultsDetail'] ?? 'score') === 'full';
         $responses = $this->responsesOf($request, $quizForm);
-        $questions = array_values(array_filter(is_array($quizForm->questions) ? $quizForm->questions : [], fn (mixed $question): bool => is_array($question) && isset($question['id'])));
+        $questions = QuizItems::questions($quizForm->questions);
         $kkm = $quizForm->kkm();
 
         return Inertia::render('QuizResult', [

@@ -29,7 +29,7 @@ import {
     scaleQuestionTypes,
     templatePresets,
 } from '@/constants/form-editor';
-import type { PreviewAnswer, Question, QuestionType, QuizFormPayload } from '@/types/quiz';
+import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload } from '@/types/quiz';
 import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
@@ -895,11 +895,50 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
         points: form.settings.defaultQuestionPoints ?? 1,
     };
 
-    form.questions.push(question);
-    activeQuestionId.value = question.id;
-    activeTab.value = 'questions';
+    insertAfterActive(question);
     markChanged('Question added');
 };
+
+/*
+ * Like in Google Forms, a new item comes right after the selected one (so it lands in the
+ * section being worked on), and sections and "title and description" items are not questions.
+ */
+const isContentItem = (question: Question) => CONTENT_ITEM_TYPES.includes(question.type);
+
+const insertAfterActive = (item: Question) => {
+    const index = form.questions.findIndex((question: Question) => question.id === activeQuestionId.value);
+    form.questions.splice(index >= 0 ? index + 1 : form.questions.length, 0, item);
+    activeQuestionId.value = item.id;
+    activeTab.value = 'questions';
+};
+
+const contentItem = (type: QuestionType, title: string): Question => ({
+    id: nextQuestionId++,
+    title,
+    description: '',
+    type,
+    options: [],
+    rows: [],
+    columns: [],
+    answer: '',
+    required: false,
+    media: [],
+    points: 0,
+});
+
+/** "Bagian X dari Y" of each section: the form's own header is section 1, unless a section comes first. */
+const sectionLabels = computed<Record<number, string>>(() => {
+    const sections = form.questions.filter((question: Question) => question.type === 'Section');
+    const startsWithSection = form.questions[0]?.type === 'Section';
+    const total = sections.length + (startsWithSection ? 0 : 1);
+    return Object.fromEntries(sections.map((section: Question, index: number) => [section.id, `Bagian ${index + (startsWithSection ? 1 : 2)} dari ${total}`]));
+});
+/** With sections, the form's own header is "Bagian 1 dari Y" (unless a section comes first). */
+const headerSectionLabel = computed(() => {
+    const sectionCount = form.questions.filter((question: Question) => question.type === 'Section').length;
+    return sectionCount > 0 && form.questions[0]?.type !== 'Section' ? `Bagian 1 dari ${sectionCount + 1}` : null;
+});
+const answerableQuestions = computed(() => form.questions.filter((question: Question) => !isContentItem(question)));
 
 const insertTextIntoQuestion = (question: any, snippet: string) => {
     if (!question.title || question.title === 'Untitled Question') {
@@ -936,7 +975,7 @@ const duplicateQuestion = (question: Question) => {
 };
 
 const deleteQuestion = (question: Question) => {
-    if (form.questions.length === 1) {
+    if (form.questions.length === 1 && !isContentItem(question)) {
         question.title = 'Untitled Question';
         question.description = '';
         question.options = ['Option 1'];
@@ -950,6 +989,10 @@ const deleteQuestion = (question: Question) => {
 
     const index = form.questions.findIndex((item) => item.id === question.id);
     form.questions.splice(index, 1);
+    if (form.questions.length === 0) {
+        addQuestion();
+        return;
+    }
     activeQuestionId.value = form.questions[Math.max(0, index - 1)].id;
     markChanged('Question deleted');
 };
@@ -1212,15 +1255,16 @@ const openPreview = () => {
     window.open(publicUrl.value, '_blank');
 };
 
+/** A new section: students see the items after it on a page of their own, with Berikutnya / Kembali. */
 const addSection = () => {
-    addQuestion('Paragraph');
-    activeQuestion.value.title = 'Section description';
+    insertAfterActive(contentItem('Section', 'Bagian tanpa judul'));
+    markChanged('Bagian ditambahkan');
 };
 
+/** A title with a description between questions: text only, nothing to answer. */
 const addTitleDescription = () => {
-    addQuestion('Paragraph');
-    activeQuestion.value.title = 'Judul bagian';
-    activeQuestion.value.description = 'Deskripsi bagian';
+    insertAfterActive(contentItem('Title and description', 'Judul'));
+    markChanged('Judul dan deskripsi ditambahkan');
 };
 
 const addMediaToActiveQuestion = (type: 'image' | 'video') => {
@@ -2149,6 +2193,12 @@ watch(
                 </div>
 
                 <template v-if="activeTab === 'questions'">
+                    <div
+                        v-if="headerSectionLabel"
+                        :class="['-mb-4 w-fit rounded-t-xl px-4 py-1.5 text-xs font-bold text-white', form.settings.themeColorClass ?? 'bg-indigo-600']"
+                    >
+                        {{ headerSectionLabel }}
+                    </div>
                     <!-- A remedial or enrichment exam: what it follows up, and the students who may take it -->
                     <details
                         v-if="followUp"
@@ -2224,13 +2274,84 @@ watch(
                             @drop="handleDrop(question, $event)"
                             @dragend="handleDragEnd"
                         >
+                            <!-- Like Google Forms: the section label on top of its card -->
+                            <div
+                                v-if="question.type === 'Section'"
+                                :class="['rounded-t-2xl px-4 py-1.5 text-xs font-bold text-white', form.settings.themeColorClass ?? 'bg-indigo-600']"
+                            >
+                                {{ sectionLabels[question.id] }}
+                            </div>
                             <div
                                 :class="[
                                     'grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_260px]',
                                     activeQuestionId === question.id ? 'border-l-4 border-blue-500' : 'border-l-4 border-transparent',
                                 ]"
                             >
-                                <template v-if="editingAnswerKeyQuestionId === question.id">
+                                <!-- A section or a "title and description": a title and a description only -->
+                                <template v-if="isContentItem(question)">
+                                    <div class="col-span-full" data-testid="content-item">
+                                        <div
+                                            data-drag-handle
+                                            class="mx-auto mb-2 flex w-12 cursor-grab justify-center gap-1.5 py-1 text-slate-300 select-none hover:text-slate-500 active:cursor-grabbing"
+                                            title="Tahan dan geser untuk memindahkan"
+                                            @mousedown="enableCardDrag(question.id)"
+                                            @mouseenter="enableCardDrag(question.id)"
+                                            @mouseleave="disableCardDrag"
+                                            @mouseup="disableCardDrag"
+                                        >
+                                            <span v-for="dot in 6" :key="dot" class="h-1 w-1 rounded-full bg-current"></span>
+                                        </div>
+                                        <input
+                                            v-model="question.title"
+                                            type="text"
+                                            :aria-label="question.type === 'Section' ? 'Judul bagian' : 'Judul'"
+                                            :placeholder="question.type === 'Section' ? 'Judul bagian' : 'Judul'"
+                                            :class="[
+                                                'w-full border-0 border-b border-transparent bg-transparent p-0 font-normal text-slate-950 outline-none transition focus:border-indigo-500',
+                                                question.type === 'Section' ? 'text-2xl' : 'text-xl',
+                                            ]"
+                                            @input="markChanged(question.type === 'Section' ? 'Judul bagian diperbarui' : 'Judul diperbarui')"
+                                        />
+                                        <textarea
+                                            v-model="question.description"
+                                            v-auto-resize
+                                            data-auto-resize
+                                            rows="1"
+                                            aria-label="Deskripsi"
+                                            placeholder="Deskripsi (opsional)"
+                                            class="mt-3 w-full resize-none border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-600 outline-none transition focus:border-indigo-500"
+                                            @input="markChanged('Deskripsi diperbarui')"
+                                        ></textarea>
+                                        <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 text-slate-600">
+                                            <span class="text-xs text-slate-500">
+                                                {{
+                                                    question.type === 'Section'
+                                                        ? 'Soal di bawahnya tampil di halaman tersendiri bagi siswa.'
+                                                        : 'Teks saja: tidak dijawab dan tidak dinilai.'
+                                                }}
+                                            </span>
+                                            <span class="flex items-center gap-4">
+                                                <button
+                                                    type="button"
+                                                    :aria-label="question.type === 'Section' ? 'Duplikat bagian' : 'Duplikat judul'"
+                                                    class="transition hover:text-indigo-600"
+                                                    @click.stop="duplicateQuestion(question)"
+                                                >
+                                                    <FileText class="h-5 w-5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    :aria-label="question.type === 'Section' ? 'Hapus bagian' : 'Hapus judul'"
+                                                    class="transition hover:text-red-500"
+                                                    @click.stop="deleteQuestion(question)"
+                                                >
+                                                    <Trash2 class="h-5 w-5" />
+                                                </button>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else-if="editingAnswerKeyQuestionId === question.id">
                                     <!-- ANSWER KEY EDIT MODE -->
                                     <div class="col-span-full overflow-hidden rounded-2xl border border-indigo-100 bg-white">
                                         <div class="flex items-center justify-between border-b border-indigo-100 bg-indigo-50/50 px-6 py-4">
@@ -3250,13 +3371,14 @@ watch(
                                     </button>
                                     <button
                                         type="button"
-                                        aria-label="Tambah title dan deskripsi"
+                                        aria-label="Tambah judul dan deskripsi"
                                         class="tool-button"
                                         @click.stop="addTitleDescription"
                                     >
                                         <Type class="h-5 w-5" />
                                     </button>
                                     <button
+                                        v-if="!isContentItem(question)"
                                         type="button"
                                         aria-label="Tambah gambar"
                                         class="tool-button"
@@ -3265,6 +3387,7 @@ watch(
                                         <Image class="h-5 w-5" />
                                     </button>
                                     <button
+                                        v-if="!isContentItem(question)"
                                         type="button"
                                         aria-label="Tambah video"
                                         class="tool-button"
@@ -3272,7 +3395,7 @@ watch(
                                     >
                                         <Video class="h-5 w-5" />
                                     </button>
-                                    <button type="button" aria-label="Tambah section" class="tool-button" @click.stop="addSection">
+                                    <button type="button" aria-label="Tambah bagian" class="tool-button" @click.stop="addSection">
                                         <PanelTop class="h-5 w-5" />
                                     </button>
                                 </div>
@@ -3859,7 +3982,7 @@ watch(
 
                                     <QuestionDrawSettings
                                         :draw="form.settings.questionDraw"
-                                        :question-ids="form.questions.map((question: Question) => question.id)"
+                                        :question-ids="answerableQuestions.map((question: Question) => question.id)"
                                         :difficulties="questionDifficulties"
                                         @update:draw="
                                             form.settings.questionDraw = $event;
@@ -4196,7 +4319,14 @@ watch(
                 <h3 class="text-3xl font-semibold"><RichContent :content="form.title" /></h3>
                 <RichContent v-if="form.description" :content="form.description" as="p" class="mt-2 text-slate-500" />
                 <div class="mt-6 space-y-5">
-                    <div v-for="question in form.questions" :key="`preview-${question.id}`" class="rounded-2xl border border-slate-200 p-5">
+                    <div
+                        v-for="question in form.questions"
+                        :key="`preview-${question.id}`"
+                        :class="['rounded-2xl border p-5', question.type === 'Section' ? 'border-indigo-300 bg-indigo-50/40' : 'border-slate-200']"
+                    >
+                        <p v-if="question.type === 'Section'" class="mb-1 text-xs font-bold uppercase tracking-wider text-indigo-700">
+                            {{ sectionLabels[question.id] }}
+                        </p>
                         <p class="flex flex-wrap items-center font-bold">
                             <RichContent :content="question.title" class="flex-1" />
                             <span v-if="question.required" class="ml-1 text-red-500">*</span>
@@ -4336,10 +4466,10 @@ watch(
                             </label>
                         </div>
                         <input
-                            v-else
+                            v-else-if="!isContentItem(question)"
                             type="text"
                             class="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
-                            placeholder="Your answer"
+                            placeholder="Jawaban Anda"
                         />
                     </div>
                 </div>

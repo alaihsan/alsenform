@@ -68,18 +68,38 @@ class ExamLayout
     public function build(QuizForm $quizForm, string $seed): array
     {
         $randomizer = new Randomizer(new Xoshiro256StarStar(hash('sha256', $seed, true)));
-        $questions = $this->questionsOf($quizForm);
+        $items = $this->questionsOf($quizForm);
+        $questions = QuizItems::questions($items);
         $isDrawn = $this->drawSettings($quizForm) !== null;
 
-        $chosen = $isDrawn ? $this->draw($quizForm, $questions, $randomizer) : $questions;
+        $chosenIds = array_flip(array_map(
+            fn (array $question): string => (string) $question['id'],
+            $isDrawn ? $this->draw($quizForm, $questions, $randomizer) : $questions,
+        ));
 
-        if ($this->setting($quizForm, 'shuffleQuestions') && count($chosen) > 1) {
-            $chosen = $randomizer->shuffleArray($chosen);
+        // Sections and "title and description" items stay where the teacher put them; questions are
+        // shuffled within the stretch between two of them, so a reading text stays above its questions.
+        $shuffles = $this->setting($quizForm, 'shuffleQuestions');
+        $chosen = [];
+        $stretch = [];
+        $close = function () use (&$chosen, &$stretch, $shuffles, $randomizer): void {
+            array_push($chosen, ...($shuffles && count($stretch) > 1 ? $randomizer->shuffleArray($stretch) : $stretch));
+            $stretch = [];
+        };
+
+        foreach ($items as $item) {
+            if (QuizItems::isContent($item)) {
+                $close();
+                $chosen[] = $item;
+            } elseif (isset($chosenIds[(string) $item['id']])) {
+                $stretch[] = $item;
+            }
         }
+        $close();
 
         $options = [];
         if ($this->setting($quizForm, 'shuffleOptions')) {
-            foreach ($chosen as $question) {
+            foreach (QuizItems::questions($chosen) as $question) {
                 if ($this->choicesMayBeShuffled($question)) {
                     $options[(string) $question['id']] = $randomizer->shuffleArray(array_keys(array_values($question['options'])));
                 }
@@ -153,7 +173,7 @@ class ExamLayout
             return null;
         }
 
-        return array_values(array_map(fn (array $question): string => (string) $question['id'], $this->arrange($quizForm, $layout)));
+        return array_values(array_map(fn (array $question): string => (string) $question['id'], QuizItems::questions($this->arrange($quizForm, $layout))));
     }
 
     /**
@@ -208,7 +228,7 @@ class ExamLayout
         $labels = $this->difficulties($quizForm);
         $counts = array_fill_keys([...self::DIFFICULTIES, 'none'], 0);
 
-        foreach ($this->questionsOf($quizForm) as $question) {
+        foreach (QuizItems::questions($this->questionsOf($quizForm)) as $question) {
             $counts[$labels[(string) $question['id']] ?? 'none']++;
         }
 

@@ -44,7 +44,8 @@ class UpdateQuizFormRequest extends FormRequest
             ],
             'questions' => ['required', 'array', 'min:1'],
             'questions.*.id' => ['required'],
-            'questions.*.title' => ['required', 'string'],
+            // A section or a "title and description" may go without a title (a description only).
+            'questions.*.title' => ['required_unless:questions.*.type,Section,Title and description', 'nullable', 'string'],
             'questions.*.description' => ['nullable', 'string'],
             'questions.*.type' => ['required', 'string', 'max:100'],
             'questions.*.options' => ['nullable', 'array'],

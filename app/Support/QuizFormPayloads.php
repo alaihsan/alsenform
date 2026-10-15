@@ -101,7 +101,7 @@ class QuizFormPayloads
         $user = $currentUser ?? auth()->user();
         $isCollaborator = $user && $quizForm->user_id !== $user->id;
 
-        $questions = $quizForm->questions ?? [];
+        $questions = QuizItems::questions($quizForm->questions);
         $previewQuestions = [];
         if (! empty($questions) && is_array($questions)) {
             foreach (array_slice($questions, 0, 2) as $q) {
@@ -208,7 +208,7 @@ class QuizFormPayloads
             ->latest()
             ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
 
-        $questions = $this->responseQuestionSummaries(collect($quizForm->questions ?? []), $responses);
+        $questions = $this->responseQuestionSummaries(collect(QuizItems::questions($quizForm->questions)), $responses);
 
         // Scored against the current answer keys, so correcting a key re-grades earlier answers.
         $scoring = new QuizScoring;
@@ -278,7 +278,7 @@ class QuizFormPayloads
             // Analisis butir soal: difficulty, discrimination and distractors of each question.
             // Only with the Analisis Butir Soal add-on on for this exam (not even computed otherwise).
             'analysis' => $quizForm->usesAddon(Addon::ItemAnalysis)
-                ? app(ItemAnalysis::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
+                ? app(ItemAnalysis::class)->analyzeResponses(QuizItems::questions($formQuestions), $responses)
                 : null,
             'applyDifficultyUrl' => route('forms.analysis.apply-difficulty', $quizForm),
             // Grading by hand: essays and files still waiting for the teacher, over every answer.
@@ -289,7 +289,7 @@ class QuizFormPayloads
             'remedial' => $quizForm->usesAddon(Addon::Remedial) ? app(Remedial::class)->overview($quizForm) : null,
             // Peta Miskonsepsi: right or wrong, sure or "Ragu-ragu", per question.
             'misconceptions' => $quizForm->usesAddon(Addon::Misconception)
-                ? app(Misconceptions::class)->analyzeResponses(array_values(array_filter($formQuestions, fn (mixed $question): bool => is_array($question) && isset($question['id']))), $responses)
+                ? app(Misconceptions::class)->analyzeResponses(QuizItems::questions($formQuestions), $responses)
                 : null,
         ];
     }

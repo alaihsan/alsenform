@@ -16,6 +16,7 @@ use App\Support\ExamLayout;
 use App\Support\ExamToken;
 use App\Support\FileAnswers;
 use App\Support\MediaUrl;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
 use Illuminate\Database\QueryException;
@@ -177,11 +178,13 @@ class QuizResponseController extends Controller
                 'requiresExamToken' => $this->requiresExamToken($quizForm, $user),
                 'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
             ],
+            // Sections and "title and description" items are not questions.
             'examSummary' => [
-                'questionCount' => count($sanitizedQuestions),
-                'requiredCount' => count(array_filter($sanitizedQuestions, fn ($question) => ! empty($question['required']))),
-                'totalPoints' => array_sum(array_map(fn ($question) => is_numeric($question['points'] ?? null) ? (float) $question['points'] : 0, $sanitizedQuestions)),
+                'questionCount' => count(QuizItems::questions($sanitizedQuestions)),
+                'requiredCount' => count(array_filter(QuizItems::questions($sanitizedQuestions), fn ($question) => ! empty($question['required']))),
+                'totalPoints' => array_sum(array_map(fn ($question) => is_numeric($question['points'] ?? null) ? (float) $question['points'] : 0, QuizItems::questions($sanitizedQuestions))),
                 'timeLimitMinutes' => $timeLimitMinutes,
+                'sectionCount' => $this->sectionCount($sanitizedQuestions),
             ],
             'session' => [
                 'token' => $quizSession->session_token,
@@ -511,6 +514,19 @@ class QuizResponseController extends Controller
 
             return $question;
         }, $mediaUrl->normalizeQuestions(app(ExamLayout::class)->arrange($quizForm, $layout)) ?? []));
+    }
+
+    /**
+     * The sections (pages) of the exam, like in Google Forms: the start of the form is the first,
+     * unless a section comes first. 0 without sections.
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    protected function sectionCount(array $items): int
+    {
+        $sections = count(array_filter($items, fn (array $item): bool => ($item['type'] ?? '') === QuizItems::SECTION));
+
+        return $sections === 0 ? 0 : $sections + ((($items[0]['type'] ?? '') === QuizItems::SECTION) ? 0 : 1);
     }
 
     /**
