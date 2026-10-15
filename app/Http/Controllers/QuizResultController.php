@@ -42,6 +42,7 @@ class QuizResultController extends Controller
                 'title' => $quizForm->title,
                 'publicUrl' => route('forms.public', ['quizForm' => $quizForm->slug]),
                 'themeColorClass' => $settings['themeColorClass'] ?? 'bg-indigo-600',
+                'design' => $quizForm->design(),
             ],
             'isShown' => $isShown,
             'isFull' => $isFull,

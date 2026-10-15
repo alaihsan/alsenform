@@ -2,6 +2,7 @@
 import RichContent from '@/components/RichContent.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle2, Clock, Lightbulb, MessageSquare, MinusCircle, XCircle } from 'lucide-vue-next';
+import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { computed, ref } from 'vue';
 
 type ResultQuestion = {
@@ -35,7 +36,7 @@ type Attempt = {
  * every question with their answer, the right answer, the pembahasan and the teacher's comment.
  */
 const props = defineProps<{
-    quiz: { title: string; publicUrl: string; themeColorClass: string };
+    quiz: { title: string; publicUrl: string; themeColorClass: string; design?: Partial<FormDesign> | null };
     isShown: boolean;
     isFull: boolean;
     kkm: number;
@@ -49,26 +50,37 @@ const plainTitle = computed(() => new DOMParser().parseFromString(props.quiz.tit
 const formatNumber = (value: number) => value.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 const formatTime = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+// Desainer Form add-on: the exam's design here too.
+const design = computed<FormDesign | null>(() => (props.quiz.design ? withDesignDefaults(props.quiz.design) : null));
+useDesignCss(design);
+
 const correctCount = computed(() => shown.value?.questions.filter((question) => question.isCorrect === true).length ?? 0);
 </script>
 
 <template>
     <Head :title="`Hasil: ${plainTitle}`" />
 
-    <div class="min-h-screen bg-[#f0efff] px-4 py-6 sm:py-10">
+    <div
+        :class="['af-page min-h-screen px-4 py-6 sm:py-10', design ? 'af-designed' : 'bg-[#f0efff]']"
+        :style="design ? { ...designVariables(design), ...pageBackgroundStyle(design) } : undefined"
+    >
         <main class="mx-auto max-w-3xl space-y-4">
             <Link
                 :href="$page.props.auth?.user ? route('dashboard') : quiz.publicUrl"
-                class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-indigo-700"
+                :class="['inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-indigo-700', design ? 'af-on-page' : '']"
             >
                 <ArrowLeft class="h-4 w-4" /> {{ $page.props.auth?.user ? 'Kembali ke Beranda' : 'Kembali ke ujian' }}
             </Link>
 
-            <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div :class="['h-2', quiz.themeColorClass]"></div>
+            <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image" />
+            <section class="af-card af-header overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div :class="['af-header-bar h-2', design ? 'af-accent-bg' : quiz.themeColorClass]"></div>
                 <div class="p-5 sm:p-7">
+                    <div v-if="design?.logo" class="mb-3 flex" :style="{ justifyContent: logoJustify(design) }">
+                        <img :src="design.logo" alt="Logo" class="af-logo" />
+                    </div>
                     <p class="text-xs font-extrabold uppercase tracking-widest text-indigo-600">Hasil Ujian</p>
-                    <h1 class="mt-1 text-2xl font-black tracking-tight text-slate-900"><RichContent :content="quiz.title" /></h1>
+                    <h1 :class="['mt-1 text-2xl font-black tracking-tight text-slate-900', design ? 'af-title' : '']"><RichContent :content="quiz.title" /></h1>
 
                     <p v-if="!isShown" class="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
                         Guru belum menampilkan hasil ujian ini. Buka lagi halaman ini nanti.
@@ -128,7 +140,7 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                     v-for="question in shown.questions"
                     :key="question.number"
                     :class="[
-                        'rounded-3xl border bg-white p-5 shadow-sm',
+                        'af-card af-question rounded-3xl border bg-white p-5 shadow-sm',
                         question.isCorrect === true ? 'border-emerald-200' : question.isCorrect === false ? 'border-rose-200' : 'border-slate-200',
                     ]"
                     data-testid="result-question"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AddonEntry } from '@/components/addons/AddonGallery.vue';
-import { FlaskConical, Brain, GraduationCap, KeyRound, Puzzle } from 'lucide-vue-next';
+import { FlaskConical, Brain, GraduationCap, KeyRound, Paintbrush, Puzzle } from 'lucide-vue-next';
 
 defineProps<{
     /** Add-ons installed for this teacher or for the exam's owner. */
@@ -12,7 +12,7 @@ const emit = defineEmits<{
     toggle: [addon: AddonEntry, on: boolean];
 }>();
 
-const ICONS: Record<string, unknown> = { 'flask-conical': FlaskConical, 'key-round': KeyRound, 'graduation-cap': GraduationCap, brain: Brain };
+const ICONS: Record<string, unknown> = { 'flask-conical': FlaskConical, 'key-round': KeyRound, 'graduation-cap': GraduationCap, brain: Brain, paintbrush: Paintbrush };
 </script>
 
 <template>

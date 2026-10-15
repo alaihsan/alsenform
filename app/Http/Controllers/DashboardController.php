@@ -68,6 +68,7 @@ class DashboardController extends Controller
                     'tone' => 'bg-indigo-50',
                     'stripe' => 'bg-indigo-600',
                     'accent' => 'bg-indigo-500',
+                    'design' => $quizForm->cardDesign(),
                     'ownerName' => $quizForm->user?->name ?? 'Guru',
                     'questionsCount' => count(QuizItems::questions($quizForm->questions)),
                     'updatedLabel' => $quizForm->published_at?->diffForHumans() ?? '',

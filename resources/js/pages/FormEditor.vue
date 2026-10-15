@@ -29,6 +29,8 @@ import {
     scaleQuestionTypes,
     templatePresets,
 } from '@/constants/form-editor';
+import FormDesigner from '@/components/form-design/FormDesigner.vue';
+import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload } from '@/types/quiz';
 import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
@@ -55,6 +57,7 @@ import {
     Link2,
     Maximize2,
     MoreVertical,
+    Paintbrush,
     Palette,
     PanelTop,
     PlusCircle,
@@ -170,6 +173,8 @@ const form = reactive({
         themeColorClass: props.quizForm?.settings?.themeColorClass ?? 'bg-indigo-600',
         backgroundColorClass: props.quizForm?.settings?.backgroundColorClass ?? 'bg-[#f0efff]',
         backgroundPatternClass: props.quizForm?.settings?.backgroundPatternClass ?? 'pattern-none',
+        // Desainer Form add-on: null until the teacher designs the exam.
+        design: props.quizForm?.settings?.design ? withDesignDefaults(props.quizForm.settings.design) : (null as FormDesign | null),
         lockOnBlur: props.quizForm?.settings?.lockOnBlur ?? false,
         timeLimit: props.quizForm?.settings?.timeLimit ?? 0,
         questionsPerPage: props.quizForm?.settings?.questionsPerPage ?? 'all',
@@ -508,6 +513,55 @@ const itemAnalysisAddon = computed(() => addonCatalog.value.find((addon) => addo
 const examTokenAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'exam-token') ?? null);
 const remedialAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'remedial') ?? null);
 const misconceptionAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'misconception') ?? null);
+const formDesignerAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'form-designer') ?? null);
+
+// Desainer Form: the exam's design, drawn in the editor while the add-on is on for the exam.
+const isDesignerOn = computed(() => Boolean(formDesignerAddon.value && isAddonOnForExam(formDesignerAddon.value)));
+const activeDesign = computed<FormDesign | null>(() => (isDesignerOn.value && form.settings.design ? withDesignDefaults(form.settings.design) : null));
+const activeDesignVariables = computed(() => (activeDesign.value ? designVariables(activeDesign.value) : undefined));
+const themeClass = computed(() => (activeDesign.value ? 'af-accent-bg' : (form.settings.themeColorClass ?? 'bg-indigo-600')));
+const showFormDesigner = ref(false);
+useDesignCss(activeDesign);
+
+/** The palette button: the Desainer Form while its add-on is on, the simple theme panel otherwise. */
+const openThemeEditor = () => {
+    if (isDesignerOn.value) {
+        if (!form.settings.design) {
+            form.settings.design = { ...DEFAULT_DESIGN };
+            markChanged('Desain diperbarui');
+        }
+        showThemeSidebar.value = false;
+        showFormDesigner.value = true;
+
+        return;
+    }
+    showThemeSidebar.value = !showThemeSidebar.value;
+};
+
+const updateDesign = (design: FormDesign) => {
+    form.settings.design = design;
+    markChanged('Desain diperbarui');
+};
+
+/** From the simple theme panel: switch the add-on on for this exam (or show the gallery) and open the designer. */
+const startFormDesigner = () => {
+    const addon = formDesignerAddon.value;
+    if (!addon?.installedForOwner) {
+        showThemeSidebar.value = false;
+        isAddonGalleryOpen.value = true;
+
+        return;
+    }
+    if (!isAddonOnForExam(addon)) {
+        setAddonForExam(addon, true);
+    }
+    if (!form.settings.design) {
+        form.settings.design = { ...DEFAULT_DESIGN };
+        markChanged('Desain diperbarui');
+    }
+    showThemeSidebar.value = false;
+    showFormDesigner.value = true;
+};
 
 const setAddonForExam = (addon: AddonEntry, on: boolean) => {
     form.settings.addons = { ...form.settings.addons, [addon.key]: on };
@@ -1060,6 +1114,10 @@ const isQuestionAnswered = (question: Question) => {
 };
 
 const normalizeCorrectAnswer = (question: Question) => {
+    // Sections and "title and description" items have no answer.
+    if (isContentItem(question)) {
+        return;
+    }
     if (gridQuestionTypes.includes(question.type)) {
         if (typeof question.answer !== 'object' || question.answer === null) {
             question.answer = {};
@@ -1898,9 +1956,10 @@ watch(
     <main
         :class="[
             'min-h-screen text-slate-900 transition-all duration-300',
-            form.settings.backgroundColorClass ?? 'bg-[#f0efff]',
-            form.settings.backgroundPatternClass ?? 'pattern-none',
+            activeDesign ? '' : (form.settings.backgroundColorClass ?? 'bg-[#f0efff]'),
+            activeDesign?.backgroundImage ? '' : (form.settings.backgroundPatternClass ?? 'pattern-none'),
         ]"
+        :style="activeDesign ? pageBackgroundStyle(activeDesign) : undefined"
     >
         <header class="sticky top-0 z-30 border-b border-slate-200 bg-white">
             <div class="flex h-16 items-center gap-3 px-4 sm:px-5">
@@ -1966,8 +2025,9 @@ watch(
                     <button
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
-                        aria-label="Theme"
-                        @click="showThemeSidebar = !showThemeSidebar"
+                        aria-label="Tema"
+                        :title="isDesignerOn ? 'Desainer Form' : 'Tema'"
+                        @click="openThemeEditor"
                     >
                         <Palette class="h-5 w-5" />
                     </button>
@@ -2096,7 +2156,7 @@ watch(
                                 type="button"
                                 class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50"
                                 @click="
-                                    showThemeSidebar = true;
+                                    openThemeEditor();
                                     showMoreMenu = false;
                                 "
                             >
@@ -2142,7 +2202,7 @@ watch(
             <input ref="docxFileInput" type="file" accept=".docx" class="hidden" @change="handleImportDocxFile" />
             <input ref="examviewFileInput" type="file" accept=".zip" class="hidden" @change="handleImportExamViewFile" />
             <div class="space-y-4">
-                <p class="text-sm font-medium text-slate-500">{{ statusMessage }}</p>
+                <p class="text-sm font-medium text-slate-500" :style="activeDesignVariables ? { color: activeDesignVariables['--af-on-bg-muted'] } : undefined">{{ statusMessage }}</p>
 
                 <div
                     v-if="saveConflict"
@@ -2192,10 +2252,11 @@ watch(
                     </div>
                 </div>
 
-                <template v-if="activeTab === 'questions'">
+                <div v-if="activeTab === 'questions'" :class="['space-y-4', activeDesign ? 'af-designed' : '']" :style="activeDesignVariables">
+                    <img v-if="activeDesign?.headerImage" :src="activeDesign.headerImage" alt="" class="af-header-image" data-testid="design-header-image" />
                     <div
                         v-if="headerSectionLabel"
-                        :class="['-mb-4 w-fit rounded-t-xl px-4 py-1.5 text-xs font-bold text-white', form.settings.themeColorClass ?? 'bg-indigo-600']"
+                        :class="['-mb-4 w-fit rounded-t-xl px-4 py-1.5 text-xs font-bold text-white', themeClass]"
                     >
                         {{ headerSectionLabel }}
                     </div>
@@ -2222,14 +2283,21 @@ watch(
                             {{ followUp.participants.map((participant) => (participant.kelas ? `${participant.name} (${participant.kelas})` : participant.name)).join(', ') }}
                         </p>
                     </details>
-                    <section class="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md">
-                        <div :class="['h-3 transition-all duration-300', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+                    <section class="af-card af-header overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md">
+                        <div :class="['af-header-bar h-3 transition-all duration-300', themeClass]"></div>
                         <div class="grid gap-3 p-5 sm:p-6">
+                            <div v-if="activeDesign?.logo" class="flex" :style="{ justifyContent: logoJustify(activeDesign) }">
+                                <img :src="activeDesign.logo" alt="Logo" class="af-logo" />
+                            </div>
                             <input
                                 v-model="form.title"
                                 type="text"
-                                class="w-full border-0 border-b border-transparent bg-transparent p-0 text-2xl font-normal leading-tight outline-none transition focus:border-indigo-500 sm:text-3xl"
-                                :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
+                                aria-label="Judul ujian"
+                                :class="[
+                                    'w-full border-0 border-b border-transparent bg-transparent p-0 text-2xl font-normal leading-tight outline-none transition focus:border-indigo-500 sm:text-3xl',
+                                    activeDesign ? 'af-title' : '',
+                                ]"
+                                :style="activeDesign ? undefined : { fontFamily: form.settings.questionFont ?? 'inherit' }"
                                 @input="markChanged('Title updated')"
                                 @blur="handleTitleBlur"
                                 @change="handleTitleBlur"
@@ -2240,9 +2308,9 @@ watch(
                                 v-auto-resize
                                 data-auto-resize
                                 rows="1"
-                                class="w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
+                                class="af-description w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
                                 :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                placeholder="Form description"
+                                placeholder="Deskripsi ujian"
                                 @input="handleAutoResize($event); markChanged('Description updated')"
                                 @keydown="handleShiftEnterKeydown"
                             ></textarea>
@@ -2265,7 +2333,8 @@ watch(
                             :key="question.id"
                             :draggable="draggableQuestionId === question.id"
                             :class="[
-                                'relative overflow-visible rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md',
+                                'af-card relative overflow-visible rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md',
+                                isContentItem(question) ? 'af-section' : 'af-question',
                                 draggedQuestionId === question.id ? 'scale-[0.99] opacity-60' : '',
                             ]"
                             @click="activeQuestionId = question.id"
@@ -2277,7 +2346,7 @@ watch(
                             <!-- Like Google Forms: the section label on top of its card -->
                             <div
                                 v-if="question.type === 'Section'"
-                                :class="['rounded-t-2xl px-4 py-1.5 text-xs font-bold text-white', form.settings.themeColorClass ?? 'bg-indigo-600']"
+                                :class="['af-header-bar rounded-t-2xl px-4 py-1.5 text-xs font-bold text-white', themeClass]"
                             >
                                 {{ sectionLabels[question.id] }}
                             </div>
@@ -3402,7 +3471,7 @@ watch(
                             </Transition>
                         </section>
                     </TransitionGroup>
-                </template>
+                </div>
 
                 <section v-else-if="activeTab === 'responses'" class="space-y-5">
                     <div class="rounded-2xl border border-slate-300 bg-white p-6 shadow-sm">
@@ -4310,13 +4379,20 @@ watch(
         </section>
 
         <div v-if="showPreview" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <section class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <section
+                :class="['max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl', activeDesign ? 'af-designed' : '']"
+                :style="activeDesignVariables"
+            >
                 <div class="mb-5 flex items-center justify-between">
                     <h2 class="text-2xl font-bold">Pratinjau</h2>
                     <button type="button" class="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100" @click="showPreview = false">Tutup</button>
                 </div>
-                <div :class="['mb-5 h-3 rounded-full', form.settings.themeColorClass ?? 'bg-indigo-600']"></div>
-                <h3 class="text-3xl font-semibold"><RichContent :content="form.title" /></h3>
+                <img v-if="activeDesign?.headerImage" :src="activeDesign.headerImage" alt="" class="af-header-image mb-4" />
+                <div :class="['mb-5 h-3 rounded-full', themeClass]"></div>
+                <div v-if="activeDesign?.logo" class="mb-3 flex" :style="{ justifyContent: logoJustify(activeDesign) }">
+                    <img :src="activeDesign.logo" alt="Logo" class="af-logo" />
+                </div>
+                <h3 :class="['text-3xl font-semibold', activeDesign ? 'af-title' : '']"><RichContent :content="form.title" /></h3>
                 <RichContent v-if="form.description" :content="form.description" as="p" class="mt-2 text-slate-500" />
                 <div class="mt-6 space-y-5">
                     <div
@@ -5011,6 +5087,24 @@ Jawaban: A, C</pre
                 </div>
 
                 <div class="space-y-6">
+                    <!-- Desainer Form add-on: the full designer -->
+                    <div v-if="formDesignerAddon" class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4" data-testid="designer-callout">
+                        <p class="flex items-center gap-2 text-sm font-black text-slate-900">
+                            <Paintbrush class="h-4 w-4 text-indigo-600" />
+                            Desainer Form
+                        </p>
+                        <p class="mt-1 text-xs leading-relaxed text-slate-600">
+                            Tema siap pakai, gambar header, logo sekolah, foto latar, huruf, bentuk kartu dan CSS sendiri, untuk editor dan semua halaman siswa.
+                        </p>
+                        <button
+                            type="button"
+                            class="mt-3 w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"
+                            @click="startFormDesigner"
+                        >
+                            {{ formDesignerAddon.installedForOwner ? 'Aktifkan & buka Desainer Form' : 'Pasang add-on Desainer Form' }}
+                        </button>
+                    </div>
+
                     <!-- Fonts Configuration -->
                     <div>
                         <h3 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Gaya Font</h3>
@@ -5100,6 +5194,20 @@ Jawaban: A, C</pre
                 </div>
             </div>
         </Transition>
+
+        <FormDesigner
+            v-if="showFormDesigner && activeDesign"
+            :model-value="activeDesign"
+            :title="form.title"
+            :description="form.description"
+            :question-font="form.settings.questionFont"
+            :answer-font="form.settings.answerFont"
+            :public-url="quizForm?.publicUrl"
+            @update:model-value="updateDesign"
+            @update:question-font="(font) => { form.settings.questionFont = font; markChanged('Huruf soal diperbarui'); }"
+            @update:answer-font="(font) => { form.settings.answerFont = font; markChanged('Huruf jawaban diperbarui'); }"
+            @close="showFormDesigner = false"
+        />
 
         <!-- Floating Premium Toast -->
         <Transition

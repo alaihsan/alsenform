@@ -37,6 +37,7 @@ import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
 import { deviceHintsHeader } from '@/lib/deviceHints';
 import { CONTENT_ITEM_TYPES } from '@/types/quiz';
+import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
 
@@ -97,6 +98,8 @@ const props = defineProps<{
         requiresExamToken?: boolean;
         /** The student's results, once the teacher shows them. */
         resultsUrl?: string;
+        /** Desainer Form add-on: the exam's look (null while the add-on is off). */
+        design?: Partial<FormDesign> | null;
     };
     examSummary?: {
         questionCount: number;
@@ -1251,6 +1254,12 @@ const perPage = computed<number>(() => {
  * top; without, the questions-per-page setting. Sections and "title and description" items are text
  * only: never numbered, answered or counted.
  */
+// Desainer Form add-on: the exam's design on every part of the page.
+const design = computed<FormDesign | null>(() => (props.quizForm.design ? withDesignDefaults(props.quizForm.design) : null));
+const designVars = computed(() => (design.value ? designVariables(design.value) : undefined));
+const themeClass = computed(() => (design.value ? 'af-accent-bg' : (props.quizForm.settings.themeColorClass ?? 'bg-indigo-600')));
+useDesignCss(design);
+
 const isContentItem = (question: Question) => CONTENT_ITEM_TYPES.includes(question.type as (typeof CONTENT_ITEM_TYPES)[number]);
 const answerableQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => !isContentItem(question)));
 const hasSections = computed<boolean>(() => displayQuestions.value.some((question) => question.type === 'Section'));
@@ -2068,6 +2077,9 @@ const submitAnotherResponse = () => {
 <template>
     <Head :title="quizForm.title" />
 
+    <!-- Desainer Form add-on: the exam's design over every part of the page -->
+    <div :class="design ? 'af-designed' : undefined" :style="designVars">
+
     <!-- Connection notice: a toast that never blocks answering (below the timer, at the bottom on large screens).
          The lock screen has its own note. -->
     <Transition
@@ -2150,16 +2162,16 @@ const submitAnotherResponse = () => {
     <!-- Progress bar at the top of the page if enabled -->
     <div v-if="quizForm.settings.showProgress" class="fixed left-0 right-0 top-0 z-50 h-2 bg-slate-100">
         <div
-            :class="['h-full transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"
+            :class="['af-progress h-full transition-all duration-300', themeClass]"
             :style="{ width: `${progress}%` }"
         ></div>
     </div>
 
     <main
         :class="[
-            'min-h-screen px-4 py-8 text-slate-900 transition-all duration-300 sm:px-6',
-            quizForm.settings.backgroundColorClass ?? 'bg-violet-50',
-            quizForm.settings.backgroundPatternClass ?? 'pattern-none',
+            'af-page min-h-screen px-4 py-8 text-slate-900 transition-all duration-300 sm:px-6',
+            design ? '' : (quizForm.settings.backgroundColorClass ?? 'bg-violet-50'),
+            design?.backgroundImage ? '' : (quizForm.settings.backgroundPatternClass ?? 'pattern-none'),
             isQuestionNavAvailable ? 'pb-24 lg:pb-8' : '',
             // Room for the timer bar across the top on phones.
             hasCountdownTimer ? 'pt-16 sm:pt-8' : '',
@@ -2167,9 +2179,12 @@ const submitAnotherResponse = () => {
             isQuestionCopyBlocked ? 'select-none print:hidden' : '',
             isQuestionNavAvailable && isQuestionNavPinnedOpen ? (questionNavSide === 'left' ? 'lg:pl-72' : 'lg:pr-72') : '',
         ]"
+        :style="design ? pageBackgroundStyle(design) : undefined"
     >
         <!-- Access Restricted State (Cohort Restriction) -->
-        <section v-if="accessRestricted" class="mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white shadow-xl overflow-hidden my-8">
+        <template v-if="accessRestricted">
+        <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image mx-auto mt-8 max-w-xl" />
+        <section class="af-card mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white shadow-xl overflow-hidden my-8">
             <div class="h-3 bg-amber-500"></div>
             <div class="p-6 sm:p-8 text-center">
                 <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50 text-amber-600 mb-4 ring-8 ring-amber-50">
@@ -2219,11 +2234,17 @@ const submitAnotherResponse = () => {
                 </div>
             </div>
         </section>
+        </template>
 
-        <section v-else-if="isSubmitted" class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+        <template v-else-if="isSubmitted">
+        <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image mx-auto mb-4 max-w-3xl" />
+        <section class="af-card af-header mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div :class="['af-header-bar h-3 rounded-t-3xl transition-all duration-300', themeClass]"></div>
             <div class="p-6 sm:p-8">
-                <h1 class="text-2xl font-semibold leading-tight sm:text-3xl" :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
+                <div v-if="design?.logo" class="mb-4 flex" :style="{ justifyContent: logoJustify(design) }">
+                    <img :src="design.logo" alt="Logo" class="af-logo" />
+                </div>
+                <h1 :class="['text-2xl font-semibold leading-tight sm:text-3xl', design ? 'af-title' : '']" :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
                     {{ quizForm.settings.confirmationMessage ?? 'Jawaban Anda sudah tercatat.' }}
                 </h1>
                 <a
@@ -2246,10 +2267,12 @@ const submitAnotherResponse = () => {
                 </p>
             </div>
         </section>
+        </template>
 
         <template v-else>
-            <section class="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div :class="['h-3 rounded-t-3xl transition-all duration-300', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+            <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image mx-auto mb-4 max-w-3xl" data-testid="design-header-image" />
+            <section class="af-card af-header mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div :class="['af-header-bar h-3 rounded-t-3xl transition-all duration-300', themeClass]"></div>
                 <div class="p-5 sm:p-8">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="flex-1">
@@ -2259,9 +2282,12 @@ const submitAnotherResponse = () => {
                             >
                                 <span>Bagian {{ currentPage }} dari {{ totalPages }}</span>
                             </div>
+                            <div v-if="design?.logo" class="mb-3 flex" :style="{ justifyContent: logoJustify(design) }">
+                                <img :src="design.logo" alt="Logo" class="af-logo" />
+                            </div>
                             <h1
-                                class="text-2xl font-semibold leading-tight sm:text-3xl"
-                                :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                                :class="['text-2xl font-semibold leading-tight sm:text-3xl', design ? 'af-title' : '']"
+                                :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
                             >
                                 <RichContent :content="quizForm.title" />
                             </h1>
@@ -2281,7 +2307,7 @@ const submitAnotherResponse = () => {
                         v-if="quizForm.description && (!isPaginated || currentPage === 1)"
                         :content="quizForm.description"
                         as="p"
-                        class="mt-3 text-slate-500"
+                        class="af-description mt-3 text-slate-500"
                         :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
                     />
                 </div>
@@ -2336,10 +2362,10 @@ const submitAnotherResponse = () => {
                 <!-- A section (page title) or a "title and description": text only, like in Google Forms -->
                 <section
                     v-if="isContentItem(question)"
-                    class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                    class="af-card af-section overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
                     data-testid="content-item"
                 >
-                    <div v-if="question.type === 'Section'" :class="['h-2', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+                    <div v-if="question.type === 'Section'" :class="['af-header-bar h-2', themeClass]"></div>
                     <div class="p-5 sm:p-6">
                         <p v-if="question.type === 'Section'" class="text-xs font-bold uppercase tracking-wider text-indigo-700">
                             Bagian {{ pageOf(question.id) }} dari {{ totalPages }}
@@ -2364,7 +2390,7 @@ const submitAnotherResponse = () => {
                     :id="`question-card-${question.id}`"
                     :data-question-id="question.id"
                     :class="[
-                        'rounded-3xl border bg-white p-4 shadow-sm transition-all duration-300 sm:p-6',
+                        'af-card af-question rounded-3xl border bg-white p-4 shadow-sm transition-all duration-300 sm:p-6',
                         validationErrors[question.id] ? 'border-red-400 bg-red-50/5 ring-2 ring-red-100' : 'border-slate-200'
                     ]"
                 >
@@ -2398,7 +2424,7 @@ const submitAnotherResponse = () => {
                         </button>
                     </div>
                     <h2
-                        class="mt-3 text-[17px] font-medium leading-relaxed text-slate-900 sm:text-lg"
+                        class="af-question-title mt-3 text-[17px] font-medium leading-relaxed text-slate-900 sm:text-lg"
                         :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
                     >
                         <RichContent :content="questionText(question.title)" />
@@ -2658,7 +2684,7 @@ const submitAnotherResponse = () => {
                             v-for="(option, optionIndex) in question.options"
                             :key="option"
                             :class="[
-                                'flex cursor-pointer items-start gap-3 rounded-2xl border px-3.5 py-3 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-300 sm:px-4',
+                                'af-option flex cursor-pointer items-start gap-3 rounded-2xl border px-3.5 py-3 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-300 sm:px-4',
                                 isOptionSelected(question, option) ? 'border-indigo-500 bg-indigo-50/70' : 'border-slate-200 hover:bg-slate-50',
                             ]"
                             :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
@@ -2683,7 +2709,7 @@ const submitAnotherResponse = () => {
                                 <Check v-if="question.type === 'Checkboxes' && isOptionSelected(question, option)" class="h-4 w-4" />
                                 <template v-else>{{ optionLetter(optionIndex) }}</template>
                             </span>
-                            <RichContent :content="option" class="min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-slate-800 sm:text-base" />
+                            <RichContent :content="option" class="af-option-text min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-slate-800 sm:text-base" />
                         </label>
                     </div>
                     <input
@@ -2781,8 +2807,8 @@ const submitAnotherResponse = () => {
 
                     <!-- Indikator Halaman -->
                     <div v-if="isPaginated" class="text-center">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ currentPage }} dari {{ totalPages }}</span>
-                        <span v-if="currentPageRange" class="text-xs font-semibold text-slate-600 mt-0.5 block">
+                        <span class="af-on-page text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ currentPage }} dari {{ totalPages }}</span>
+                        <span v-if="currentPageRange" class="af-on-page text-xs font-semibold text-slate-600 mt-0.5 block">
                             Soal {{ currentPageRange[0] }}{{ currentPageRange[1] !== currentPageRange[0] ? ` - ${currentPageRange[1]}` : '' }} dari {{ totalQuestionsCount }}
                         </span>
                     </div>
@@ -2794,8 +2820,8 @@ const submitAnotherResponse = () => {
                             type="button"
                             :disabled="isSubmitting"
                             :class="[
-                                'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-sm transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
-                                quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                                'af-button w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-sm transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
+                                themeClass,
                             ]"
                             @click="nextPage"
                         >
@@ -2808,8 +2834,8 @@ const submitAnotherResponse = () => {
                             type="button"
                             :disabled="isSubmitting"
                             :class="[
-                                'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-md transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
-                                quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                                'af-button w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-7 py-3.5 font-bold text-white shadow-md transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60',
+                                themeClass,
                             ]"
                             @click="openSubmitConfirmation"
                         >
@@ -2853,7 +2879,7 @@ const submitAnotherResponse = () => {
             id="question-navigator"
             aria-label="Daftar nomor soal"
             :class="[
-                'fixed inset-y-0 z-[60] flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl lg:inset-y-auto lg:z-30 lg:max-h-[calc(100vh-8rem)] lg:w-64 lg:max-w-none lg:rounded-3xl lg:border lg:border-slate-200 lg:shadow-lg',
+                'af-nav fixed inset-y-0 z-[60] flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl lg:inset-y-auto lg:z-30 lg:max-h-[calc(100vh-8rem)] lg:w-64 lg:max-w-none lg:rounded-3xl lg:border lg:border-slate-200 lg:shadow-lg',
                 questionNavTopClass,
                 questionNavSide === 'left' ? 'left-0 rounded-r-3xl lg:left-4' : 'right-0 rounded-l-3xl lg:right-4',
             ]"
@@ -2962,18 +2988,22 @@ const submitAnotherResponse = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="exam-start-title"
-            class="my-4 w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            class="af-card af-header my-4 w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
         >
-            <div :class="['h-3', quizForm.settings.themeColorClass ?? 'bg-indigo-600']"></div>
+            <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image af-header-image-inset" />
+            <div :class="['h-3', themeClass]"></div>
             <div class="p-6 sm:p-8">
                 <span class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
                     <ScrollText class="h-3.5 w-3.5" />
                     Konfirmasi Ujian
                 </span>
+                <div v-if="design?.logo" class="mt-4 flex" :style="{ justifyContent: logoJustify(design) }">
+                    <img :src="design.logo" alt="Logo" class="af-logo" />
+                </div>
                 <h1
                     id="exam-start-title"
-                    class="mt-3 text-2xl font-black leading-tight text-slate-900 sm:text-3xl"
-                    :style="{ fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                    :class="['mt-3 text-2xl font-black leading-tight text-slate-900 sm:text-3xl', design ? 'af-title' : '']"
+                    :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
                 >
                     <RichContent :content="quizForm.title" />
                 </h1>
@@ -3084,8 +3114,8 @@ const submitAnotherResponse = () => {
                         type="button"
                         :disabled="isStartingExam"
                         :class="[
-                            'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-7 py-3.5 text-sm font-bold text-white shadow-md transition hover:brightness-95 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
-                            quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                            'af-button inline-flex w-full items-center justify-center gap-2 rounded-2xl px-7 py-3.5 text-sm font-bold text-white shadow-md transition hover:brightness-95 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
+                            themeClass,
                         ]"
                         @click="startExam"
                     >
@@ -3227,8 +3257,8 @@ const submitAnotherResponse = () => {
                     type="button"
                     :disabled="isSubmitting || unansweredRequiredQuestions.length > 0"
                     :class="[
-                        'w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-bold text-white shadow-md transition-all duration-300',
-                        quizForm.settings.themeColorClass ?? 'bg-indigo-600',
+                        'af-button w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-bold text-white shadow-md transition-all duration-300',
+                        themeClass,
                         'hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50',
                     ]"
                     @click="confirmAndSubmit"
@@ -3308,6 +3338,7 @@ const submitAnotherResponse = () => {
                 </div>
             </div>
         </section>
+    </div>
     </div>
 </template>
 

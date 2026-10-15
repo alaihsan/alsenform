@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\QuizForm;
 use App\Support\Addon;
+use App\Support\FormDesign;
 use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -90,6 +91,10 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.themeColorClass' => ['nullable', 'string', 'max:100'],
             'settings.backgroundColorClass' => ['nullable', 'string', 'max:100'],
             'settings.backgroundPatternClass' => ['nullable', 'string', 'max:100'],
+            // Desainer Form add-on: normalised by FormDesign when saved.
+            'settings.design' => ['nullable', 'array'],
+            'settings.design.*' => ['nullable'],
+            'settings.design.customCss' => ['nullable', 'string', 'max:'.FormDesign::MAX_CSS_LENGTH],
             'settings.lockOnBlur' => ['nullable', 'boolean'],
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'settings.questionsPerPage' => ['nullable'],

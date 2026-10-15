@@ -1,4 +1,5 @@
 import type { AddonEntry } from '@/components/addons/AddonGallery.vue';
+import type { CardDesign, FormDesign } from '@/lib/formDesign';
 import type { Component } from 'vue';
 
 export type QuestionType =
@@ -102,6 +103,8 @@ export type QuizFormPayload = {
         themeColorClass?: string;
         backgroundColorClass?: string;
         backgroundPatternClass?: string;
+        /** Desainer Form add-on: the exam's look (see App\\Support\\FormDesign). */
+        design?: Partial<FormDesign> | null;
         lockOnBlur?: boolean;
         timeLimit?: number;
         /** Identity fields guests fill in on a public quiz (email is collectEmail). */
@@ -227,6 +230,8 @@ export type RecentForm = {
     accent: string;
     themeColorClass?: string | null;
     backgroundColorClass?: string | null;
+    /** Desainer Form add-on: what the card shows of the exam's design. */
+    design?: CardDesign | null;
     questionsCount?: number;
     previewQuestions?: PreviewQuestion[];
     firstQuestion?: PreviewQuestion | null;

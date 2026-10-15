@@ -173,6 +173,7 @@ class QuizFormPayloads
             'stripe' => $stripe,
             'themeColorClass' => $themeColor,
             'backgroundColorClass' => $bgColor,
+            'design' => $quizForm->cardDesign(),
             'questionsCount' => is_array($questions) ? count($questions) : 0,
             'previewQuestions' => $previewQuestions,
             'firstQuestion' => $previewQuestions[0] ?? null,

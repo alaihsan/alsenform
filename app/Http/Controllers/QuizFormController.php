@@ -11,6 +11,7 @@ use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Services\ImageOptimizationService;
 use App\Services\QuestionBank;
+use App\Support\FormDesign;
 use App\Support\MediaUrl;
 use App\Support\QuizFormPayloads;
 use Illuminate\Http\JsonResponse;
@@ -87,7 +88,7 @@ class QuizFormController extends Controller
                 'description' => $validated['description'] ?? '',
                 'slug' => $validated['slug'],
                 'questions' => $mediaUrl->normalizeQuestions($validated['questions']),
-                'settings' => $validated['settings'],
+                'settings' => $this->settingsToStore($validated['settings']),
                 'published_at' => $request->boolean('published') ? ($current->published_at ?? now()) : null,
             ]);
 
@@ -117,6 +118,21 @@ class QuizFormController extends Controller
         }
 
         return to_route('forms.edit', ['quizForm' => $savedForm->slug]);
+    }
+
+    /**
+     * The settings as saved: the Desainer Form design keeps known keys with safe values only.
+     *
+     * @param  array<string, mixed>  $settings
+     * @return array<string, mixed>
+     */
+    protected function settingsToStore(array $settings): array
+    {
+        if (isset($settings['design'])) {
+            $settings['design'] = app(FormDesign::class)->normalize($settings['design']);
+        }
+
+        return $settings;
     }
 
     public function duplicate(QuizForm $quizForm, DuplicateQuizForm $duplicateQuizForm): RedirectResponse

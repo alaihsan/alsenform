@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { RecentForm } from '@/types/quiz';
 import RichContent from '@/components/RichContent.vue';
+import { designVariables, withDesignDefaults } from '@/lib/formDesign';
 
 const props = withDefaults(
     defineProps<{
@@ -12,6 +13,9 @@ const props = withDefaults(
         viewMode: 'grid',
     }
 );
+
+// Desainer Form add-on: the card in the exam's colours, with its header image.
+const design = computed(() => (props.form.design && !props.form.isTrashed ? withDesignDefaults(props.form.design) : null));
 
 const firstQuestion = computed(() => props.form.firstQuestion || props.form.previewQuestions?.[0] || null);
 
@@ -47,19 +51,21 @@ const isScaleOrRating = computed(() => firstQuestion.value?.type === 'Linear sca
         :class="[
             'relative flex aspect-[500/309] select-none items-start justify-center overflow-hidden transition-colors',
             viewMode === 'list' ? 'h-full w-full p-1.5' : 'w-full p-2 sm:p-2.5',
-            form.backgroundColorClass || form.tone || 'bg-slate-100',
+            design ? 'af-designed' : form.backgroundColorClass || form.tone || 'bg-slate-100',
             form.isTrashed ? 'opacity-65 grayscale' : '',
         ]"
+        :style="design ? { ...designVariables(design), backgroundColor: design.background } : undefined"
     >
         <!-- Miniature Google Forms Paper -->
         <div
             class="flex h-full w-[88%] sm:w-[90%] flex-col overflow-hidden rounded-t-md border border-slate-200/90 bg-white shadow-sm transition-shadow group-hover:shadow-md"
         >
+            <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="h-6 w-full shrink-0 object-cover sm:h-7" loading="lazy" />
             <!-- Top Theme Accent Stripe -->
             <div
                 :class="[
                     'h-2.5 w-full shrink-0 transition-colors sm:h-3',
-                    form.isTrashed ? 'bg-slate-400' : form.themeColorClass || form.stripe || 'bg-indigo-600',
+                    form.isTrashed ? 'bg-slate-400' : design ? 'af-accent-bg' : form.themeColorClass || form.stripe || 'bg-indigo-600',
                 ]"
             ></div>
 

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Addons;
 use App\Support\Addon;
+use App\Support\FormDesign;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\QuizFormFactory;
@@ -266,6 +267,33 @@ class QuizForm extends Model
     public function usesAddon(Addon $addon): bool
     {
         return app(Addons::class)->isActiveFor($this, $addon);
+    }
+
+    /**
+     * The exam's look from the Desainer Form add-on, or null while the add-on is off for it (the
+     * design is kept, so switching the add-on on again brings it back).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function design(): ?array
+    {
+        $settings = is_array($this->settings) ? $this->settings : [];
+
+        return is_array($settings['design'] ?? null) && $this->usesAddon(Addon::FormDesigner)
+            ? app(FormDesign::class)->normalize($settings['design'])
+            : null;
+    }
+
+    /**
+     * What the dashboard card shows of the exam's design, or null without one.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function cardDesign(): ?array
+    {
+        $design = $this->design();
+
+        return $design !== null ? app(FormDesign::class)->card($design) : null;
     }
 
     /**

@@ -13,6 +13,7 @@ enum Addon: string
     case ExamToken = 'exam-token';
     case Remedial = 'remedial';
     case Misconception = 'misconception';
+    case FormDesigner = 'form-designer';
 
     public function label(): string
     {
@@ -21,6 +22,7 @@ enum Addon: string
             self::ExamToken => 'Token Ujian',
             self::Remedial => 'Remedial & Pengayaan',
             self::Misconception => 'Peta Miskonsepsi',
+            self::FormDesigner => 'Desainer Form',
         };
     }
 
@@ -31,6 +33,7 @@ enum Addon: string
             self::ExamToken => 'Seperti ANBK: siswa mengetik token 6 huruf dari pengawas sebelum mulai. Token berganti setiap 15 menit.',
             self::Remedial => 'Daftar siswa di bawah KKM tersusun otomatis; ujian remedial dan pengayaan dibuat dalam beberapa klik.',
             self::Misconception => 'Bedakan siswa yang menebak, yang belum paham, dan yang yakin pada konsep keliru, dari tombol Ragu-ragu.',
+            self::FormDesigner => 'Seperti Pretty Forms Designer: ubah tampilan ujian sepenuhnya, dari tema siap pakai, warna, huruf, gambar header dan logo, sampai CSS sendiri.',
         };
     }
 
@@ -41,6 +44,7 @@ enum Addon: string
             self::ExamToken => 'Pengawas menampilkan token di kelas (bisa layar penuh untuk proyektor) dan siswa mengetiknya di layar konfirmasi ujian. Tanpa token yang berlaku ujian tidak dapat dimulai, jadi ujian tidak dapat dikerjakan dari luar ruangan atau sebelum waktunya. Token berganti setiap 15 menit (menit :00, :15, :30 dan :45); token sebelumnya masih diterima 5 menit lagi agar siswa yang sedang mengetik tidak tertolak. Siswa yang sudah mulai tidak perlu mengetik token lagi saat halaman dimuat ulang. Guru pemilik dan kolaborator tidak perlu token saat mencoba ujiannya.',
             self::Remedial => 'Setelah ulangan, siswa dibagi menjadi Belum Tuntas (di bawah KKM) dan Tuntas menurut nilai terbaiknya. Ujian remedial dibuat dari soal yang dijawab salah oleh siswa remedial, atau dari soal lain setopik di Bank Soal; ujian pengayaan dari soal sulit setopik. Ujian tindak lanjut dibuat sebagai draf dan hanya dapat dikerjakan siswa yang dipilih. Nilainya dicatat terpisah: nilai asli tidak berubah, dan laporan Excel menampilkan nilai asli, nilai remedial dan nilai akhir berdampingan.',
             self::Misconception => 'Memakai metode CRI (Certainty of Response Index). Saat ujian, siswa menandai soal yang belum diyakininya dengan tombol Ragu-ragu. Setiap jawaban lalu masuk satu dari empat kelompok: benar dan yakin (paham), benar tapi ragu (menebak), salah dan ragu atau kosong (belum paham), serta salah tapi yakin (miskonsepsi). Miskonsepsi berbeda dari belum paham: siswa merasa benar, jadi mengulang materi saja tidak cukup. Soal dengan banyak miskonsepsi ditandai, lengkap dengan jawaban keliru yang paling diyakini siswa. Hasilnya bermakna bila siswa memakai tombol Ragu-ragu dengan jujur; panel memberi tahu bila terlalu sedikit siswa memakainya.',
+            self::FormDesigner => 'Mulai dari salah satu tema siap pakai (Klasik, Google Form, Malam, Madrasah, Ceria SD, Kertas Ujian, Kontras Tinggi, dan lainnya), lalu atur sendiri warna aksen, latar (warna atau foto dengan peredup), warna dan transparansi kartu, warna teks, gambar header seperti Google Form, logo sekolah, huruf judul dan soal, ukuran teks, sudut dan bayangan kartu, bentuk tombol, serta lebar halaman. Guru yang mahir dapat menambah CSS sendiri; CSS itu hanya berlaku di halaman ujian ini dan tidak dapat memuat apa pun dari luar server sekolah. Desain yang sama tampil di editor guru, di semua halaman siswa (layar mulai, soal, selesai, hasil) dan di kartu ujian di beranda. Mematikan add-on mengembalikan tampilan biasa tanpa menghapus desainnya.',
         };
     }
 
@@ -54,6 +58,7 @@ enum Addon: string
             self::ExamToken => 'key-round',
             self::Misconception => 'brain',
             self::Remedial => 'graduation-cap',
+            self::FormDesigner => 'paintbrush',
         };
     }
 
@@ -83,6 +88,11 @@ enum Addon: string
                 'Tab Jawaban: panel Peta Miskonsepsi berisi empat kelompok jawaban per soal dan jawaban keliru yang paling diyakini.',
                 'Laporan Excel: lembar "Peta Miskonsepsi" per soal dan per siswa.',
             ],
+            self::FormDesigner => [
+                'Editor: tombol palet membuka Desainer Form dengan pratinjau langsung (tema, warna, huruf, gambar, bentuk, CSS).',
+                'Halaman siswa: layar mulai, soal, layar selesai dan halaman hasil memakai desain ujian.',
+                'Beranda guru dan siswa: kartu ujian memakai warna dan gambar header desainnya.',
+            ],
         };
     }
 
@@ -108,6 +118,9 @@ enum Addon: string
             self::Misconception => [
                 'Jawaban siswa di ujian Anda dan soal yang mereka tandai Ragu-ragu.',
             ],
+            self::FormDesigner => [
+                'Hanya pengaturan tampilan ujian dan gambar yang Anda unggah ke server sekolah; tidak membaca jawaban siswa.',
+            ],
         };
     }
 
@@ -117,7 +130,7 @@ enum Addon: string
     public function onByDefault(): bool
     {
         return match ($this) {
-            self::ItemAnalysis, self::Remedial, self::Misconception => true,
+            self::ItemAnalysis, self::Remedial, self::Misconception, self::FormDesigner => true,
             // Students could not start an exam without a token: switched on per exam by the teacher.
             self::ExamToken => false,
         };

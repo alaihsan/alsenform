@@ -54,6 +54,7 @@ class QuizResponseController extends Controller
                         'description' => $quizForm->description,
                         'questions' => [],
                         'settings' => $quizForm->settings,
+                        'design' => $quizForm->design(),
                         'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                     ],
                     'accessRestricted' => true,
@@ -82,6 +83,7 @@ class QuizResponseController extends Controller
                     'description' => $quizForm->description,
                     'questions' => [],
                     'settings' => $quizForm->settings,
+                    'design' => $quizForm->design(),
                     'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                     'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
                 ],
@@ -115,6 +117,7 @@ class QuizResponseController extends Controller
                     'description' => $quizForm->description,
                     'questions' => [],
                     'settings' => $quizForm->settings,
+                    'design' => $quizForm->design(),
                     'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                     'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
                 ],
@@ -169,6 +172,8 @@ class QuizResponseController extends Controller
                 'description' => $quizForm->description,
                 'questions' => $hasStarted ? $sanitizedQuestions : [],
                 'settings' => $quizForm->settings,
+                // Desainer Form add-on: the exam's look, on every page the student sees.
+                'design' => $quizForm->design(),
                 'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                 'startUrl' => route('forms.responses.start', ['quizForm' => $quizForm->slug]),
                 // Guests say who they are on the confirmation screen; accounts identify themselves.
