@@ -37,6 +37,7 @@ import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
 import { deviceHintsHeader } from '@/lib/deviceHints';
 import { CONTENT_ITEM_TYPES } from '@/types/quiz';
+import { stripRichFormatting } from '@/utils/rich-content';
 import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
@@ -2568,7 +2569,7 @@ const submitAnotherResponse = () => {
                         @change="answers[question.id] = ($event.target as HTMLSelectElement).value"
                     >
                         <option value="" disabled>Pilih jawaban</option>
-                        <option v-for="option in question.options" :key="option" :value="option">{{ option }}</option>
+                        <option v-for="option in question.options" :key="option" :value="option">{{ stripRichFormatting(option) }}</option>
                     </select>
                     <div
                         v-else-if="question.type === 'Linear scale'"

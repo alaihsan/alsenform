@@ -64,6 +64,65 @@ export function renderLatex(latex: string, displayMode: boolean = false): string
 }
 
 /**
+ * Formatting a teacher gives selected text in the editor: bold, italic, underline and a highlighter
+ * colour. It is stored as these exact tags around plain text; any other markup stays text.
+ */
+export const HIGHLIGHT_COLORS = {
+    yellow: { label: 'Kuning', hex: '#fde047' },
+    green: { label: 'Hijau', hex: '#86efac' },
+    blue: { label: 'Biru', hex: '#93c5fd' },
+    pink: { label: 'Merah muda', hex: '#f9a8d4' },
+    orange: { label: 'Oranye', hex: '#fdba74' },
+} as const;
+
+export type HighlightColor = keyof typeof HIGHLIGHT_COLORS;
+
+const COLOR_NAMES = Object.keys(HIGHLIGHT_COLORS).join('|');
+
+/** One formatting tag of the stored text (the capture holds the highlighter colour). */
+export const FORMAT_TAG_REGEX = new RegExp(`<\\/?(?:b|i|u)>|<mark data-color="(${COLOR_NAMES})">|<\\/mark>`, 'g');
+
+/** Splits stored text into text pieces and formatting tags (the tags at odd positions). */
+function splitFormatting(text: string): string[] {
+    return text.split(new RegExp(`(<\\/?(?:b|i|u)>|<mark data-color="(?:${COLOR_NAMES})">|<\\/mark>)`, 'g'));
+}
+
+/** The text without its formatting: for drop-downs, page titles and other plain places. */
+export function stripRichFormatting(text?: string | null): string {
+    return text ? String(text).replace(FORMAT_TAG_REGEX, '') : '';
+}
+
+/** Whether the text has bold, italic, underline or highlighter formatting. */
+export function hasRichFormatting(text?: string | null): boolean {
+    return !!text && new RegExp(FORMAT_TAG_REGEX.source).test(String(text));
+}
+
+/** The safe HTML of one formatting tag. */
+function formatTagHtml(tag: string): string {
+    if (tag.startsWith('<mark')) {
+        const color = tag.match(/data-color="([a-z]+)"/)?.[1] ?? 'yellow';
+
+        return `<mark class="rich-mark rich-mark-${color}">`;
+    }
+
+    return tag;
+}
+
+/** Plain text with its formatting: escaped, Arabic in the Mushaf font, the allowed tags kept. */
+function formatText(text: string): string {
+    return splitFormatting(text)
+        .map((piece, index) => {
+            if (index % 2 === 1) {
+                return formatTagHtml(piece);
+            }
+            const escaped = escapeHtml(piece);
+
+            return hasArabic(escaped) ? processArabicText(escaped) : escaped;
+        })
+        .join('');
+}
+
+/**
  * Parses and formats text containing:
  * 1. LaTeX math formulas ($...$, $$...$$, \(...\), \[...\])
  * 2. Arabic Quran text and verses (with proper Amiri Quran / Madinah font & RTL)
@@ -86,40 +145,32 @@ export function formatRichContent(rawContent?: string | null): string {
     const formattedParts = parts.map((part) => {
         if (!part) return '';
 
+        // Formatting is not part of a formula.
+        const math = stripRichFormatting(part);
+
         // Display math: $$...$$
         if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
-            const math = part.slice(2, -2);
-            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math, true)}</div>`;
+            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math.slice(2, -2), true)}</div>`;
         }
 
-        // Display math: \[...\]
+        // Display math: \\[...\\]
         if (part.startsWith('\\[') && part.endsWith('\\]') && part.length >= 4) {
-            const math = part.slice(2, -2);
-            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math, true)}</div>`;
+            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math.slice(2, -2), true)}</div>`;
         }
 
         // Inline math: $...$
         if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
-            const math = part.slice(1, -1);
-            return `<span class="inline-math px-0.5">${renderLatex(math, false)}</span>`;
+            return `<span class="inline-math px-0.5">${renderLatex(math.slice(1, -1), false)}</span>`;
         }
 
-        // Inline math: \(...\)
+        // Inline math: \\(...\\)
         if (part.startsWith('\\(') && part.endsWith('\\)') && part.length >= 4) {
-            const math = part.slice(2, -2);
-            return `<span class="inline-math px-0.5">${renderLatex(math, false)}</span>`;
+            return `<span class="inline-math px-0.5">${renderLatex(math.slice(2, -2), false)}</span>`;
         }
 
-        // User-provided text must never become HTML. Only KaTeX and the
-        // controlled Arabic wrappers generated below are rendered as markup.
-        const escapedPart = escapeHtml(part);
-
-        if (hasArabic(escapedPart)) {
-            // If the whole block is predominantly Arabic, wrap whole block or words in font-quran
-            return processArabicText(escapedPart);
-        }
-
-        return escapedPart;
+        // User-provided text must never become HTML. Only KaTeX, the controlled Arabic wrappers
+        // and the formatting tags (bold, italic, underline, highlighter) are rendered as markup.
+        return formatText(part);
     });
 
     return formattedParts.join('');

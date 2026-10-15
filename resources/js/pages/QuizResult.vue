@@ -190,7 +190,7 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                             <dt class="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
                                 <Lightbulb class="h-3.5 w-3.5" /> Pembahasan
                             </dt>
-                            <dd class="mt-0.5 whitespace-pre-wrap text-indigo-950">{{ question.explanation }}</dd>
+                            <dd class="mt-0.5 text-indigo-950"><RichContent :content="question.explanation" /></dd>
                         </div>
                         <div v-if="question.feedback" class="rounded-xl bg-amber-50 px-3 py-2">
                             <dt class="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-amber-800">

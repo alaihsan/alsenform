@@ -49,6 +49,7 @@ Editor soal mirip Google Forms, tetapi dibuat untuk ujian sekolah. Ada 11 tipe p
 
 Fitur editor lainnya:
 
+- **Format teks seperti Google Docs**: sorot teks di soal, deskripsi, pilihan jawaban, baris/kolom kisi, bagian, judul & deskripsi, atau pembahasan, lalu pop-up muncul dengan tombol **Tebal**, **Miring**, **Garis bawah**, **spidol** lima warna (kuning, hijau, biru, merah muda, oranye), hapus warna, dan hapus semua format. Pintasan Ctrl+B / Ctrl+I / Ctrl+U juga bisa. Berlaku juga untuk teks Arab, dan tampil sama di halaman siswa, hasil, dan penilaian. Teks yang ditempel masuk tanpa format. Di HP pop-up muncul di bawah teks yang disorot.
 - **Rumus matematika** ditulis dengan sintaks KaTeX di antara tanda dolar, misalnya `$x^2 + 2x + 1$`. Ada tombol f(x) untuk pecahan, akar, pangkat, dan simbol.
 - **Bahasa Arab dan Al-Qur'an**: font Amiri Quran, Scheherazade New, dan Noto Naskh Arabic, lengkap dengan panduan pintasan keyboard untuk harakat dan tanda waqaf.
 - **Gambar dan video** di soal maupun pilihan jawaban. Gambar otomatis diperkecil dan diubah ke WebP supaya ringan dibuka dari HP murid.

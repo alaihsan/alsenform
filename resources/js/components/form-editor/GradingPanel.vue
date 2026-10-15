@@ -192,7 +192,7 @@ const TYPE_LABEL: Record<string, string> = { Paragraph: 'Esai', 'File upload': '
                                 Kunci: <b>{{ question.answerKey }}</b
                                 >. Beri nilai bila jawaban benar tetapi ditulis berbeda dari kunci.
                             </p>
-                            <p v-if="question.explanation" class="mt-2 text-sm text-slate-600"><b>Pembahasan:</b> {{ question.explanation }}</p>
+                            <p v-if="question.explanation" class="mt-2 text-sm text-slate-600"><b>Pembahasan:</b> <RichContent :content="question.explanation" /></p>
                         </div>
 
                         <div class="mt-4 flex flex-wrap items-center gap-2">

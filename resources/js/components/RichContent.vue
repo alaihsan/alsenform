@@ -50,6 +50,36 @@ const isRtl = computed(() => {
     text-rendering: auto;
 }
 
+/* Highlighter (spidol) from the editor's selection toolbar: dark text on a marker colour, also on dark themes */
+mark.rich-mark {
+    color: #111827;
+    border-radius: 0.25em;
+    padding: 0 0.12em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+mark.rich-mark-yellow {
+    background-color: #fde047;
+}
+mark.rich-mark-green {
+    background-color: #86efac;
+}
+mark.rich-mark-blue {
+    background-color: #93c5fd;
+}
+mark.rich-mark-pink {
+    background-color: #f9a8d4;
+}
+mark.rich-mark-orange {
+    background-color: #fdba74;
+}
+
+/* Arabic words are inline blocks, which an underline around them does not reach by itself. */
+.rich-content u .font-quran {
+    text-decoration: underline;
+    text-underline-offset: 0.35em;
+}
+
 /* Quranic verse bracket and symbol enhancements */
 .rich-content .font-quran {
     font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri Quran', 'Scheherazade New', 'Traditional Arabic', serif !important;

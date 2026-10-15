@@ -16,6 +16,8 @@ import ClassMapPanel, { type ClassMapStudent } from '@/components/form-editor/Cl
 import GradingPanel from '@/components/form-editor/GradingPanel.vue';
 import ItemAnalysisPanel, { type ItemAnalysis } from '@/components/form-editor/ItemAnalysisPanel.vue';
 import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
+import RichTextInput from '@/components/form-editor/RichTextInput.vue';
+import SelectionFormatToolbar from '@/components/form-editor/SelectionFormatToolbar.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
@@ -32,7 +34,7 @@ import {
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload } from '@/types/quiz';
-import { hasArabic, hasMathOrArabic } from '@/utils/rich-content';
+import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
@@ -425,43 +427,9 @@ const unlockAllStudents = async () => {
     }
 };
 
-const autoResize = (el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
-};
-
-const handleAutoResize = (event: Event) => {
-    autoResize(event.target as HTMLTextAreaElement);
-};
-
-const vAutoResize = {
-    mounted(el: HTMLTextAreaElement) {
-        autoResize(el);
-    },
-    updated(el: HTMLTextAreaElement) {
-        autoResize(el);
-    },
-};
-
-const resizeAllTextareas = () => {
-    nextTick(() => {
-        document.querySelectorAll<HTMLTextAreaElement>('textarea[data-auto-resize]').forEach((el) => {
-            autoResize(el);
-        });
-    });
-};
-
-const handleShiftEnterKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && event.shiftKey) {
-        setTimeout(() => autoResize(event.target as HTMLTextAreaElement), 0);
-    }
-};
-
 let unlockRequestsInterval: any = null;
 let unlockRequestsTick = 0;
 onMounted(() => {
-    resizeAllTextareas();
     fetchUnlockRequests();
     fetchExamProgress();
     // Every 5 s on the Keamanan tab; elsewhere every 15 s while the lock is on, for the tab's count.
@@ -489,9 +457,6 @@ watch(activeTab, (newTab) => {
     }
     if (newTab === 'responses') {
         fetchExamProgress();
-    }
-    if (newTab === 'questions') {
-        resizeAllTextareas();
     }
 });
 
@@ -1007,7 +972,6 @@ const insertTextIntoQuestion = (question: any, snippet: string) => {
         question.title += ` ${snippet}`;
     }
     markChanged('Question formula or arabic inserted');
-    nextTick(() => resizeAllTextareas());
 };
 
 const duplicateQuestion = (question: Question) => {
@@ -1062,26 +1026,24 @@ const addOption = (question: Question, label = `Option ${question.options.length
     markChanged('Option added');
 };
 
-const handleOptionKeydown = (event: KeyboardEvent, question: Question) => {
-    if (event.key === 'Enter') {
-        if (event.shiftKey) {
-            setTimeout(() => autoResize(event.target as HTMLTextAreaElement), 0);
+/** Enter in an option adds the next one and moves there (Shift+Enter is a line break). */
+const handleOptionEnter = (event: KeyboardEvent, question: Question) => {
+    const container = (event.target as HTMLElement).closest('[data-options-list]');
+    addOption(question);
+    nextTick(() => {
+        const fields = container?.querySelectorAll<HTMLElement>('[data-rich-input]');
+        const added = fields?.[fields.length - 1];
+        if (!added) {
             return;
         }
-        event.preventDefault();
-        addOption(question);
-        nextTick(() => {
-            const container = (event.target as HTMLElement).closest('.space-y-3');
-            const textareas = container?.querySelectorAll<HTMLTextAreaElement>('textarea');
-            if (textareas && textareas.length > 0) {
-                const last = textareas[textareas.length - 1];
-                last.focus();
-                autoResize(last);
-            }
-        });
-    }
+        // Its default text ("Option 4") is selected, so typing replaces it.
+        added.focus();
+        const range = document.createRange();
+        range.selectNodeContents(added);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+    });
 };
-
 
 const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
@@ -2309,17 +2271,14 @@ watch(
                                 @change="handleTitleBlur"
                                 @keydown.enter.prevent="handleTitleBlur"
                             />
-                            <textarea
+                            <RichTextInput
                                 v-model="form.description"
-                                v-auto-resize
-                                data-auto-resize
-                                rows="1"
-                                class="af-description w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 outline-none transition focus:border-indigo-500 sm:text-lg"
+                                :dir="isPredominantlyArabic(form.description) ? 'rtl' : 'auto'"
+                                class="af-description w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 transition focus:border-indigo-500 sm:text-lg"
                                 :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                 placeholder="Deskripsi ujian"
-                                @input="handleAutoResize($event); markChanged('Description updated')"
-                                @keydown="handleShiftEnterKeydown"
-                            ></textarea>
+                                @update:model-value="markChanged('Description updated')"
+                            />
                         </div>
                     </section>
 
@@ -2376,27 +2335,26 @@ watch(
                                         >
                                             <span v-for="dot in 6" :key="dot" class="h-1 w-1 rounded-full bg-current"></span>
                                         </div>
-                                        <input
+                                        <RichTextInput
                                             v-model="question.title"
-                                            type="text"
-                                            :aria-label="question.type === 'Section' ? 'Judul bagian' : 'Judul'"
+                                            :multiline="false"
+                                            :dir="isPredominantlyArabic(question.title) ? 'rtl' : 'auto'"
+                                            :label="question.type === 'Section' ? 'Judul bagian' : 'Judul'"
                                             :placeholder="question.type === 'Section' ? 'Judul bagian' : 'Judul'"
                                             :class="[
-                                                'w-full border-0 border-b border-transparent bg-transparent p-0 font-normal text-slate-950 outline-none transition focus:border-indigo-500',
+                                                'w-full border-0 border-b border-transparent bg-transparent p-0 font-normal text-slate-950 transition focus:border-indigo-500',
                                                 question.type === 'Section' ? 'text-2xl' : 'text-xl',
                                             ]"
-                                            @input="markChanged(question.type === 'Section' ? 'Judul bagian diperbarui' : 'Judul diperbarui')"
+                                            @update:model-value="markChanged(question.type === 'Section' ? 'Judul bagian diperbarui' : 'Judul diperbarui')"
                                         />
-                                        <textarea
+                                        <RichTextInput
                                             v-model="question.description"
-                                            v-auto-resize
-                                            data-auto-resize
-                                            rows="1"
-                                            aria-label="Deskripsi"
+                                            :dir="isPredominantlyArabic(question.description) ? 'rtl' : 'auto'"
+                                            label="Deskripsi"
                                             placeholder="Deskripsi (opsional)"
-                                            class="mt-3 w-full resize-none border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-600 outline-none transition focus:border-indigo-500"
-                                            @input="markChanged('Deskripsi diperbarui')"
-                                        ></textarea>
+                                            class="mt-3 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-600 transition focus:border-indigo-500"
+                                            @update:model-value="markChanged('Deskripsi diperbarui')"
+                                        />
                                         <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-3 text-slate-600">
                                             <span class="text-xs text-slate-500">
                                                 {{
@@ -2448,7 +2406,7 @@ watch(
 
                                         <div class="space-y-4 p-6">
                                             <div class="text-sm font-bold text-slate-800">
-                                                Pertanyaan: <span class="font-normal text-slate-600">{{ question.title || 'Tanpa Judul' }}</span>
+                                                Pertanyaan: <RichContent :content="question.title || 'Tanpa Judul'" class="font-normal text-slate-600" />
                                             </div>
 
                                             <!-- Short Answer Kunci Jawaban -->
@@ -2509,7 +2467,7 @@ watch(
                                                         >
                                                             <Check v-if="isCorrectAnswer(question, optionIndex)" class="h-3.5 w-3.5 text-white" />
                                                         </span>
-                                                        <span>{{ option }}</span>
+                                                        <RichContent :content="option" />
                                                     </button>
                                                 </div>
                                             </div>
@@ -2533,7 +2491,7 @@ watch(
                                                             markChanged('Answer key updated');
                                                         "
                                                     >
-                                                        {{ option }}
+                                                        <RichContent :content="option" />
                                                     </button>
                                                 </div>
                                             </div>
@@ -2597,7 +2555,7 @@ watch(
                                                                     :key="`header-col-${cIndex}`"
                                                                     class="p-3 text-center font-bold text-slate-700"
                                                                 >
-                                                                    {{ col }}
+                                                                    <RichContent :content="col" />
                                                                 </th>
                                                             </tr>
                                                         </thead>
@@ -2607,7 +2565,7 @@ watch(
                                                                 :key="`row-key-${rIndex}`"
                                                                 class="border-slate-150 border-b transition-colors last:border-0 hover:bg-slate-50"
                                                             >
-                                                                <td class="p-3 font-semibold text-slate-800">{{ row }}</td>
+                                                                <td class="p-3 font-semibold text-slate-800"><RichContent :content="row" /></td>
                                                                 <td
                                                                     v-for="(col, cIndex) in question.columns"
                                                                     :key="`cell-${rIndex}-${cIndex}`"
@@ -2679,18 +2637,16 @@ watch(
                                             @toggle-rtl="question.isRtl = !question.isRtl"
                                         />
 
-                                        <textarea
+                                        <RichTextInput
                                             v-model="question.title"
-                                            v-auto-resize
-                                            data-auto-resize
-                                            rows="1"
-                                            :dir="question.isRtl ? 'rtl' : hasArabic(question.title) ? 'rtl' : 'auto'"
-                                            class="mb-3 w-full resize-none overflow-hidden rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium outline-none transition focus:border-indigo-600 sm:text-xl"
+                                            :dir="question.isRtl ? 'rtl' : isPredominantlyArabic(question.title) ? 'rtl' : 'auto'"
+                                            label="Pertanyaan"
+                                            class="mb-3 w-full rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium transition focus:border-indigo-600 sm:text-xl"
                                             :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                             placeholder="Tulis pertanyaan, rumus matematika $...$, atau ketik bahasa Arab..."
-                                            @input="handleAutoResize($event); markChanged('Question updated')"
-                                            @keydown="handleShiftEnterKeydown"
-                                        ></textarea>
+                                            data-question-title
+                                            @update:model-value="markChanged('Question updated')"
+                                        />
 
                                         <!-- Live Preview of Math & Quran Arabic Rendering -->
                                         <div
@@ -2708,17 +2664,15 @@ watch(
                                             </div>
                                         </div>
 
-                                        <textarea
+                                        <RichTextInput
                                             v-model="question.description"
-                                            v-auto-resize
-                                            data-auto-resize
-                                            rows="1"
-                                            class="mb-4 w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 outline-none transition focus:border-indigo-500"
-                                            placeholder="Description"
+                                            :dir="isPredominantlyArabic(question.description) ? 'rtl' : 'auto'"
+                                            label="Deskripsi soal"
+                                            class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 transition focus:border-indigo-500"
+                                            placeholder="Deskripsi (opsional)"
                                             :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                            @input="handleAutoResize($event); markChanged('Description updated')"
-                                            @keydown="handleShiftEnterKeydown"
-                                        ></textarea>
+                                            @update:model-value="markChanged('Description updated')"
+                                        />
 
                                         <!-- Media Rendering and Editing -->
                                         <div v-if="question.media && question.media.length" class="mb-4 space-y-4">
@@ -3094,15 +3048,13 @@ watch(
                                                         class="flex items-start gap-2 pt-1"
                                                     >
                                                         <span class="mt-0.5 text-xs font-bold text-slate-400">#{{ rIndex + 1 }}</span>
-                                                        <textarea
+                                                        <RichTextInput
                                                             v-model="question.rows[rIndex]"
-                                                            v-auto-resize
-                                                            data-auto-resize
-                                                            rows="1"
-                                                            class="min-w-0 flex-1 resize-none overflow-hidden border-b border-slate-200 bg-transparent py-0.5 text-xs outline-none focus:border-indigo-500"
-                                                            @input="handleAutoResize($event); markChanged('Row label updated')"
-                                                            @keydown="handleShiftEnterKeydown"
-                                                        ></textarea>
+                                                            :dir="isPredominantlyArabic(question.rows[rIndex]) ? 'rtl' : 'auto'"
+                                                            :label="`Baris ${rIndex + 1}`"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-0.5 text-xs focus:border-indigo-500"
+                                                            @update:model-value="markChanged('Row label updated')"
+                                                        />
                                                         <button
                                                             type="button"
                                                             class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
@@ -3131,15 +3083,13 @@ watch(
                                                         class="flex items-start gap-2 pt-1"
                                                     >
                                                         <span class="mt-0.5 text-xs font-bold text-slate-400">#{{ cIndex + 1 }}</span>
-                                                        <textarea
+                                                        <RichTextInput
                                                             v-model="question.columns[cIndex]"
-                                                            v-auto-resize
-                                                            data-auto-resize
-                                                            rows="1"
-                                                            class="min-w-0 flex-1 resize-none overflow-hidden border-b border-slate-200 bg-transparent py-0.5 text-xs outline-none focus:border-indigo-500"
-                                                            @input="handleAutoResize($event); markChanged('Column label updated')"
-                                                            @keydown="handleShiftEnterKeydown"
-                                                        ></textarea>
+                                                            :dir="isPredominantlyArabic(question.columns[cIndex]) ? 'rtl' : 'auto'"
+                                                            :label="`Kolom ${cIndex + 1}`"
+                                                            class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-0.5 text-xs focus:border-indigo-500"
+                                                            @update:model-value="markChanged('Column label updated')"
+                                                        />
                                                         <button
                                                             type="button"
                                                             class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
@@ -3164,19 +3114,19 @@ watch(
                                             >
                                                 <span class="block font-bold">Kunci jawaban benar:</span>
                                                 <div v-for="(colIdx, rowIdx) in question.answer" :key="`ans-${rowIdx}`" class="ml-2 font-medium">
-                                                    - {{ question.rows?.[rowIdx] }}:
+                                                    - {{ stripRichFormatting(question.rows?.[Number(rowIdx)]) }}:
                                                     <span class="font-bold">
                                                         {{
                                                             Array.isArray(colIdx)
-                                                                ? colIdx.map((c) => question.columns?.[c]).join(', ')
-                                                                : question.columns?.[colIdx]
+                                                                ? colIdx.map((c) => stripRichFormatting(question.columns?.[c])).join(', ')
+                                                                : stripRichFormatting(question.columns?.[colIdx])
                                                         }}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div v-else class="space-y-5">
+                                        <div v-else class="space-y-5" data-options-list>
                                             <div
                                                 v-if="question.type === 'Drop-down'"
                                                 class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-500"
@@ -3212,17 +3162,17 @@ watch(
                                                 </span>
 
                                                 <div class="flex min-w-0 flex-1 flex-col gap-1">
-                                                    <textarea
+                                                    <RichTextInput
                                                         v-model="question.options[optionIndex]"
-                                                        v-auto-resize
-                                                        data-auto-resize
-                                                        rows="1"
-                                                        :dir="hasArabic(question.options[optionIndex]) ? 'rtl' : 'auto'"
-                                                        class="w-full resize-none overflow-hidden border-0 border-b border-transparent bg-transparent p-0 outline-none transition focus:border-indigo-500"
+                                                        :multiline="question.type !== 'Drop-down'"
+                                                        enter="emit"
+                                                        :dir="isPredominantlyArabic(question.options[optionIndex]) ? 'rtl' : 'auto'"
+                                                        :label="`Pilihan ${optionIndex + 1}`"
+                                                        class="w-full border-0 border-b border-transparent bg-transparent p-0 transition focus:border-indigo-500"
                                                         :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                                        @input="handleAutoResize($event); markChanged('Option updated')"
-                                                        @keydown="handleOptionKeydown($event, question)"
-                                                    ></textarea>
+                                                        @update:model-value="markChanged('Option updated')"
+                                                        @enter="handleOptionEnter($event, question)"
+                                                    />
                                                     <div
                                                         v-if="hasMathOrArabic(question.options[optionIndex])"
                                                         class="inline-flex items-center gap-1 self-start rounded border border-indigo-100 bg-indigo-50/70 px-2 py-0.5 text-xs text-slate-800"
@@ -3253,7 +3203,7 @@ watch(
                                                             .map((a: any) => {
                                                                 const asNum = Number(a);
                                                                 if (!isNaN(asNum) && question.options[asNum] !== undefined) {
-                                                                    return question.options[asNum];
+                                                                    return stripRichFormatting(question.options[asNum]);
                                                                 }
                                                                 return a;
                                                             })
@@ -3270,7 +3220,7 @@ watch(
                                                     "
                                                     class="ml-1"
                                                 >
-                                                    {{ question.options[Number(question.answer)] || question.answer }}
+                                                    {{ stripRichFormatting(question.options[Number(question.answer)] || String(question.answer)) }}
                                                 </span>
                                                 <span v-else class="ml-1 text-emerald-600">belum dipilih</span>
                                             </div>
@@ -3350,20 +3300,16 @@ watch(
 
                                     <!-- Pembahasan: shown to students with their results (when shown in full) -->
                                     <div v-if="form.settings.isQuiz && (activeQuestionId === question.id || question.explanation)" class="lg:col-span-2">
-                                        <label :for="`explanation-${question.id}`" class="text-xs font-bold uppercase tracking-wider text-slate-500"
-                                            >Pembahasan (opsional)</label
-                                        >
-                                        <textarea
+                                        <p :id="`explanation-label-${question.id}`" class="text-xs font-bold uppercase tracking-wider text-slate-500">Pembahasan (opsional)</p>
+                                        <RichTextInput
                                             :id="`explanation-${question.id}`"
                                             v-model="question.explanation"
-                                            v-auto-resize
-                                            data-auto-resize
-                                            rows="1"
-                                            maxlength="5000"
+                                            :dir="isPredominantlyArabic(question.explanation) ? 'rtl' : 'auto'"
+                                            label="Pembahasan"
                                             placeholder="Jelaskan jawaban yang benar. Siswa melihatnya di halaman hasil bila hasil lengkap ditampilkan."
-                                            class="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:bg-white"
-                                            @input="markChanged('Pembahasan diperbarui')"
-                                        ></textarea>
+                                            class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition focus:border-indigo-500 focus:bg-white"
+                                            @update:model-value="markChanged('Pembahasan diperbarui')"
+                                        />
                                     </div>
 
                                     <div class="border-t border-slate-200 pt-4 lg:col-span-2">
@@ -3664,7 +3610,7 @@ watch(
                         >
                             <div class="flex flex-wrap items-start justify-between gap-4">
                                 <div class="min-w-0">
-                                    <h3 class="break-words text-base font-bold text-slate-900 sm:truncate sm:text-lg">{{ question.title }}</h3>
+                                    <RichContent :content="question.title" as="h3" class="break-words text-base font-bold text-slate-900 sm:truncate sm:text-lg" />
                                     <p class="mt-1 text-sm font-semibold text-slate-500">{{ question.total }} answer</p>
                                 </div>
                                 <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ question.type }}</span>
@@ -4465,7 +4411,7 @@ watch(
                             class="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
                         >
                             <option value="" disabled>Pilih jawaban</option>
-                            <option v-for="option in question.options" :key="option" :value="option">{{ option }}</option>
+                            <option v-for="option in question.options" :key="option" :value="option">{{ stripRichFormatting(option) }}</option>
                         </select>
                         <div v-else-if="scaleQuestionTypes.includes(question.type)" class="mt-4 flex gap-2">
                             <span
@@ -5204,6 +5150,9 @@ Jawaban: A, C</pre
                 </div>
             </div>
         </Transition>
+
+        <!-- Bold, italic, underline and highlighter over selected text of any field -->
+        <SelectionFormatToolbar />
 
         <FormDesigner
             v-if="showFormDesigner && activeDesign"
