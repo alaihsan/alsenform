@@ -295,3 +295,34 @@ test('a copy of a remedial exam is an exam of its own', function () {
     expect($this->exam->followUps()->count())->toBe(1)
         ->and(QuizForm::query()->latest('id')->first())->follow_up_of_id->toBeNull()->follow_up_kind->toBeNull();
 });
+
+test('a follow-up exam does not inherit the schedule of the exam, and counts questions only', function () {
+    // The exam closed yesterday; the remedial exam is made today.
+    $this->exam->update(['settings' => [...$this->exam->settings, 'schedule' => ['opensAt' => now()->subDays(2)->toISOString(), 'closesAt' => now()->subDay()->toISOString()]]]);
+
+    $response = $this->actingAs($this->teacher)->postJson(route('forms.follow-ups.store', $this->exam), [
+        'kind' => 'remedial',
+        'students' => ['user:'.$this->budi->id],
+        'source' => 'empty',
+    ])->assertCreated();
+
+    $remedial = QuizForm::query()->findOrFail($response->json('id'));
+    expect($remedial->settings)->not->toHaveKey('schedule')
+        ->and($remedial->scheduleState())->toBe('open');
+
+    // The teacher writes it with a section; the panel of the exam counts its questions only.
+    $remedial->update([
+        'published_at' => now(),
+        'questions' => [
+            ['id' => 1, 'title' => 'Bagian 1', 'type' => 'Section'],
+            remedialQuestion(2, 'Soal remedial'),
+            ['id' => 3, 'title' => 'Bacaan', 'type' => 'Title and description', 'description' => 'Teks'],
+        ],
+    ]);
+
+    $this->actingAs($this->teacher)->get(route('forms.edit', $this->exam))
+        ->assertInertia(fn (Assert $page) => $page->where('quizForm.responses.remedial.followUps.0.questionCount', 1));
+
+    $this->actingAs($this->budi)->get(route('forms.public', $remedial))
+        ->assertInertia(fn (Assert $page) => $page->where('accessRestricted', false));
+});

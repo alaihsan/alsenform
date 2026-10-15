@@ -82,7 +82,7 @@ Fitur editor lainnya:
 
 Seperti add-on Google Workspace, kemampuan tambahan dipasang sekali lalu dinyalakan atau dimatikan per ujian.
 
-- **Galeri add-on**: tombol puzzle di editor (Jelajahi add-on), atau menu akun → Add-on. Setiap add-on menjelaskan apa yang ditambahkannya dan data apa yang dibacanya sebelum dipasang.
+- **Galeri add-on**: tombol puzzle di editor (Jelajahi add-on), atau menu akun → Add-on. Add-on tampil sebagai kartu dalam grid (bisa disaring: semua, terpasang, belum dipasang); tombol **Detail** menjelaskan apa yang ditambahkannya dan data apa yang dibacanya. Setiap pemasangan dan pelepasan diminta konfirmasi dulu.
 - **Pasang** untuk diri sendiri; **admin** juga bisa memasang untuk semua guru (hanya admin yang bisa melepasnya).
 - **Per ujian**: tombol puzzle di editor menampilkan add-on yang terpasang dengan sakelar "Aktif di ujian ini". Yang menentukan adalah pemilik ujian: kolaborator melihat hasil yang sama, termasuk di berkas Excel.
 - **Melepas** add-on mematikannya di semua ujian pemiliknya tanpa menghapus data; saat dipasang lagi, pilihan tiap ujian kembali seperti semula.

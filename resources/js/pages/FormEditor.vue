@@ -571,7 +571,13 @@ const setAddonForExam = (addon: AddonEntry, on: boolean) => {
 /** Installed or removed in the gallery: the exam is loaded again for what the add-on adds or takes away. */
 const onAddonsChanged = (addons: AddonEntry[]) => {
     const previous = new Map(addonCatalog.value.map((addon) => [addon.key, addon]));
-    addonCatalog.value = addons.map((addon) => ({ ...previous.get(addon.key), ...addon }));
+    // The owner's installations are the exam's: installing switches its add-on on right away, also
+    // while a save is in flight and the exam is not reloaded.
+    addonCatalog.value = addons.map((addon) => ({
+        ...previous.get(addon.key),
+        ...addon,
+        ...(props.quizForm?.owner && props.quizForm.owner.id === page.props.auth?.user?.id ? { installedForOwner: addon.installed } : {}),
+    }));
     if (!isSaveInFlight) {
         router.reload({ only: ['quizForm'] });
     }
@@ -4793,7 +4799,7 @@ Jawaban: A, C</pre
         <!-- Modal Kolaborasi Kuis (Antar Guru) -->
         <div v-if="isAddonGalleryOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section
-                class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl duration-150 animate-in fade-in zoom-in-95"
+                class="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl duration-150 animate-in fade-in zoom-in-95"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="addon-gallery-title"
@@ -4818,9 +4824,9 @@ Jawaban: A, C</pre
                     </button>
                 </div>
                 <div class="space-y-5 overflow-y-auto p-5 sm:p-6">
-                    <div v-if="examAddons.length" class="rounded-2xl border border-slate-200 p-2">
-                        <p class="px-2 pb-1 pt-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Di ujian ini</p>
-                        <AddonExamSwitches :addons="examAddons" :is-on="isAddonOnForExam" @toggle="setAddonForExam" />
+                    <div v-if="examAddons.length" class="rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+                        <p class="px-2 pb-2 pt-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Di ujian ini</p>
+                        <AddonExamSwitches :addons="examAddons" :is-on="isAddonOnForExam" layout="grid" @toggle="setAddonForExam" />
                     </div>
                     <AddonGallery
                         :addons="addonCatalog"
@@ -5096,7 +5102,11 @@ Jawaban: A, C</pre
                         <p class="mt-1 text-xs leading-relaxed text-slate-600">
                             Tema siap pakai, gambar header, logo sekolah, foto latar, huruf, bentuk kartu dan CSS sendiri, untuk editor dan semua halaman siswa.
                         </p>
+                        <p v-if="formDesignerAddon.installed && !formDesignerAddon.installedForOwner" class="mt-3 text-xs font-semibold text-amber-700">
+                            Pemilik ujian ini belum memasang Desainer Form, jadi desain belum dapat dipakai di ujian ini.
+                        </p>
                         <button
+                            v-else
                             type="button"
                             class="mt-3 w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"
                             @click="startFormDesigner"

@@ -1,23 +1,38 @@
 <script setup lang="ts">
 import type { AddonEntry } from '@/components/addons/AddonGallery.vue';
-import { FlaskConical, Brain, GraduationCap, KeyRound, Paintbrush, Puzzle } from 'lucide-vue-next';
+import { Brain, FlaskConical, GraduationCap, KeyRound, Paintbrush, Puzzle } from 'lucide-vue-next';
 
-defineProps<{
-    /** Add-ons installed for this teacher or for the exam's owner. */
-    addons: AddonEntry[];
-    isOn: (addon: AddonEntry) => boolean;
-}>();
+withDefaults(
+    defineProps<{
+        /** Add-ons installed for this teacher or for the exam's owner. */
+        addons: AddonEntry[];
+        isOn: (addon: AddonEntry) => boolean;
+        /** A list in the toolbar menu, a grid in the wide add-on window. */
+        layout?: 'list' | 'grid';
+    }>(),
+    { layout: 'list' },
+);
 
 const emit = defineEmits<{
     toggle: [addon: AddonEntry, on: boolean];
 }>();
 
-const ICONS: Record<string, unknown> = { 'flask-conical': FlaskConical, 'key-round': KeyRound, 'graduation-cap': GraduationCap, brain: Brain, paintbrush: Paintbrush };
+const ICONS: Record<string, unknown> = {
+    'flask-conical': FlaskConical,
+    'key-round': KeyRound,
+    'graduation-cap': GraduationCap,
+    brain: Brain,
+    paintbrush: Paintbrush,
+};
 </script>
 
 <template>
-    <ul class="space-y-1">
-        <li v-for="addon in addons" :key="addon.key" class="flex items-center gap-3 rounded-xl px-2 py-2">
+    <ul :class="layout === 'grid' ? 'grid gap-2 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-1'">
+        <li
+            v-for="addon in addons"
+            :key="addon.key"
+            :class="['flex items-center gap-3 rounded-xl px-2 py-2', layout === 'grid' ? 'border border-slate-200 bg-white px-3 py-2.5' : '']"
+        >
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                 <component :is="ICONS[addon.icon] ?? Puzzle" class="h-5 w-5" />
             </div>

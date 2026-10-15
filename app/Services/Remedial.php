@@ -7,6 +7,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
 use App\Support\HtmlToPlainText;
+use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -67,7 +68,7 @@ class Remedial
                     'title' => $this->plain((string) $followUp->title),
                     'editUrl' => route('forms.edit', ['quizForm' => $followUp->slug]),
                     'isPublished' => $followUp->published_at !== null,
-                    'questionCount' => is_array($followUp->questions) ? count($followUp->questions) : 0,
+                    'questionCount' => count(QuizItems::questions($followUp->questions)),
                     'participants' => $followUp->participants_count,
                     'submitted' => $followUp->submittedStudentCount(),
                     'createdAt' => $followUp->created_at?->diffForHumans(),
@@ -192,8 +193,9 @@ class Remedial
                     $questions,
                     array_keys($questions),
                 )),
-                // The rules of the exam (time, lock, add-ons), without a draw meant for its questions.
-                'settings' => Arr::except(is_array($exam->settings) ? $exam->settings : [], ['questionDraw']),
+                // The rules of the exam (time, lock, add-ons), without a draw meant for its questions
+                // and without its schedule: a follow-up made after the exam closed must not be closed too.
+                'settings' => Arr::except(is_array($exam->settings) ? $exam->settings : [], ['questionDraw', 'schedule']),
             ]);
 
             if ($restricted) {
@@ -363,10 +365,8 @@ class Remedial
      */
     protected function questionsOf(QuizForm $exam): array
     {
-        return array_values(array_filter(
-            is_array($exam->questions) ? $exam->questions : [],
-            fn (mixed $question): bool => is_array($question) && isset($question['id']),
-        ));
+        // Sections and "title and description" items are not questions.
+        return QuizItems::questions($exam->questions);
     }
 
     /**

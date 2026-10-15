@@ -928,8 +928,13 @@ const examExpiresAt = ref<string | null>(props.session?.expires_at ?? null);
 let examClockOffset = serverClockOffset;
 const isStartingExam = ref(false);
 const startExamError = ref('');
-/* Token Ujian add-on: six letters from the proctor, typed before starting. */
-const requiresExamToken = computed<boolean>(() => Boolean(props.quizForm.requiresExamToken));
+/* Token Ujian add-on: six letters from the proctor, typed before starting. The proctor may switch
+ * it on after this page was opened: the field then appears when the server asks for the token. */
+const requiresExamToken = ref<boolean>(Boolean(props.quizForm.requiresExamToken));
+watch(
+    () => props.quizForm.requiresExamToken,
+    (required) => (requiresExamToken.value = Boolean(required)),
+);
 const examToken = ref('');
 const examTokenError = ref('');
 const examTokenInput = ref<HTMLInputElement | null>(null);
@@ -942,6 +947,7 @@ const updateExamToken = (event: Event) => {
     examTokenError.value = '';
 };
 const showExamTokenError = (message: string) => {
+    requiresExamToken.value = true;
     examTokenError.value = message;
     nextTick(() => examTokenInput.value?.focus());
 };

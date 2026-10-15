@@ -57,7 +57,10 @@ const fetchToken = async () => {
         if (retryTimer) {
             clearTimeout(retryTimer);
         }
-        retryTimer = setTimeout(fetchToken, 5000);
+        retryTimer = setTimeout(() => {
+            retryTimer = null;
+            fetchToken();
+        }, 5000);
     } finally {
         isFetching = false;
     }
@@ -80,8 +83,9 @@ const start = () => {
     fetchToken();
     ticker ??= setInterval(() => {
         now.value = Date.now();
-        // A new token at :00, :15, :30 and :45 of the server's clock.
-        if (state.value && secondsLeft.value <= 0) {
+        // A new token at :00, :15, :30 and :45 of the server's clock (while the server cannot be
+        // reached, the retry every 5 seconds asks for it instead of every tick).
+        if (state.value && secondsLeft.value <= 0 && !retryTimer) {
             fetchToken();
         }
     }, 1000);

@@ -148,3 +148,31 @@ test('only known add-ons can be switched per exam, and students have no gallery'
     $this->actingAs($this->teacher)->postJson(route('addons.install', 'tidak-ada'))->assertNotFound();
     $this->actingAs(User::factory()->create(['role' => 'siswa']))->get(route('addons.index'))->assertForbidden();
 });
+
+test('removing an add-on an admin installed for everyone says it stays on', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    app(Addons::class)->install(Addon::ItemAnalysis, $admin, forEveryone: true);
+    app(Addons::class)->install(Addon::ItemAnalysis, $this->teacher);
+    app()->forgetScopedInstances();
+
+    // The teacher's own installation goes; the one for everyone stays.
+    $this->actingAs($this->teacher)->deleteJson(route('addons.uninstall', 'item-analysis'))
+        ->assertOk()
+        ->assertJsonPath('message', 'Analisis Butir Soal tetap aktif karena dipasang admin untuk semua guru.')
+        ->assertJsonPath('addons.0.installed', true);
+    expect(InstalledAddon::query()->whereNull('user_id')->count())->toBe(1)
+        ->and(InstalledAddon::query()->where('user_id', $this->teacher->id)->count())->toBe(0);
+
+    // The admin's own installation stays when theirs for everyone goes.
+    app(Addons::class)->install(Addon::ItemAnalysis, $admin);
+    app()->forgetScopedInstances();
+    $this->actingAs($admin)->deleteJson(route('addons.uninstall', 'item-analysis').'?everyone=1')
+        ->assertOk()
+        ->assertJsonPath('message', 'Analisis Butir Soal dilepas dari semua guru, tetapi tetap terpasang untuk Anda sendiri.');
+
+    app()->forgetScopedInstances();
+    $this->actingAs($this->teacher)->deleteJson(route('addons.uninstall', 'item-analysis'))
+        ->assertOk()
+        ->assertJsonPath('message', 'Analisis Butir Soal dilepas.')
+        ->assertJsonPath('addons.0.installed', false);
+});

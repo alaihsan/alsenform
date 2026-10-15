@@ -38,8 +38,16 @@ class AddonController extends Controller
         $forEveryone = $this->forEveryone($request);
         $addons->uninstall($addon, $request->user(), $forEveryone);
 
+        // Removed by this teacher, but an admin installed it for everyone (or, removed for
+        // everyone, the admin has it installed too): it stays installed, and the message says so.
+        $message = match (true) {
+            ! $addons->isInstalledFor($addon, $request->user()) => "{$addon->label()} dilepas.",
+            $forEveryone => "{$addon->label()} dilepas dari semua guru, tetapi tetap terpasang untuk Anda sendiri.",
+            default => "{$addon->label()} tetap aktif karena dipasang admin untuk semua guru.",
+        };
+
         return response()->json([
-            'message' => "{$addon->label()} dilepas.",
+            'message' => $message,
             'addons' => $addons->catalog($request->user()),
         ]);
     }
