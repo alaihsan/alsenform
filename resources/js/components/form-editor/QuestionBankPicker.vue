@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { questionTypeLabel } from '@/constants/form-editor';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
 import { Check, Image as ImageIcon, KeyRound, Library, Loader2, Search } from 'lucide-vue-next';
@@ -29,21 +30,7 @@ const emit = defineEmits<{
     add: [questions: Record<string, any>[]];
 }>();
 
-const TYPE_LABELS: Record<string, string> = {
-    'Multiple choice': 'Pilihan Ganda',
-    Checkboxes: 'Kotak Centang',
-    'Drop-down': 'Drop-down',
-    'Short answer': 'Isian Singkat',
-    Paragraph: 'Uraian',
-    'File upload': 'Unggah Berkas',
-    'Linear scale': 'Skala Linear',
-    Rating: 'Rating',
-    'Multiple-choice grid': 'Kisi Pilihan Ganda',
-    'Tick box grid': 'Kisi Kotak Centang',
-    Date: 'Tanggal',
-    Time: 'Waktu',
-};
-const typeLabel = (type: string) => TYPE_LABELS[type] ?? type;
+const typeLabel = questionTypeLabel;
 
 const search = ref('');
 const typeFilter = ref('');

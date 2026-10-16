@@ -569,6 +569,18 @@ test('users can create new quiz using educational templates', function () {
         ->and($form->questions[0]['options'])->toHaveCount(4);
 });
 
+test('a blank form starts in Indonesian, with no description for the students to read', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('forms.create'))->assertRedirect();
+
+    $form = QuizForm::query()->where('user_id', $user->id)->latest('id')->first();
+    expect($form->title)->toBe('Formulir tanpa judul')
+        ->and($form->description)->toBe('')
+        ->and($form->questions[0]['title'])->toBe('Pertanyaan tanpa judul')
+        ->and($form->questions[0]['options'])->toBe(['Opsi 1']);
+});
+
 test('guests are redirected from help page to login', function () {
     $response = $this->get(route('help'));
     $response->assertRedirect(route('login'));

@@ -27,10 +27,14 @@ import {
     gridQuestionTypes,
     noOptionQuestionTypes,
     optionQuestionTypes,
+    OTHER_OPTIONS,
     pieColors,
+    PLACEHOLDER_QUESTION_TITLES,
+    questionTypeLabel,
     questionTypes,
     scaleQuestionTypes,
     templatePresets,
+    UNTITLED_QUESTION,
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
@@ -201,7 +205,7 @@ const toggleCohort = (id: number) => {
     } else {
         selectedCohortIds.value.push(id);
     }
-    markChanged('Cohort updated');
+    markChanged('Cohort diperbarui');
 };
 
 const setCohortRestriction = (restricted: boolean) => {
@@ -209,7 +213,7 @@ const setCohortRestriction = (restricted: boolean) => {
     if (!restricted) {
         selectedCohortIds.value = [];
     }
-    markChanged('Cohort restriction updated');
+    markChanged('Batasan cohort diperbarui');
 };
 const showPreview = ref(false);
 const showPublish = ref(false);
@@ -232,12 +236,12 @@ const disableCardDrag = () => {
 
 const setMediaWidth = (media: any, width: string) => {
     media.width = width;
-    markChanged('Media size updated');
+    markChanged('Ukuran media diperbarui');
 };
 
 const setMediaAlign = (media: any, align: 'left' | 'center' | 'right') => {
     media.align = align;
-    markChanged('Media alignment updated');
+    markChanged('Perataan media diperbarui');
 };
 
 const openLightbox = (media: any) => {
@@ -357,7 +361,7 @@ const removeCollaborator = (collaboratorId: number, isSelf = false) => {
     );
 };
 
-const statusMessage = ref('All changes saved locally');
+const statusMessage = ref('Semua perubahan tersimpan');
 const showThemeSidebar = ref(false);
 const previewAnswers = reactive<Record<number, PreviewAnswer>>({});
 const appOrigin = ref(typeof window === 'undefined' ? '' : window.location.origin);
@@ -466,7 +470,7 @@ watch(activeTab, (newTab) => {
 
 const markSettingsChanged = () => {
     form.settings.collectEmail = form.settings.emailCollectionMode !== 'none';
-    markChanged('Settings updated');
+    markChanged('Pengaturan diperbarui');
 };
 
 /*
@@ -701,7 +705,7 @@ const debouncedRecordHistory = useDebounceFn(() => {
     recordHistory();
 }, 500);
 
-const markChanged = (message = 'Draft updated') => {
+const markChanged = (message = 'Draf diperbarui') => {
     statusMessage.value = message;
     debouncedRecordHistory();
 };
@@ -857,7 +861,7 @@ const saveDraft = (publishAfterSave = false, onComplete?: () => void, onSaved?: 
 
 const saveDraftAndCopy = () => {
     saveDraft(false, undefined, () => {
-        markChanged('Draft saved');
+        markChanged('Draf disimpan');
         copyShareUrl();
     });
 };
@@ -912,10 +916,10 @@ const reloadLatestVersion = () => {
 const addQuestion = (type: QuestionType = 'Multiple choice') => {
     const question: Question = {
         id: nextQuestionId++,
-        title: ['Paragraph', 'Short answer'].includes(type) ? `${type} question` : 'Untitled Question',
+        title: UNTITLED_QUESTION,
         description: '',
         type,
-        options: noOptionQuestionTypes.includes(type) ? [] : scaleQuestionTypes.includes(type) ? ['1', '2', '3', '4', '5'] : ['Option 1'],
+        options: noOptionQuestionTypes.includes(type) ? [] : scaleQuestionTypes.includes(type) ? ['1', '2', '3', '4', '5'] : ['Opsi 1'],
         rows: gridQuestionTypes.includes(type) ? ['Baris 1', 'Baris 2'] : [],
         columns: gridQuestionTypes.includes(type) ? ['Kolom 1', 'Kolom 2'] : [],
         answer: gridQuestionTypes.includes(type) ? {} : type === 'Checkboxes' ? [] : '',
@@ -925,7 +929,7 @@ const addQuestion = (type: QuestionType = 'Multiple choice') => {
     };
 
     insertAfterActive(question);
-    markChanged('Question added');
+    markChanged('Pertanyaan ditambahkan');
 };
 
 /*
@@ -1026,12 +1030,12 @@ const setOptionGoTo = (question: Question, optionIndex: number, target: SectionT
 };
 
 const insertTextIntoQuestion = (question: any, snippet: string) => {
-    if (!question.title || question.title === 'Untitled Question') {
+    if (!question.title || PLACEHOLDER_QUESTION_TITLES.includes(question.title)) {
         question.title = snippet;
     } else {
         question.title += ` ${snippet}`;
     }
-    markChanged('Question formula or arabic inserted');
+    markChanged('Rumus atau teks Arab disisipkan');
 };
 
 const duplicateQuestion = (question: Question) => {
@@ -1055,19 +1059,19 @@ const duplicateQuestion = (question: Question) => {
     const index = form.questions.findIndex((item) => item.id === question.id);
     form.questions.splice(index + 1, 0, copy);
     activeQuestionId.value = copy.id;
-    markChanged('Question duplicated');
+    markChanged('Pertanyaan diduplikat');
 };
 
 const deleteQuestion = (question: Question) => {
     if (form.questions.length === 1 && !isContentItem(question)) {
-        question.title = 'Untitled Question';
+        question.title = UNTITLED_QUESTION;
         question.description = '';
-        question.options = ['Option 1'];
+        question.options = ['Opsi 1'];
         question.answer = '';
         question.type = 'Multiple choice';
         question.required = false;
         question.media = [];
-        markChanged('Question reset');
+        markChanged('Pertanyaan dikosongkan');
         return;
     }
 
@@ -1078,12 +1082,12 @@ const deleteQuestion = (question: Question) => {
         return;
     }
     activeQuestionId.value = form.questions[Math.max(0, index - 1)].id;
-    markChanged('Question deleted');
+    markChanged('Pertanyaan dihapus');
 };
 
-const addOption = (question: Question, label = `Option ${question.options.length + 1}`) => {
+const addOption = (question: Question, label = `Opsi ${question.options.length + 1}`) => {
     question.options.push(label);
-    markChanged('Option added');
+    markChanged('Pilihan ditambahkan');
 };
 
 /** Enter in an option adds the next one and moves there (Shift+Enter is a line break). */
@@ -1109,7 +1113,7 @@ const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
     question.optionGoTo?.splice(optionIndex, 1);
     if (question.options.length === 0 && !noOptionQuestionTypes.includes(question.type)) {
-        question.options.push('Option 1');
+        question.options.push('Opsi 1');
     }
 
     if (question.type === 'Checkboxes') {
@@ -1132,7 +1136,7 @@ const removeOption = (question: Question, optionIndex: number) => {
             question.answer = numIdx - 1;
         }
     }
-    markChanged('Option removed');
+    markChanged('Pilihan dihapus');
 };
 
 const isQuestionAnswered = (question: Question) => {
@@ -1219,7 +1223,7 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
 
     if (optionQuestionTypes.includes(type)) {
         if (question.options.length === 0 || gridQuestionTypes.includes(previousType)) {
-            question.options = ['Option 1'];
+            question.options = ['Opsi 1'];
         }
         normalizeCorrectAnswer(question);
         normalizeChoiceAnswer(question);
@@ -1238,7 +1242,7 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
     } else {
         question.answer = '';
     }
-    markChanged('Question type changed');
+    markChanged('Jenis pertanyaan diubah');
 };
 
 const setGridAnswer = (question: Question, rowIndex: number, colIndex: number, mode: 'single' | 'multiple') => {
@@ -1258,7 +1262,7 @@ const setGridAnswer = (question: Question, rowIndex: number, colIndex: number, m
             question.answer[rowIndex].push(colIndex);
         }
     }
-    markChanged('Grid answer key updated');
+    markChanged('Kunci jawaban kisi diperbarui');
 };
 
 const isCorrectAnswer = (question: Question, optionIndex: number | string) => {
@@ -1296,7 +1300,7 @@ const setCorrectAnswer = (question: Question, optionIndex: number | string) => {
     } else {
         question.answer = idx;
     }
-    markChanged('Correct answer updated');
+    markChanged('Jawaban benar diperbarui');
 };
 
 const checkboxAnswerIncludes = (question: Question, option: string) => {
@@ -1362,7 +1366,7 @@ const addMediaToActiveQuestion = (type: 'image' | 'video') => {
         isUploading: false,
         uploadError: '',
     });
-    markChanged(type === 'image' ? 'Image added to question' : 'Video added to question');
+    markChanged(type === 'image' ? 'Gambar ditambahkan ke pertanyaan' : 'Video ditambahkan ke pertanyaan');
 };
 
 const handleMediaUpload = async (event: Event, media: any) => {
@@ -1393,7 +1397,7 @@ const handleMediaUpload = async (event: Event, media: any) => {
             },
         });
         media.url = response.data.url;
-        markChanged('Media uploaded successfully');
+        markChanged('Media berhasil diunggah');
     } catch (error: any) {
         console.error(error);
         const errMsg = error.response?.data?.message || '';
@@ -1425,7 +1429,7 @@ const moveQuestion = (fromId: number, toId: number) => {
     const [movedQuestion] = form.questions.splice(fromIndex, 1);
     form.questions.splice(toIndex, 0, movedQuestion);
     activeQuestionId.value = movedQuestion.id;
-    markChanged('Question reordered');
+    markChanged('Urutan pertanyaan diubah');
 };
 
 const handleDragStart = (question: Question, event: DragEvent) => {
@@ -1534,7 +1538,7 @@ const addQuestionsFromBank = (bankQuestions: Record<string, any>[]) => {
         const question: Question = {
             ...copy,
             id: nextQuestionId++,
-            title: copy.title || 'Untitled Question',
+            title: copy.title || UNTITLED_QUESTION,
             description: copy.description || '',
             type: copy.type || 'Multiple choice',
             options: Array.isArray(copy.options) ? copy.options : [],
@@ -1559,7 +1563,7 @@ const downloadImportTemplate = () => {
     link.href = route('questions.import.template');
     link.download = 'template_import_soal_alsenform.docx';
     link.click();
-    markChanged('DOCX template downloaded');
+    markChanged('Template DOCX diunduh');
 };
 
 const handleImportDocxFile = async (event: Event) => {
@@ -1605,7 +1609,7 @@ const handleImportDocxFile = async (event: Event) => {
 
                 const question: Question = {
                     id: nextQuestionId++,
-                    title: q.title || 'Untitled Question',
+                    title: q.title || UNTITLED_QUESTION,
                     description: q.description || '',
                     type: q.type || 'Multiple choice',
                     options: Array.isArray(q.options) ? [...q.options] : [],
@@ -1670,7 +1674,7 @@ const handleImportExamViewFile = async (event: Event) => {
             importedQuestions.forEach((q: any) => {
                 const question: Question = {
                     id: nextQuestionId++,
-                    title: q.title || 'Untitled Question',
+                    title: q.title || UNTITLED_QUESTION,
                     description: q.description || '',
                     type: q.type || 'Multiple choice',
                     options: Array.isArray(q.options) ? [...q.options] : [],
@@ -1716,7 +1720,7 @@ const handleImportExamViewFile = async (event: Event) => {
 const copyShareUrl = async () => {
     try {
         await navigator.clipboard.writeText(shareUrl.value);
-        markChanged('Link copied');
+        markChanged('Tautan disalin');
     } catch {
         markChanged(shareUrl.value);
     }
@@ -1786,7 +1790,7 @@ const undo = () => {
         form.questions = state.questions;
         form.settings = state.settings;
         isUndoingRedoing = false;
-        statusMessage.value = 'Undo performed';
+        statusMessage.value = 'Perubahan dibatalkan';
         triggerToast('Undo berhasil dilakukan');
     }
 };
@@ -1801,7 +1805,7 @@ const redo = () => {
         form.questions = state.questions;
         form.settings = state.settings;
         isUndoingRedoing = false;
-        statusMessage.value = 'Redo performed';
+        statusMessage.value = 'Perubahan diulang';
         triggerToast('Redo berhasil dilakukan');
     }
 };
@@ -1995,7 +1999,7 @@ watch(
                 <button
                     type="button"
                     class="grid h-9 w-9 shrink-0 grid-cols-2 gap-1 rounded-xl bg-indigo-500 p-1.5 text-white shadow-[0_3px_0_#4338ca] transition hover:-translate-y-0.5 hover:shadow-[0_5px_0_#4338ca]"
-                    aria-label="Back to dashboard"
+                    aria-label="Kembali ke beranda"
                     title="Kembali ke Dashboard"
                     @click="navigateBackToDashboard"
                 >
@@ -2010,7 +2014,7 @@ watch(
                         v-model="form.title"
                         type="text"
                         class="min-w-0 max-w-[170px] border-0 bg-transparent p-0 text-lg font-medium outline-none transition focus:border-b focus:border-indigo-500 sm:max-w-md sm:text-xl"
-                        @input="markChanged('Title updated')"
+                        @input="markChanged('Judul diperbarui')"
                         @blur="handleTitleBlur"
                         @change="handleTitleBlur"
                         @keydown.enter.prevent="handleTitleBlur"
@@ -2024,15 +2028,15 @@ watch(
                             <button
                                 type="button"
                                 class="hidden rounded-full p-2 transition hover:bg-slate-100 data-[state=open]:bg-indigo-50 data-[state=open]:text-indigo-700 lg:block"
-                                aria-label="Add-ons"
-                                title="Add-ons"
+                                aria-label="Add-on"
+                                title="Add-on"
                             >
                                 <Puzzle class="h-5 w-5" />
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" class="z-50 mt-1.5 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                             <div class="flex items-center justify-between px-2 pb-1 pt-1.5">
-                                <p class="text-sm font-bold text-slate-900">Add-ons</p>
+                                <p class="text-sm font-bold text-slate-900">Add-on</p>
                                 <DropdownMenuItem
                                     class="cursor-pointer rounded-lg px-2 py-1 text-xs font-bold text-indigo-600 focus:bg-indigo-50 focus:text-indigo-700"
                                     @select="isAddonGalleryOpen = true"
@@ -2060,7 +2064,7 @@ watch(
                     >
                         <Palette class="h-5 w-5" />
                     </button>
-                    <button type="button" class="rounded-full p-2 transition hover:bg-slate-100" aria-label="Preview" @click="openPreview">
+                    <button type="button" class="rounded-full p-2 transition hover:bg-slate-100" aria-label="Pratinjau" @click="openPreview">
                         <Eye class="h-5 w-5" />
                     </button>
                     <button
@@ -2086,7 +2090,7 @@ watch(
                     <button
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
-                        aria-label="Copy & Edit link"
+                        aria-label="Salin dan ubah tautan"
                         @click="showPublish = true"
                     >
                         <Link2 class="h-5 w-5" />
@@ -2094,7 +2098,7 @@ watch(
                     <button
                         type="button"
                         class="relative hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
-                        aria-label="Invite collaborators"
+                        aria-label="Undang kolaborator"
                         title="Kolaborasi Kuis Antar Guru"
                         @click="openCollaboratorModal"
                     >
@@ -2154,7 +2158,7 @@ watch(
                             class="absolute right-0 top-11 w-52 rounded-2xl border border-slate-200 bg-white p-2 text-sm font-medium shadow-lg"
                         >
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="showPublish = true">
-                                Copy public link
+                                Salin tautan publik
                             </button>
                             <button
                                 type="button"
@@ -2168,7 +2172,7 @@ watch(
                                 Kolaborasi Kuis
                             </button>
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="openPreview">
-                                Open preview
+                                Buka pratinjau
                             </button>
                             <button
                                 type="button"
@@ -2179,7 +2183,7 @@ watch(
                                 "
                             >
                                 <Puzzle class="h-4 w-4 text-indigo-600" />
-                                Add-ons
+                                Add-on
                             </button>
                             <button
                                 type="button"
@@ -2327,7 +2331,7 @@ watch(
                                     activeDesign ? 'af-title' : '',
                                 ]"
                                 :style="activeDesign ? undefined : { fontFamily: form.settings.questionFont ?? 'inherit' }"
-                                @input="markChanged('Title updated')"
+                                @input="markChanged('Judul diperbarui')"
                                 @blur="handleTitleBlur"
                                 @change="handleTitleBlur"
                                 @keydown.enter.prevent="handleTitleBlur"
@@ -2338,7 +2342,7 @@ watch(
                                 class="af-description w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 transition focus:border-indigo-500 sm:text-lg"
                                 :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
                                 placeholder="Deskripsi ujian"
-                                @update:model-value="markChanged('Description updated')"
+                                @update:model-value="markChanged('Deskripsi diperbarui')"
                             />
                         </div>
                     </section>
@@ -2474,7 +2478,7 @@ watch(
                                                     type="number"
                                                     min="0"
                                                     class="w-16 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-center text-sm font-extrabold outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
-                                                    @input="markChanged('Points updated')"
+                                                    @input="markChanged('Poin diperbarui')"
                                                 />
                                             </div>
                                         </div>
@@ -2497,7 +2501,7 @@ watch(
                                                     type="text"
                                                     class="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/30 px-3.5 text-sm outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                                                     placeholder="Masukkan teks jawaban yang benar..."
-                                                    @input="markChanged('Answer key updated')"
+                                                    @input="markChanged('Kunci jawaban diperbarui')"
                                                 />
                                             </div>
 
@@ -2563,7 +2567,7 @@ watch(
                                                         ]"
                                                         @click="
                                                             question.answer = option;
-                                                            markChanged('Answer key updated');
+                                                            markChanged('Kunci jawaban diperbarui');
                                                         "
                                                     >
                                                         <RichContent :content="option" />
@@ -2587,7 +2591,7 @@ watch(
                                                         ]"
                                                         @click="
                                                             question.answer = option;
-                                                            markChanged('Answer key updated');
+                                                            markChanged('Kunci jawaban diperbarui');
                                                         "
                                                     >
                                                         <Star class="h-8 w-8 fill-current" />
@@ -2602,7 +2606,7 @@ watch(
                                                     v-model="question.answer"
                                                     type="date"
                                                     class="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-indigo-600"
-                                                    @change="markChanged('Answer key updated')"
+                                                    @change="markChanged('Kunci jawaban diperbarui')"
                                                 />
                                             </div>
 
@@ -2613,7 +2617,7 @@ watch(
                                                     v-model="question.answer"
                                                     type="time"
                                                     class="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-sm outline-none focus:border-indigo-600"
-                                                    @change="markChanged('Answer key updated')"
+                                                    @change="markChanged('Kunci jawaban diperbarui')"
                                                 />
                                             </div>
 
@@ -2720,7 +2724,7 @@ watch(
                                             :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"
                                             placeholder="Tulis pertanyaan, rumus matematika $...$, atau ketik bahasa Arab..."
                                             data-question-title
-                                            @update:model-value="markChanged('Question updated')"
+                                            @update:model-value="markChanged('Pertanyaan diperbarui')"
                                         />
 
                                         <!-- Live Preview of Math & Quran Arabic Rendering -->
@@ -2746,7 +2750,7 @@ watch(
                                             class="mb-4 w-full border-0 border-b border-transparent bg-transparent p-0 text-sm text-slate-500 transition focus:border-indigo-500"
                                             placeholder="Deskripsi (opsional)"
                                             :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                            @update:model-value="markChanged('Description updated')"
+                                            @update:model-value="markChanged('Deskripsi diperbarui')"
                                         />
 
                                         <!-- Media Rendering and Editing -->
@@ -2777,7 +2781,7 @@ watch(
                                                             title="Hapus media"
                                                             @click.stop="
                                                                 question.media.splice(mediaIndex, 1);
-                                                                markChanged('Media removed');
+                                                                markChanged('Media dihapus');
                                                             "
                                                         >
                                                             <Trash2 class="h-4 w-4" />
@@ -2862,7 +2866,7 @@ watch(
                                                                 : 'Masukkan Link YouTube (https://youtube.com/...)'
                                                         "
                                                         class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-indigo-500"
-                                                        @input="markChanged('Media URL updated')"
+                                                        @input="markChanged('URL media diperbarui')"
                                                     />
                                                 </div>
 
@@ -3051,7 +3055,7 @@ watch(
                                                     class="text-xs font-bold text-indigo-600 hover:underline"
                                                     @click.stop="
                                                         question.options.push(String(question.options.length + 1));
-                                                        markChanged('Scale extended');
+                                                        markChanged('Skala ditambah');
                                                     "
                                                 >
                                                     + Tambah Poin Skala
@@ -3062,7 +3066,7 @@ watch(
                                                     class="ml-4 text-xs font-bold text-red-600 hover:underline"
                                                     @click.stop="
                                                         question.options.pop();
-                                                        markChanged('Scale reduced');
+                                                        markChanged('Skala dikurangi');
                                                     "
                                                 >
                                                     Kurangi Skala
@@ -3086,7 +3090,7 @@ watch(
                                                     class="text-xs font-bold text-indigo-600 hover:underline"
                                                     @click.stop="
                                                         question.options.push(String(question.options.length + 1));
-                                                        markChanged('Rating extended');
+                                                        markChanged('Rating ditambah');
                                                     "
                                                 >
                                                     + Tambah Skala Rating
@@ -3097,7 +3101,7 @@ watch(
                                                     class="ml-4 text-xs font-bold text-red-600 hover:underline"
                                                     @click.stop="
                                                         question.options.pop();
-                                                        markChanged('Rating reduced');
+                                                        markChanged('Rating dikurangi');
                                                     "
                                                 >
                                                     Kurangi Rating
@@ -3128,7 +3132,7 @@ watch(
                                                             :dir="isPredominantlyArabic(question.rows[rIndex]) ? 'rtl' : 'auto'"
                                                             :label="`Baris ${rIndex + 1}`"
                                                             class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-0.5 text-xs focus:border-indigo-500"
-                                                            @update:model-value="markChanged('Row label updated')"
+                                                            @update:model-value="markChanged('Label baris diperbarui')"
                                                         />
                                                         <button
                                                             type="button"
@@ -3163,7 +3167,7 @@ watch(
                                                             :dir="isPredominantlyArabic(question.columns[cIndex]) ? 'rtl' : 'auto'"
                                                             :label="`Kolom ${cIndex + 1}`"
                                                             class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-0.5 text-xs focus:border-indigo-500"
-                                                            @update:model-value="markChanged('Column label updated')"
+                                                            @update:model-value="markChanged('Label kolom diperbarui')"
                                                         />
                                                         <button
                                                             type="button"
@@ -3212,7 +3216,7 @@ watch(
                                             <div
                                                 v-for="(option, optionIndex) in question.options"
                                                 :key="`${question.id}-${optionIndex}`"
-                                                v-show="option !== 'Other' || !isQuestionAnswered(question)"
+                                                v-show="!OTHER_OPTIONS.includes(option) || !isQuestionAnswered(question)"
                                                 class="flex items-start gap-3 pt-1 text-base transition hover:translate-x-1 sm:text-lg"
                                             >
                                                 <!-- Visual icon only for checkboxes/radio in edit mode -->
@@ -3245,7 +3249,7 @@ watch(
                                                         :label="`Pilihan ${optionIndex + 1}`"
                                                         class="w-full border-0 border-b border-transparent bg-transparent p-0 transition focus:border-indigo-500"
                                                         :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                                        @update:model-value="markChanged('Option updated')"
+                                                        @update:model-value="markChanged('Pilihan diperbarui')"
                                                         @enter="handleOptionEnter($event, question)"
                                                     />
                                                     <div
@@ -3257,7 +3261,7 @@ watch(
                                                     </div>
                                                     <!-- "Buka bagian berdasarkan jawaban": where this option sends the student -->
                                                     <div
-                                                        v-if="question.branching && canSendByAnswer(question) && option !== 'Other'"
+                                                        v-if="question.branching && canSendByAnswer(question) && !OTHER_OPTIONS.includes(option)"
                                                         class="flex min-w-0 items-center gap-1.5"
                                                         data-testid="option-go-to"
                                                     >
@@ -3328,20 +3332,20 @@ watch(
                                                     ]"
                                                 ></span>
                                                 <button type="button" class="transition hover:text-indigo-600" @click.stop="addOption(question)">
-                                                    Add option
+                                                    Tambah pilihan
                                                 </button>
                                                 <span
-                                                    v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
+                                                    v-if="!question.options.some((option) => OTHER_OPTIONS.includes(option)) && !isQuestionAnswered(question)"
                                                     class="text-slate-900"
-                                                    >or</span
+                                                    >atau</span
                                                 >
                                                 <button
-                                                    v-if="!question.options.includes('Other') && !isQuestionAnswered(question)"
+                                                    v-if="!question.options.some((option) => OTHER_OPTIONS.includes(option)) && !isQuestionAnswered(question)"
                                                     type="button"
                                                     class="text-blue-600 transition hover:text-blue-700"
-                                                    @click.stop="addOption(question, 'Other')"
+                                                    @click.stop="addOption(question, 'Lainnya')"
                                                 >
-                                                    Add "Other"
+                                                    Tambah "Lainnya"
                                                 </button>
                                             </div>
                                         </div>
@@ -3356,7 +3360,7 @@ watch(
                                             >
                                                 <span class="flex min-w-0 items-center gap-3">
                                                     <component :is="questionTypeIcon(question.type)" class="h-5 w-5 shrink-0 text-slate-500" />
-                                                    <span class="truncate">{{ question.type }}</span>
+                                                    <span class="truncate">{{ questionTypeLabel(question.type) }}</span>
                                                 </span>
                                                 <ChevronDown class="h-5 w-5 shrink-0 text-slate-500" />
                                             </button>
@@ -3380,7 +3384,7 @@ watch(
                                                         @click="updateQuestionType(question, type.value)"
                                                     >
                                                         <component :is="type.icon" class="h-6 w-6 shrink-0 text-slate-500" />
-                                                        <span>{{ type.value }}</span>
+                                                        <span>{{ questionTypeLabel(type.value) }}</span>
                                                     </button>
                                                 </template>
                                             </div>
@@ -3462,7 +3466,7 @@ watch(
                                                     :aria-pressed="question.required"
                                                     @click.stop="
                                                         question.required = !question.required;
-                                                        markChanged('Required setting changed');
+                                                        markChanged('Pengaturan wajib diubah');
                                                     "
                                                 >
                                                     <ToggleRight
@@ -3493,7 +3497,7 @@ watch(
                                     <button type="button" aria-label="Tambah pertanyaan" class="tool-button-primary" @click.stop="addQuestion()">
                                         <PlusCircle class="h-5 w-5" />
                                     </button>
-                                    <button type="button" aria-label="Import question" class="tool-button" @click.stop="isImportModalOpen = true">
+                                    <button type="button" aria-label="Impor soal" class="tool-button" @click.stop="isImportModalOpen = true">
                                         <FileUp class="h-5 w-5" />
                                     </button>
                                     <button
@@ -3546,7 +3550,7 @@ watch(
                     <div class="rounded-2xl border border-slate-300 bg-white p-6 shadow-sm">
                         <div class="flex flex-wrap items-start justify-between gap-4">
                             <div>
-                                <h2 class="text-2xl font-semibold">Responses</h2>
+                                <h2 class="text-2xl font-semibold">Jawaban</h2>
                                 <p class="mt-2 text-sm text-slate-500">Ringkasan jawaban responden dari link publik form ini.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
@@ -3561,10 +3565,10 @@ watch(
                                 <button
                                     type="button"
                                     class="with-tooltip rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-50"
-                                    aria-label="Copy public link"
+                                    aria-label="Salin tautan publik"
                                     @click="copyShareUrl"
                                 >
-                                    Copy link
+                                    Salin tautan
                                 </button>
                             </div>
                         </div>
@@ -3730,7 +3734,7 @@ watch(
                                     <RichContent :content="question.title" as="h3" class="break-words text-base font-bold text-slate-900 sm:truncate sm:text-lg" />
                                     <p class="mt-1 text-sm font-semibold text-slate-500">{{ question.total }} answer</p>
                                 </div>
-                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ question.type }}</span>
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ questionTypeLabel(question.type) }}</span>
                             </div>
 
                             <div v-if="question.options.length" class="mt-5 grid gap-6 lg:grid-cols-[180px_1fr]">
@@ -4510,7 +4514,7 @@ watch(
                             v-if="question.type === 'File upload'"
                             class="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
                         >
-                            File upload area
+                            Area unggah berkas
                         </div>
                         <input
                             v-else-if="question.type === 'Date'"
@@ -4873,7 +4877,7 @@ Jawaban: A, C</pre
                             <Puzzle class="h-6 w-6" />
                         </div>
                         <div>
-                            <h2 id="addon-gallery-title" class="text-xl font-extrabold text-slate-900">Add-ons</h2>
+                            <h2 id="addon-gallery-title" class="text-xl font-extrabold text-slate-900">Add-on</h2>
                             <p class="text-xs text-slate-500">Pasang sekali, lalu nyalakan atau matikan untuk tiap ujian.</p>
                         </div>
                     </div>
@@ -5107,7 +5111,7 @@ Jawaban: A, C</pre
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button type="button" class="rounded-xl px-4 py-2 font-bold text-slate-600 hover:bg-slate-100" @click="showPublish = false">
-                        Cancel
+                        Batal
                     </button>
                     <button
                         type="button"
@@ -5115,7 +5119,7 @@ Jawaban: A, C</pre
                         :disabled="isSaving"
                         @click="saveDraft(false)"
                     >
-                        {{ isSaving ? 'Saving...' : 'Save link' }}
+                        {{ isSaving ? 'Menyimpan...' : 'Simpan tautan' }}
                     </button>
                     <button
                         type="button"
@@ -5123,7 +5127,7 @@ Jawaban: A, C</pre
                         :disabled="isSaving || Boolean(slugWarning)"
                         @click="saveDraftAndCopy()"
                     >
-                        Copy
+                        Salin
                     </button>
                 </div>
             </section>
@@ -5187,7 +5191,7 @@ Jawaban: A, C</pre
                                 <select
                                     v-model="form.settings.questionFont"
                                     class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-indigo-500"
-                                    @change="markChanged('Theme font updated')"
+                                    @change="markChanged('Huruf tema diperbarui')"
                                 >
                                     <option v-for="font in fonts" :key="font.value" :value="font.value">
                                         {{ font.name }}
@@ -5199,7 +5203,7 @@ Jawaban: A, C</pre
                                 <select
                                     v-model="form.settings.answerFont"
                                     class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-indigo-500"
-                                    @change="markChanged('Theme font updated')"
+                                    @change="markChanged('Huruf tema diperbarui')"
                                 >
                                     <option v-for="font in fonts" :key="font.value" :value="font.value">
                                         {{ font.name }}
@@ -5225,7 +5229,7 @@ Jawaban: A, C</pre
                                 @click="
                                     form.settings.themeColorClass = theme.theme;
                                     form.settings.backgroundColorClass = theme.bg;
-                                    markChanged('Theme color updated');
+                                    markChanged('Warna tema diperbarui');
                                 "
                             >
                                 <span v-if="form.settings.themeColorClass === theme.theme" class="h-3 w-3 rounded-full bg-white shadow-sm"></span>
@@ -5253,7 +5257,7 @@ Jawaban: A, C</pre
                                 ]"
                                 @click="
                                     form.settings.backgroundPatternClass = pattern.value;
-                                    markChanged('Background pattern updated');
+                                    markChanged('Pola latar diperbarui');
                                 "
                             >
                                 <span

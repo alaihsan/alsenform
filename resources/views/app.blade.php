@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>Alsenform</title>
 
         {{-- Web fonts are an optional enhancement, fetched only once the page has loaded: on an intranet
              without internet a font request can hang for minutes, which left pages loading forever

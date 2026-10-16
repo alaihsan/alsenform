@@ -165,7 +165,7 @@ class QuizFormPayloads
             'deleteUrl' => route('forms.destroy', $quizForm),
             'restoreUrl' => route('forms.restore', $quizForm),
             'forceDeleteUrl' => route('forms.force-delete', $quizForm),
-            'updatedLabel' => 'Opened '.$quizForm->updated_at->format('j M Y'),
+            'updatedLabel' => $quizForm->updated_at->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('j M Y'),
             'updatedAt' => $quizForm->updated_at->toISOString(),
             'isPublished' => ! is_null($quizForm->published_at),
             'isTrashed' => ! is_null($quizForm->deleted_at),
@@ -354,7 +354,7 @@ class QuizFormPayloads
 
             return [
                 'id' => $question['id'] ?? null,
-                'title' => $question['title'] ?? 'Untitled question',
+                'title' => $question['title'] ?? 'Pertanyaan tanpa judul',
                 'type' => $question['type'] ?? 'Short answer',
                 'total' => array_sum($counts),
                 'options' => collect($counts)->map(fn (int $count, string $label): array => [

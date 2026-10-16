@@ -51,6 +51,7 @@ test('every question a teacher writes is kept in their question bank', function 
     saveExam($this->exam, [
         bankQuestion(1, 'Ibu kota <b>Indonesia</b> adalah?'),
         bankQuestion(2, 'Untitled Question'),
+        bankQuestion(5, 'Pertanyaan tanpa judul'),
         bankQuestion(3, 'Short answer question', ['type' => 'Short answer', 'options' => []]),
         bankQuestion(4, 'Jelaskan proses fotosintesis!', ['type' => 'Paragraph', 'options' => [], 'answer' => '']),
     ]);

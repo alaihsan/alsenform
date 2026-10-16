@@ -7,6 +7,7 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ConnectionLostNotice from './components/ConnectionLostNotice.vue';
 import { initializeTheme } from './composables/useAppearance';
+import { BRAND_NAME } from './lib/brand';
 import { setupDeviceHints } from './lib/deviceHints';
 import { setupRequestTimeouts } from './lib/requestTimeouts';
 
@@ -23,10 +24,11 @@ declare module 'vite/client' {
     }
 }
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+// The product name is the same everywhere, whatever APP_NAME says.
+const appName = BRAND_NAME;
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
         createApp({ render: () => [h(App, props), h(ConnectionLostNotice)] })

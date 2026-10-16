@@ -74,7 +74,7 @@ const isScaleOrRating = computed(() => firstQuestion.value?.type === 'Linear sca
                 <!-- Form Title Header -->
                 <div class="shrink-0 border-b border-slate-100 pb-1">
                     <RichContent
-                        :content="form.title || 'Untitled form'"
+                        :content="form.title || 'Formulir tanpa judul'"
                         as="h4"
                         class="line-clamp-1 text-[8.5px] font-bold leading-tight tracking-tight text-slate-800 sm:text-[9.5px]"
                     />

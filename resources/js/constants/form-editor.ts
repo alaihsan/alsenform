@@ -13,12 +13,41 @@ import {
 } from 'lucide-vue-next';
 import type { QuestionType, QuestionTypeOption } from '@/types/quiz';
 
+/** The title of a new question until the teacher writes one. */
+export const UNTITLED_QUESTION = 'Pertanyaan tanpa judul';
+
+/** Titles that only hold the place of a question's text (older forms still have the English ones). */
+export const PLACEHOLDER_QUESTION_TITLES = [UNTITLED_QUESTION, 'Untitled Question', 'Short answer question', 'Paragraph question'];
+
+/** The "Lainnya" option of a choice question (older forms have "Other"). */
+export const OTHER_OPTIONS = ['Lainnya', 'Other'];
+
+/** The names of the question types as teachers know them (the stored type stays in English). */
+export const QUESTION_TYPE_LABELS: Record<string, string> = {
+    'Multiple choice': 'Pilihan Ganda',
+    Checkboxes: 'Kotak Centang',
+    'Drop-down': 'Drop-down',
+    'Short answer': 'Isian Singkat',
+    Paragraph: 'Uraian',
+    'File upload': 'Unggah Berkas',
+    'Linear scale': 'Skala Linear',
+    Rating: 'Rating',
+    'Multiple-choice grid': 'Kisi Pilihan Ganda',
+    'Tick box grid': 'Kisi Kotak Centang',
+    Date: 'Tanggal',
+    Time: 'Waktu',
+    Section: 'Bagian',
+    'Title and description': 'Judul dan deskripsi',
+};
+
+export const questionTypeLabel = (type: string): string => QUESTION_TYPE_LABELS[type] ?? type;
+
 export const templatePresets: Record<string, { title: string; description: string; question: string; options: string[] }> = {
     blank: {
-        title: 'Untitled form',
-        description: 'Form description',
-        question: 'Untitled Question',
-        options: ['Option 1'],
+        title: 'Formulir tanpa judul',
+        description: '',
+        question: UNTITLED_QUESTION,
+        options: ['Opsi 1'],
     },
     'pilihan-ganda': {
         title: 'Penilaian Tengah Semester (PTS)',

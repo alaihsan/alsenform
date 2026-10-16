@@ -15,7 +15,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex">
-        <title>{{ $page['title'] }} - {{ config('app.name', 'Alsenform') }}</title>
+        <title>{{ $page['title'] }} - Alsenform</title>
         {{-- Optional web font, fetched once the page has loaded so a missing internet connection never delays it. --}}
         <script>
             window.addEventListener('load', function () {

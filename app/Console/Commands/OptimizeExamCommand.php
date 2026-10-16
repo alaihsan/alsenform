@@ -26,7 +26,7 @@ class OptimizeExamCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Optimasi penuh sistem Alsenform untuk ujian serentak 200+ peserta di jaringan intranet';
+    protected $description = 'Optimasi penuh sistem Alsenform untuk ujian serentak di jaringan intranet (teruji sekitar 200 siswa)';
 
     /**
      * Execute the console command.
@@ -35,7 +35,7 @@ class OptimizeExamCommand extends Command
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=blue;fg=white;options=bold>   ⚡ OPTIMASI ALSENFORM UNTUK UJIAN SERENTAK (200+ SISWA)                </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   ⚡ OPTIMASI ALSENFORM UNTUK UJIAN SERENTAK                             </>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
 

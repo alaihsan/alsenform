@@ -23,7 +23,7 @@ class QuestionBank
     /**
      * Titles the editor gives a new question before anything is written.
      */
-    public const PLACEHOLDER_TITLES = ['untitled question', 'paragraph question', 'short answer question'];
+    public const PLACEHOLDER_TITLES = ['pertanyaan tanpa judul', 'untitled question', 'paragraph question', 'short answer question'];
 
     public const PER_PAGE = 20;
 

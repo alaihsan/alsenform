@@ -69,11 +69,11 @@ export type DesignPreset = {
 
 /** Ready-made themes, a starting point the teacher then adjusts. */
 export const DESIGN_PRESETS: DesignPreset[] = [
-    { key: 'klasik', name: 'Klasik Alsen', description: 'Ungu lembut, bawaan Alsen Form.', design: {} },
+    { key: 'klasik', name: 'Klasik Alsen', description: 'Ungu lembut, bawaan Alsenform.', design: {} },
     {
         key: 'google',
-        name: 'Google Form',
-        description: 'Mirip tampilan Google Form.',
+        name: 'Ungu Tua',
+        description: 'Ungu tua, judul di tengah, halaman ramping.',
         design: {
             accent: '#673ab7',
             background: '#f0ebf8',
@@ -154,8 +154,8 @@ export const DESIGN_PRESETS: DesignPreset[] = [
     },
     {
         key: 'anbk',
-        name: 'ANBK',
-        description: 'Biru tegas seperti asesmen nasional.',
+        name: 'Biru Tegas',
+        description: 'Biru tegas, rapi untuk ujian resmi.',
         design: {
             accent: '#1d4ed8',
             background: '#e8f0fe',

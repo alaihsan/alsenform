@@ -124,7 +124,7 @@ const backgroundFits: Choice<FormDesign['backgroundFit']>[] = [
 
 type ImageKey = 'headerImage' | 'logo' | 'backgroundImage';
 const imageFields: { key: ImageKey; label: string; hint: string }[] = [
-    { key: 'headerImage', label: 'Gambar header', hint: 'Seperti Google Form: tampil di atas judul. Ukuran ideal 1600 × 400 piksel.' },
+    { key: 'headerImage', label: 'Gambar header', hint: 'Tampil di atas judul. Ukuran ideal 1600 × 400 piksel.' },
     { key: 'logo', label: 'Logo sekolah', hint: 'Tampil di atas judul ujian. PNG transparan paling bagus.' },
     { key: 'backgroundImage', label: 'Foto latar', hint: 'Menggantikan warna latar halaman.' },
 ];

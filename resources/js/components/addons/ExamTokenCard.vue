@@ -153,7 +153,7 @@ onUnmounted(() => {
         >
             <Puzzle class="h-5 w-5 shrink-0 text-amber-600" />
             <p class="min-w-0 flex-1 text-sm text-slate-700">
-                Ingin siswa hanya bisa mulai dengan token dari pengawas, seperti ANBK? Pasang add-on Token Ujian.
+                Ingin siswa hanya bisa mulai dengan token dari pengawas? Pasang add-on Token Ujian.
             </p>
             <button
                 type="button"

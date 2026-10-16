@@ -187,7 +187,7 @@ function syncFromClasses(): void {
 </script>
 
 <template>
-    <Head title="Kelompok Belajar (Cohort) - AlsenForm" />
+    <Head title="Kelompok Belajar (Cohort)" />
 
     <SettingsLayout wide>
         <!-- Toast Notification -->

@@ -97,6 +97,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Donations
+    |--------------------------------------------------------------------------
+    |
+    | The developer donation endpoints only simulate a QRIS payment: they
+    | mark a donation as paid without any money being checked. They stay
+    | off until they are connected to a licensed payment provider.
+    |
+    */
+
+    'donations' => (bool) env('DONATIONS_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

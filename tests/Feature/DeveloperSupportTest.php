@@ -4,6 +4,25 @@ use App\Models\Donation;
 use App\Models\User;
 use App\Models\Withdrawal;
 
+beforeEach(function () {
+    // The donation endpoints only simulate a payment and are off unless switched on.
+    config(['app.donations' => true]);
+});
+
+test('the donation endpoints are off by default: the payment is only simulated', function () {
+    config(['app.donations' => false]);
+    $user = User::factory()->create(['is_admin' => true]);
+    $donation = Donation::query()->create([
+        'user_id' => $user->id, 'donor_name' => 'Supporter', 'amount' => 50000, 'payment_reference' => 'DON-OFF', 'status' => 'pending',
+    ]);
+
+    $this->actingAs($user)->postJson(route('support.donate'), ['donor_name' => 'X', 'amount' => 25000])->assertNotFound();
+    $this->postJson(route('support.confirm-donation', $donation))->assertNotFound();
+    $this->postJson(route('support.withdraw'), ['amount' => 5000])->assertNotFound();
+
+    expect($donation->fresh()->status)->toBe('pending');
+});
+
 test('guests are redirected when accessing support endpoints', function () {
     $this->postJson(route('support.suggestion'), [
         'subject' => 'Idea',

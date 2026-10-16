@@ -152,7 +152,7 @@ function confirmRemove(): void {
 </script>
 
 <template>
-    <Head :title="`Cohort ${cohort.name} - AlsenForm`" />
+    <Head :title="`Cohort ${cohort.name}`" />
 
     <SettingsLayout wide>
         <!-- Toast Notification -->

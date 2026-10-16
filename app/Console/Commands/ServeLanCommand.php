@@ -1078,7 +1078,7 @@ class ServeLanCommand extends Command
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
 
-        $this->output->writeln(' <fg=green;options=bold>✓ Performa & Kapasitas Jaringan (200+ Peserta):</>');
+        $this->output->writeln(' <fg=green;options=bold>✓ Performa & Kapasitas Jaringan:</>');
         $this->output->writeln("   ⚡ <options=bold>Multi-Workers</>  : <fg=cyan>{$workers} concurrent processes</> (anti antrean request)");
         $this->output->writeln('   ⚡ <options=bold>Kompresi Gzip</>  : <fg=cyan>Aktif</> (menghemat bandwidth intranet ~80%)');
         $this->output->writeln('   ⚡ <options=bold>Cache Aset VITE</>: <fg=cyan>Aktif (Immutable)</> (0-byte reload di browser siswa)');

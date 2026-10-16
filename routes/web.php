@@ -23,6 +23,7 @@ use App\Http\Controllers\QuizResultController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
+use App\Http\Middleware\EnsureDonationsEnabled;
 use App\Services\DocxImportTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -53,10 +54,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     // Developer Support Routes
     Route::post('support/suggestion', [DeveloperSupportController::class, 'storeSuggestion'])->middleware('throttle:10,1')->name('support.suggestion');
-    Route::post('support/donate', [DeveloperSupportController::class, 'storeDonation'])->middleware('throttle:10,1')->name('support.donate');
-    Route::post('support/donate/{donation}/confirm', [DeveloperSupportController::class, 'confirmDonation'])->middleware('throttle:20,1')->name('support.confirm-donation');
+    // Donations only simulate a payment: off unless DONATIONS_ENABLED is set.
+    Route::post('support/donate', [DeveloperSupportController::class, 'storeDonation'])->middleware([EnsureDonationsEnabled::class, 'throttle:10,1'])->name('support.donate');
+    Route::post('support/donate/{donation}/confirm', [DeveloperSupportController::class, 'confirmDonation'])->middleware([EnsureDonationsEnabled::class, 'throttle:20,1'])->name('support.confirm-donation');
     Route::get('support/stats', [DeveloperSupportController::class, 'getStats'])->middleware('throttle:30,1')->name('support.stats');
-    Route::post('support/withdraw', [DeveloperSupportController::class, 'storeWithdrawal'])->middleware('throttle:5,1')->name('support.withdraw');
+    Route::post('support/withdraw', [DeveloperSupportController::class, 'storeWithdrawal'])->middleware([EnsureDonationsEnabled::class, 'throttle:5,1'])->name('support.withdraw');
 
     // Forms, Folders & Question Management (Teacher & Admin Only)
     Route::middleware('can:teacher-or-admin')->group(function (): void {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { questionTypeLabel } from '@/constants/form-editor';
 import RichContent from '@/components/RichContent.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -40,26 +41,12 @@ type BankItem = {
     question: Record<string, any> | null;
 };
 
-const TYPE_LABELS: Record<string, string> = {
-    'Multiple choice': 'Pilihan Ganda',
-    Checkboxes: 'Kotak Centang',
-    'Drop-down': 'Drop-down',
-    'Short answer': 'Isian Singkat',
-    Paragraph: 'Uraian',
-    'File upload': 'Unggah Berkas',
-    'Linear scale': 'Skala Linear',
-    Rating: 'Rating',
-    'Multiple-choice grid': 'Kisi Pilihan Ganda',
-    'Tick box grid': 'Kisi Kotak Centang',
-    Date: 'Tanggal',
-    Time: 'Waktu',
-};
 const DIFFICULTIES: Record<string, { label: string; class: string }> = {
     mudah: { label: 'Mudah', class: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
     sedang: { label: 'Sedang', class: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
     sulit: { label: 'Sulit', class: 'bg-rose-50 text-rose-700 ring-rose-600/20' },
 };
-const typeLabel = (type: string) => TYPE_LABELS[type] ?? type;
+const typeLabel = questionTypeLabel;
 const gradeText = (grade: string) => (/^kelas\b/i.test(grade) ? grade : `Kelas ${grade}`);
 
 const filters = reactive({ search: '', type: '', form: '' as number | '', difficulty: '', subject: '', grade: '', topic: '', archived: false });

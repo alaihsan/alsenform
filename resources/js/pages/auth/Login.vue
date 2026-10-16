@@ -31,7 +31,7 @@ const submit = () => {
 
 <template>
     <AuthBase title="Masuk ke akunmu" description="Admin memakai email, guru memakai NIP, dan murid memakai NIS.">
-        <Head title="Login" />
+        <Head title="Masuk" />
 
         <div v-if="status" class="mb-4 text-center text-sm font-medium text-green-600">
             {{ status }}

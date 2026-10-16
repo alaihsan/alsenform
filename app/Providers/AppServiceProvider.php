@@ -11,6 +11,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -40,6 +41,9 @@ class AppServiceProvider extends ServiceProvider
 
         $this->configureQuizRateLimiting();
         $this->recordLoginActivity();
+
+        // Dates the app writes out ("5 menit yang lalu", month and day names) are in Indonesian.
+        Carbon::setLocale('id');
     }
 
     /**

@@ -441,7 +441,7 @@ async function executeImport(): Promise<void> {
 </script>
 
 <template>
-    <Head title="Pengaturan User - AlsenForm" />
+    <Head title="Pengaturan User" />
 
     <SettingsLayout wide>
         <!-- Toast Notification -->

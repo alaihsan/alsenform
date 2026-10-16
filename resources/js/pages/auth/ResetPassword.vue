@@ -31,8 +31,8 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthLayout title="Reset password" description="Please enter your new password below">
-        <Head title="Reset password" />
+    <AuthLayout title="Atur ulang kata sandi" description="Masukkan kata sandi baru Anda di bawah ini.">
+        <Head title="Atur ulang kata sandi" />
 
         <form @submit.prevent="submit">
             <div class="grid gap-6">
@@ -43,7 +43,7 @@ const submit = () => {
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="password">Password</Label>
+                    <Label for="password">Kata sandi baru</Label>
                     <Input
                         id="password"
                         type="password"
@@ -52,13 +52,13 @@ const submit = () => {
                         v-model="form.password"
                         class="mt-1 block w-full"
                         autofocus
-                        placeholder="Password"
+                        placeholder="Kata sandi baru"
                     />
                     <InputError :message="form.errors.password" />
                 </div>
 
                 <div class="grid gap-2">
-                    <Label for="password_confirmation"> Confirm Password </Label>
+                    <Label for="password_confirmation">Ulangi kata sandi baru</Label>
                     <Input
                         id="password_confirmation"
                         type="password"
@@ -66,14 +66,14 @@ const submit = () => {
                         autocomplete="new-password"
                         v-model="form.password_confirmation"
                         class="mt-1 block w-full"
-                        placeholder="Confirm password"
+                        placeholder="Ulangi kata sandi baru"
                     />
                     <InputError :message="form.errors.password_confirmation" />
                 </div>
 
                 <Button type="submit" class="mt-4 w-full" :disabled="form.processing">
                     <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
-                    Reset password
+                    Atur ulang kata sandi
                 </Button>
             </div>
         </form>

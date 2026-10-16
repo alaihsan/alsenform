@@ -273,10 +273,10 @@ class QuizFormController extends Controller
                 'options' => ['S', 'M', 'L', 'XL'],
             ],
             default => [
-                'title' => 'Untitled form',
-                'description' => 'Form description',
-                'question' => 'Untitled Question',
-                'options' => ['Option 1'],
+                'title' => 'Formulir tanpa judul',
+                'description' => '',
+                'question' => 'Pertanyaan tanpa judul',
+                'options' => ['Opsi 1'],
             ],
         };
     }

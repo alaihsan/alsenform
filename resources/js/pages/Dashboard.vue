@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandMark from '@/components/BrandMark.vue';
 import AccountMenu from '@/components/AccountMenu.vue';
 import FormCardPreview from '@/components/FormCardPreview.vue';
 import {
@@ -160,18 +161,18 @@ const statusFilterLabel = computed(() => {
     }
 
     if (statusFilter.value === 'published') {
-        return 'Published';
+        return 'Terbit';
     }
 
     if (statusFilter.value === 'draft') {
-        return 'Draft';
+        return 'Draf';
     }
 
     if (statusFilter.value === 'trash') {
-        return 'Trash';
+        return 'Sampah';
     }
 
-    return 'All forms';
+    return 'Semua formulir';
 });
 const activeFolderFilter = computed(() => folders.value.find((folder) => folder.id === folderFilter.value) ?? null);
 
@@ -435,7 +436,7 @@ function submitFormDeleteModal(): void {
         preserveScroll: true,
         onSuccess: () => {
             closeFormDeleteModal();
-            showToast(isForceDelete ? 'Form dihapus permanen' : 'Form dipindahkan ke Trash');
+            showToast(isForceDelete ? 'Form dihapus permanen' : 'Form dipindahkan ke Sampah');
         },
     });
 }
@@ -771,23 +772,12 @@ function closeDonationModal(): void {
 </script>
 
 <template>
-    <Head title="Forms" />
+    <Head title="Beranda" />
 
     <main class="min-h-screen bg-white text-slate-900">
         <header class="sticky top-0 z-30 border-b border-slate-100 bg-white">
             <div class="flex h-14 items-center gap-3 px-4 sm:px-6">
-                <div class="flex items-center gap-2.5">
-                    <div class="grid h-8 w-8 grid-cols-2 gap-1 rounded-xl bg-indigo-500 p-1.5 text-white shadow-[0_2px_0_#4338ca]">
-                        <span class="rounded-lg bg-white/95"></span>
-                        <span class="rounded-lg bg-white/70"></span>
-                        <span class="rounded-lg bg-white/70"></span>
-                        <span class="rounded-lg bg-white/95"></span>
-                    </div>
-                    <div class="flex flex-col">
-                        <h1 class="text-base font-bold leading-tight tracking-tight text-slate-900 sm:text-lg">Alsenform</h1>
-                        <span class="text-[9px] font-medium leading-none text-slate-500 sm:text-[10px]">CBT & Exam Platform</span>
-                    </div>
-                </div>
+                <BrandMark name-as="h1" class="shrink-0" />
 
                 <label class="mx-auto hidden h-10 w-full max-w-2xl items-center gap-3 rounded-full bg-slate-100 px-4 text-slate-500 md:flex">
                     <Search class="h-4 w-4" />
@@ -795,7 +785,7 @@ function closeDonationModal(): void {
                         v-model="searchQuery"
                         type="search"
                         class="w-full border-0 bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-500"
-                        placeholder="Search quiz"
+                        placeholder="Cari formulir atau ujian"
                     />
                 </label>
 
@@ -1049,26 +1039,26 @@ function closeDonationModal(): void {
                         v-model="searchQuery"
                         type="search"
                         class="w-full border-0 bg-transparent text-base font-medium text-slate-700 outline-none placeholder:text-slate-500"
-                        placeholder="Search quiz"
+                        placeholder="Cari formulir atau ujian"
                     />
                 </label>
 
                 <div class="mb-4 flex items-center justify-between gap-4">
-                    <h2 class="text-base font-semibold">Start a new form</h2>
+                    <h2 class="text-base font-semibold">Buat formulir baru</h2>
                     <div class="hidden items-center gap-4 text-sm font-semibold text-slate-700 md:flex">
                         <button
                             type="button"
-                            aria-label="Toggle template gallery"
+                            aria-label="Buka atau tutup galeri templat"
                             class="flex items-center gap-2 hover:text-emerald-700"
                             @click="isTemplateGalleryOpen = !isTemplateGalleryOpen"
                         >
-                            Template gallery
+                            Galeri templat
                             <AArrowDown :class="['h-5 w-5 transition-transform', isTemplateGalleryOpen ? 'rotate-180' : '']" />
                         </button>
                         <span class="h-9 border-l border-slate-300"></span>
                         <button
                             type="button"
-                            aria-label="Template options"
+                            aria-label="Opsi templat"
                             class="rounded-full p-1 hover:bg-white"
                             @click="showToast('Pilih template untuk membuat form baru')"
                         >
@@ -1259,7 +1249,7 @@ function closeDonationModal(): void {
             <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-base font-semibold">
-                        {{ isStudent ? 'Daftar Soal & Kuis' : 'Recent forms' }}
+                        {{ isStudent ? 'Daftar Soal & Kuis' : 'Formulir terbaru' }}
                         <span v-if="filteredRecentForms.length" class="text-xs font-normal text-slate-500">({{ filteredRecentForms.length }})</span>
                     </h2>
                     <p v-if="searchQuery.trim()" class="mt-1 text-sm font-medium text-slate-500">
@@ -1271,7 +1261,7 @@ function closeDonationModal(): void {
                     <button
                         v-if="!isStudent"
                         type="button"
-                        aria-label="Create folder"
+                        aria-label="Buat folder"
                         class="flex h-9 items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
                         @click="openCreateFolderModal"
                     >
@@ -1293,27 +1283,27 @@ function closeDonationModal(): void {
                             v-else
                             v-model="statusFilter"
                             class="h-9 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                            aria-label="Filter forms"
+                            aria-label="Saring formulir"
                         >
-                            <option value="all">All forms</option>
-                            <option value="published">Published</option>
-                            <option value="draft">Draft</option>
-                            <option value="trash">Trash</option>
+                            <option value="all">Semua formulir</option>
+                            <option value="published">Terbit</option>
+                            <option value="draft">Draf</option>
+                            <option value="trash">Sampah</option>
                         </select>
                     </div>
                     <select
                         v-if="!isStudent"
                         v-model="folderFilter"
                         class="h-9 max-w-40 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                        aria-label="Filter folders"
+                        aria-label="Saring folder"
                         :disabled="!folders.length || statusFilter === 'trash'"
                     >
-                        <option value="">All folders</option>
+                        <option value="">Semua folder</option>
                         <option v-for="folder in folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
                     </select>
                     <button
                         type="button"
-                        :aria-label="viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'"
+                        :aria-label="viewMode === 'grid' ? 'Tampilkan sebagai daftar' : 'Tampilkan sebagai kisi'"
                         class="rounded-full p-1.5 hover:bg-slate-100"
                         @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'"
                     >
@@ -1322,7 +1312,7 @@ function closeDonationModal(): void {
                     </button>
                     <button
                         type="button"
-                        :aria-label="sortDirection === 'desc' ? 'Sort oldest first' : 'Sort newest first'"
+                        :aria-label="sortDirection === 'desc' ? 'Urutkan dari yang terlama' : 'Urutkan dari yang terbaru'"
                         class="rounded-full p-1.5 hover:bg-slate-100"
                         @click="toggleSortDirection"
                     >
@@ -1331,7 +1321,7 @@ function closeDonationModal(): void {
                     <button
                         v-if="!isStudent"
                         type="button"
-                        aria-label="Back to all folders"
+                        aria-label="Kembali ke semua folder"
                         class="rounded-full p-1.5 hover:bg-slate-100"
                         @click="folderFilter = ''"
                     >
@@ -1348,7 +1338,7 @@ function closeDonationModal(): void {
                     <button
                         type="button"
                         class="with-tooltip text-emerald-700 hover:text-emerald-800"
-                        aria-label="Back to dashboard home"
+                        aria-label="Kembali ke beranda"
                         @click="goHome"
                     >
                         Home
@@ -1361,10 +1351,10 @@ function closeDonationModal(): void {
                 <button
                     type="button"
                     class="with-tooltip rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
-                    aria-label="Clear filters and return home"
+                    aria-label="Hapus saringan dan kembali ke beranda"
                     @click="goHome"
                 >
-                    Back to Home
+                    Kembali ke Beranda
                 </button>
             </div>
 
@@ -1379,16 +1369,16 @@ function closeDonationModal(): void {
                 @drop.prevent="dropFormOutOfFolder"
             >
                 <div class="min-w-0">
-                    <p class="text-sm font-bold">All forms / Home</p>
+                    <p class="text-sm font-bold">Semua formulir / Beranda</p>
                     <p class="mt-1 text-xs font-semibold text-slate-500">Drop form di sini untuk mengeluarkannya dari folder.</p>
                 </div>
                 <button
                     type="button"
                     class="with-tooltip rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-700"
-                    aria-label="Show all forms"
+                    aria-label="Tampilkan semua formulir"
                     @click="folderFilter = ''"
                 >
-                    View Home
+                    Lihat Beranda
                 </button>
             </div>
 
@@ -1416,7 +1406,7 @@ function closeDonationModal(): void {
                         <span class="relative">
                             <button
                                 type="button"
-                                aria-label="Folder options"
+                                aria-label="Opsi folder"
                                 class="rounded-full p-1 text-slate-500 hover:bg-white hover:text-slate-800"
                                 @click.stop="activeFolderMenuId = activeFolderMenuId === folder.id ? null : folder.id"
                             >
@@ -1432,7 +1422,7 @@ function closeDonationModal(): void {
                                     @click.stop="openRenameFolderModal(folder)"
                                 >
                                     <FilePenLine class="h-4 w-4" />
-                                    Rename
+                                    Ganti nama
                                 </button>
                                 <button
                                     type="button"
@@ -1440,7 +1430,7 @@ function closeDonationModal(): void {
                                     @click.stop="openDeleteFolderModal(folder)"
                                 >
                                     <Trash2 class="h-4 w-4" />
-                                    Delete
+                                    Hapus
                                 </button>
                             </span>
                         </span>
@@ -1624,7 +1614,7 @@ function closeDonationModal(): void {
                                                 class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                                             >
                                                 <ExternalLink class="h-4 w-4" />
-                                                Open public
+                                                Buka tautan publik
                                             </a>
                                             <button
                                                 type="button"
@@ -1632,7 +1622,7 @@ function closeDonationModal(): void {
                                                 @click="copyPublicUrl(form)"
                                             >
                                                 <Clipboard class="h-4 w-4" />
-                                                Copy link
+                                                Salin tautan
                                             </button>
                                             <button
                                                 type="button"
@@ -1640,7 +1630,7 @@ function closeDonationModal(): void {
                                                 @click="duplicateForm(form)"
                                             >
                                                 <ClipboardList class="h-4 w-4" />
-                                                Duplicate
+                                                Duplikat
                                             </button>
                                             <button
                                                 type="button"
@@ -1648,7 +1638,7 @@ function closeDonationModal(): void {
                                                 @click="moveToFolder(form)"
                                             >
                                                 <Folder class="h-4 w-4" />
-                                                Move to folder
+                                                Pindahkan ke folder
                                             </button>
                                             <button
                                                 v-if="form.folderId"
@@ -1657,7 +1647,7 @@ function closeDonationModal(): void {
                                                 @click="removeFromFolder(form)"
                                             >
                                                 <X class="h-4 w-4" />
-                                                Remove from folder
+                                                Keluarkan dari folder
                                             </button>
                                             <button
                                                 v-if="!form.isCollaborator"
@@ -1666,7 +1656,7 @@ function closeDonationModal(): void {
                                                 @click="deleteForm(form)"
                                             >
                                                 <Trash2 class="h-4 w-4" />
-                                                Delete
+                                                Hapus
                                             </button>
                                             <button
                                                 v-else
@@ -1685,7 +1675,7 @@ function closeDonationModal(): void {
                                                 @click="restoreForm(form)"
                                             >
                                                 <RotateCcw class="h-4 w-4" />
-                                                Restore
+                                                Pulihkan
                                             </button>
                                             <button
                                                 type="button"
@@ -1693,7 +1683,7 @@ function closeDonationModal(): void {
                                                 @click="forceDeleteForm(form)"
                                             >
                                                 <Trash2 class="h-4 w-4" />
-                                                Delete forever
+                                                Hapus permanen
                                             </button>
                                         </template>
                                     </div>
@@ -1808,13 +1798,13 @@ function closeDonationModal(): void {
                 <div class="mb-4 flex items-start justify-between gap-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-900">
-                            {{ formDeleteMode === 'force' ? 'Hapus permanen form' : 'Pindahkan form ke Trash' }}
+                            {{ formDeleteMode === 'force' ? 'Hapus permanen form' : 'Pindahkan form ke Sampah' }}
                         </h2>
                         <p class="mt-1 text-sm text-slate-500">
                             {{
                                 formDeleteMode === 'force'
                                     ? 'Aksi ini menghapus form dari database dan tidak bisa dipulihkan.'
-                                    : 'Form masih bisa dipulihkan dari filter Trash.'
+                                    : 'Form masih bisa dipulihkan dari filter Sampah.'
                             }}
                         </p>
                     </div>
@@ -1848,7 +1838,7 @@ function closeDonationModal(): void {
                             :disabled="formDeleteConfirmation !== selectedForm.title"
                             class="rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                            {{ formDeleteMode === 'force' ? 'Hapus permanen' : 'Pindahkan ke Trash' }}
+                            {{ formDeleteMode === 'force' ? 'Hapus permanen' : 'Pindahkan ke Sampah' }}
                         </button>
                     </div>
                 </form>

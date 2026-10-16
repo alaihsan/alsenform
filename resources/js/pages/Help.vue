@@ -454,7 +454,7 @@ const selectTopic = (id: string) => {
 
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Alsenform dirancang dengan alur kerja modern berbasis formulir (seperti Google Forms) namun dioptimalkan penuh untuk standar ujian sekolah (CBT).
+                                    Alsenform dirancang dengan alur kerja formulir yang mudah dikenali, dan disiapkan khusus untuk ujian sekolah berbasis komputer (CBT).
                                 </p>
 
                                 <h3 class="font-bold text-slate-900 text-base">Alur 4 Langkah Pelaksanaan Ujian:</h3>
@@ -465,7 +465,7 @@ const selectTopic = (id: string) => {
                                             Buat / Pilih Template
                                         </div>
                                         <p class="text-xs text-slate-600">
-                                            Mulai dari <em>Blank form</em> atau gunakan template siap pakai (PTS/PAS, PAI Arab, Matematika) dari baris template atas.
+                                            Mulai dari <em>Formulir kosong</em> atau gunakan template siap pakai (PTS/PAS, PAI Arab, Matematika) dari baris template atas.
                                         </p>
                                     </div>
                                     <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">

@@ -98,7 +98,7 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 @select="goToProfile"
             >
                 <UserRound class="h-4 w-4 text-slate-500" />
-                <span>Profile</span>
+                <span>Profil</span>
             </DropdownMenuItem>
             <template v-if="!isStudent">
                 <DropdownMenuItem
@@ -145,7 +145,7 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 @select="logout"
             >
                 <LogOut class="h-4 w-4 text-rose-500" />
-                <span>Logout</span>
+                <span>Keluar</span>
             </DropdownMenuItem>
         </DropdownMenuContent>
     </DropdownMenu>

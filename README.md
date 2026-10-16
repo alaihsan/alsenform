@@ -1,6 +1,8 @@
 # Alsenform
 
-Aplikasi ujian berbasis komputer (CBT) dan formulir untuk sekolah. Satu komputer di ruang guru cukup untuk melayani ratusan murid lewat Wi-Fi atau kabel LAN, tanpa perlu internet dan tanpa server sewaan.
+**Ujian sekolah tetap jalan, walau internet putus.**
+
+Alsenform adalah aplikasi ujian berbasis komputer (CBT) dan formulir untuk sekolah. Cukup satu komputer di sekolah sebagai server: siswa tersambung lewat Wi-Fi atau kabel LAN sekolah, tanpa internet dan tanpa sewa server. Sudah dipakai untuk ujian serentak sekitar 200 siswa dengan satu Mac Mini M2; kapasitas di sekolah Anda bergantung pada komputer server dan jaringan Wi-Fi.
 
 Alsenform lahir dari kebutuhan sekolah yang ujiannya sering terganggu karena internet putus, sementara data nilai murid tidak ingin disimpan di layanan pihak lain. Guru menulis soal di editor atau langsung dari Microsoft Word, murid mengerjakan dari HP atau komputer lab, dan nilai keluar otomatis begitu jawaban dikirim.
 
@@ -31,7 +33,7 @@ Alsenform lahir dari kebutuhan sekolah yang ujiannya sering terganggu karena int
 
 ### Menyusun soal
 
-Editor soal mirip Google Forms, tetapi dibuat untuk ujian sekolah. Ada 11 tipe pertanyaan:
+Editor soal berbentuk formulir yang mudah dikenali, dibuat untuk ujian sekolah. Ada 11 tipe pertanyaan:
 
 | Tipe | Kegunaan di sekolah |
 | --- | --- |
@@ -49,7 +51,7 @@ Editor soal mirip Google Forms, tetapi dibuat untuk ujian sekolah. Ada 11 tipe p
 
 Fitur editor lainnya:
 
-- **Format teks seperti Google Docs**: sorot teks di soal, deskripsi, pilihan jawaban, baris/kolom kisi, bagian, judul & deskripsi, atau pembahasan, lalu pop-up muncul dengan tombol **Tebal**, **Miring**, **Garis bawah**, **spidol** lima warna (kuning, hijau, biru, merah muda, oranye), hapus warna, dan hapus semua format. Pintasan Ctrl+B / Ctrl+I / Ctrl+U juga bisa. Berlaku juga untuk teks Arab, dan tampil sama di halaman siswa, hasil, dan penilaian. Teks yang ditempel masuk tanpa format. Di HP pop-up muncul di bawah teks yang disorot.
+- **Format teks**: sorot teks di soal, deskripsi, pilihan jawaban, baris/kolom kisi, bagian, judul & deskripsi, atau pembahasan, lalu pop-up muncul dengan tombol **Tebal**, **Miring**, **Garis bawah**, **spidol** lima warna (kuning, hijau, biru, merah muda, oranye), hapus warna, dan hapus semua format. Pintasan Ctrl+B / Ctrl+I / Ctrl+U juga bisa. Berlaku juga untuk teks Arab, dan tampil sama di halaman siswa, hasil, dan penilaian. Teks yang ditempel masuk tanpa format. Di HP pop-up muncul di bawah teks yang disorot.
 - **Rumus matematika** ditulis dengan sintaks KaTeX di antara tanda dolar, misalnya `$x^2 + 2x + 1$`. Ada tombol f(x) untuk pecahan, akar, pangkat, dan simbol.
 - **Bahasa Arab dan Al-Qur'an**: font Amiri Quran, Scheherazade New, dan Noto Naskh Arabic, lengkap dengan panduan pintasan keyboard untuk harakat dan tanda waqaf.
 - **Gambar dan video** di soal maupun pilihan jawaban. Gambar otomatis diperkecil dan diubah ke WebP supaya ringan dibuka dari HP murid.
@@ -74,7 +76,7 @@ Fitur editor lainnya:
 - **Soal Unggah berkas**: siswa mengunggah foto pekerjaan di kertas, PDF, Word, Excel atau PowerPoint (paling banyak 5 berkas per soal, ukuran mengikuti "Batas ukuran berkas"). Berkas tersimpan di server sekolah (bukan di folder publik) dan hanya dapat dibuka guru ujian itu, langsung dari layar penilaian.
 - **Hasil & pembahasan untuk siswa**: setiap soal punya kolom Pembahasan (tidak pernah dikirim ke siswa selama ujian). Pengaturan → "Tampilkan hasil ke siswa": nilai saja, atau lengkap dengan jawaban benar, pembahasan dan komentar guru. Siswa membukanya dari layar selesai, kartu ujian di beranda ("Lihat Hasil"), atau halaman ujian setelah kesempatan habis.
 - **Jadwal ujian** (Pengaturan → Keamanan & Batas): waktu buka dan tutup. Sebelum dibuka siswa melihat hitung mundur dan halaman terbuka sendiri tepat waktu; sesudah ditutup tidak ada yang bisa mulai. Waktu siswa yang sedang mengerjakan habis paling lambat saat ujian ditutup, lalu jawabannya terkirim otomatis. Kartu "Menerima jawaban" di tab Jawaban dan beranda siswa menunjukkan jadwalnya. Guru pemilik dan kolaborator tetap dapat mencoba ujian di luar jadwal.
-- **Tombol Ragu-ragu** (seperti ANBK) di setiap soal ujian: nomornya menjadi kuning di panel Nomor Soal, dan sebelum mengirim siswa diingatkan soal mana yang masih ragu-ragu. Tanda ini tersimpan bersama draf di server (ikut pindah perangkat) dan dikirim bersama jawaban, juga saat waktu habis atau ujian terkunci.
+- **Tombol Ragu-ragu** di setiap soal ujian: nomornya menjadi kuning di panel Nomor Soal, dan sebelum mengirim siswa diingatkan soal mana yang masih ragu-ragu. Tanda ini tersimpan bersama draf di server (ikut pindah perangkat) dan dikirim bersama jawaban, juga saat waktu habis atau ujian terkunci.
 - **Peta Kelas** di tab Keamanan & Kunci: semua siswa yang sedang ujian dalam satu layar, diperbarui tiap 5 detik. Setiap kartu menunjukkan jumlah soal terjawab, jumlah soal ragu-ragu, pindah tab, dan sisa waktu. Siswa yang perlu dilihat tampil paling depan: Terkunci (bisa dibuka langsung dari kartunya), Keluar halaman, Terputus (tidak ada kontak lebih dari 1 menit), dan Diam (tidak ada jawaban baru selama 5 menit). Kartu bisa disaring menurut status.
 - **Ekspor nilai ke Excel (.xlsx)**: rekap nilai (skor, nilai 0–100, status tuntas sesuai KKM, waktu selesai) dan jawaban tiap murid dengan warna benar/salah serta persentase jawaban benar per soal, ditambah lembar dari add-on yang aktif (misalnya Analisis Butir Soal).
 - **Ekspor laporan aktivitas** ke Excel.
@@ -82,16 +84,16 @@ Fitur editor lainnya:
 
 ### Add-on
 
-Seperti add-on Google Workspace, kemampuan tambahan dipasang sekali lalu dinyalakan atau dimatikan per ujian.
+Kemampuan tambahan dipasang sekali, lalu dinyalakan atau dimatikan per ujian.
 
 - **Galeri add-on**: tombol puzzle di editor (Jelajahi add-on), atau menu akun → Add-on. Add-on tampil sebagai kartu dalam grid (bisa disaring: semua, terpasang, belum dipasang); tombol **Detail** menjelaskan apa yang ditambahkannya dan data apa yang dibacanya. Setiap pemasangan dan pelepasan diminta konfirmasi dulu.
 - **Pasang** untuk diri sendiri; **admin** juga bisa memasang untuk semua guru (hanya admin yang bisa melepasnya).
 - **Per ujian**: tombol puzzle di editor menampilkan add-on yang terpasang dengan sakelar "Aktif di ujian ini". Yang menentukan adalah pemilik ujian: kolaborator melihat hasil yang sama, termasuk di berkas Excel.
 - **Melepas** add-on mematikannya di semua ujian pemiliknya tanpa menghapus data; saat dipasang lagi, pilihan tiap ujian kembali seperti semula.
 - Add-on pertama, **Analisis Butir Soal**, menambah panel analisis di tab Jawaban, lembar ketiga di berkas Excel, dan tombol "Jadikan label kesulitan". Saat tidak aktif, ketiganya hilang dan analisis tidak dihitung sama sekali; di tab Jawaban muncul petunjuk kecil untuk memasang atau mengaktifkannya.
-- **Token Ujian** (seperti ANBK): siswa harus mengetik token 6 huruf dari pengawas di layar konfirmasi sebelum "Kerjakan Sekarang". Token tampil di tab Keamanan & Kunci, lengkap dengan hitung mundur dan tampilan layar penuh untuk proyektor. Token berganti setiap 15 menit (menit :00, :15, :30, :45) dan dihitung dari ujian serta jam server, jadi tidak tersimpan di mana pun; token sebelumnya masih diterima 5 menit lagi. Huruf besar/kecil dan spasi diabaikan, huruf I dan O tidak dipakai. Token salah dibatasi 10 kali per menit per siswa. Siswa yang sudah mulai tidak perlu token lagi saat memuat ulang, dan guru pemilik/kolaborator dapat mencoba ujiannya tanpa token. Add-on ini tidak langsung aktif setelah dipasang: nyalakan per ujian di tab Keamanan & Kunci atau tombol puzzle.
+- **Token Ujian**: siswa harus mengetik token 6 huruf dari pengawas di layar konfirmasi sebelum "Kerjakan Sekarang". Token tampil di tab Keamanan & Kunci, lengkap dengan hitung mundur dan tampilan layar penuh untuk proyektor. Token berganti setiap 15 menit (menit :00, :15, :30, :45) dan dihitung dari ujian serta jam server, jadi tidak tersimpan di mana pun; token sebelumnya masih diterima 5 menit lagi. Huruf besar/kecil dan spasi diabaikan, huruf I dan O tidak dipakai. Token salah dibatasi 10 kali per menit per siswa. Siswa yang sudah mulai tidak perlu token lagi saat memuat ulang, dan guru pemilik/kolaborator dapat mencoba ujiannya tanpa token. Add-on ini tidak langsung aktif setelah dipasang: nyalakan per ujian di tab Keamanan & Kunci atau tombol puzzle.
 - **Peta Miskonsepsi** (metode CRI): dari tombol Ragu-ragu, setiap jawaban dikelompokkan menjadi Paham (benar & yakin), Menebak (benar tapi ragu), Belum paham (salah & ragu, atau kosong), dan Miskonsepsi (salah tapi yakin). Soal yang ≥ 25% pesertanya salah tapi yakin (minimal 5 peserta) ditandai, lengkap dengan jawaban keliru yang paling diyakini siswa. Memakai percobaan pertama tiap siswa; jawaban lama tanpa data ragu tidak dihitung. Bila kurang dari 30% siswa memakai tombol Ragu-ragu, panel memperingatkan bahwa angka miskonsepsi bisa terlalu tinggi. Laporan Excel mendapat lembar "Peta Miskonsepsi" per soal dan per siswa.
-- **Desainer Form** (seperti Pretty Forms Designer di Google Forms): tombol palet di editor membuka desainer dengan pratinjau langsung. Ada 12 tema siap pakai (Klasik, Google Form, Mode Malam, Madrasah, Ceria SD, Kertas Ujian, ANBK, Samudra, Senja, Hutan, Minimalis, Kontras Tinggi), lalu semuanya bisa diatur: warna aksen, latar, kartu dan teks (dengan peringatan bila teks sulit dibaca), kekeruhan kartu, gambar header 1600 × 400 seperti Google Form, logo sekolah (kiri/tengah/kanan), foto latar dengan peredup, huruf judul/halaman/soal/jawaban, ukuran judul dan teks soal, rata judul, sudut dan bayangan kartu, bentuk tombol, lebar halaman, serta CSS sendiri lewat kelas `.af-*` (misalnya `.af-question-title`). Desain tampil di editor guru, di semua halaman siswa (layar konfirmasi, soal, selesai, hasil, halaman tunggu) dan di kartu ujian di beranda guru maupun siswa. CSS sendiri hanya berlaku di halaman ujian itu dan dibersihkan di server: `@import`, `expression()`, dan gambar dari luar server sekolah dibuang. Mematikan add-on mengembalikan tampilan biasa tanpa menghapus desainnya.
+- **Desainer Form**: tombol palet di editor membuka desainer dengan pratinjau langsung. Ada 12 tema siap pakai (Klasik Alsen, Ungu Tua, Mode Malam, Madrasah, Ceria SD, Kertas Ujian, Biru Tegas, Samudra, Senja, Hutan, Minimalis, Kontras Tinggi), lalu semuanya bisa diatur: warna aksen, latar, kartu dan teks (dengan peringatan bila teks sulit dibaca), kekeruhan kartu, gambar header 1600 × 400 di atas judul, logo sekolah (kiri/tengah/kanan), foto latar dengan peredup, huruf judul/halaman/soal/jawaban, ukuran judul dan teks soal, rata judul, sudut dan bayangan kartu, bentuk tombol, lebar halaman, serta CSS sendiri lewat kelas `.af-*` (misalnya `.af-question-title`). Desain tampil di editor guru, di semua halaman siswa (layar konfirmasi, soal, selesai, hasil, halaman tunggu) dan di kartu ujian di beranda guru maupun siswa. CSS sendiri hanya berlaku di halaman ujian itu dan dibersihkan di server: `@import`, `expression()`, dan gambar dari luar server sekolah dibuang. Mematikan add-on mengembalikan tampilan biasa tanpa menghapus desainnya.
 - **Remedial & Pengayaan**: panel di tab Jawaban membagi siswa menjadi Belum Tuntas dan Tuntas menurut KKM (dari Profil) memakai nilai terbaik tiap siswa. Tombol "Buat ujian remedial" membuat draf ujian dari soal yang dijawab salah oleh siswa terpilih, atau dari soal lain setopik di Bank Soal (sebanyak soal yang salah per topik); "Buat ujian pengayaan" mengambil soal setopik berlabel sulit (lalu sedang), paling banyak 10, atau ujian kosong untuk ditulis sendiri. Ujian tindak lanjut memakai aturan ujian asli, hanya dapat dibuka siswa yang dipilih (dan tampil di beranda mereka saja), lalu nilainya dicatat di ujiannya sendiri sehingga nilai asli tidak berubah. Berkas Excel ujian asli mendapat lembar "Remedial & Pengayaan": nilai asli, nilai remedial/pengayaan, dan nilai akhir (nilai remedial paling tinggi sama dengan KKM, tidak pernah di bawah nilai asli). Siswa tamu (tanpa akun) tidak dapat dibatasi, jadi ujian untuk mereka terbuka bagi siapa pun yang punya tautannya.
 
 ### Pelaksanaan ujian
@@ -160,7 +162,7 @@ Data bisa disaring per tanggal, jenis aktivitas, ujian, peran, atau dicari berda
 
 Perintah `php artisan lan:serve` menyiapkan semuanya untuk hari ujian:
 
-- Menjalankan server dengan banyak worker (bawaan 24) supaya ratusan murid tidak mengantre.
+- Menjalankan server dengan banyak worker (bawaan 24) supaya siswa yang mengirim jawaban bersamaan tidak mengantre.
 - Menampilkan alamat yang bisa dibuka murid untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN), termasuk nama Bonjour/mDNS untuk perangkat Apple.
 - Di macOS, mencegah komputer tertidur selama server berjalan (caffeinate).
 - Memberi tahu alamat baru kalau IP server berubah di tengah ujian.
@@ -252,7 +254,7 @@ Kalau menemukan celah keamanan, mohon laporkan secara pribadi ke pengelola repos
 - Node.js 20 atau lebih baru (hanya untuk build aset)
 - Composer 2
 
-Sudah dipakai di Mac Mini M2 untuk ujian serentak sekitar 200 murid. Linux dan Windows juga bisa. Fitur anti-sleep khusus untuk macOS. Di macOS, [Laravel Herd](https://herd.laravel.com) adalah cara termudah untuk memasang PHP dan database sekaligus.
+Sudah dipakai untuk ujian serentak sekitar 200 siswa dengan satu Mac Mini M2; kapasitas di sekolah lain bergantung pada komputer server dan jaringan Wi-Fi. Linux dan Windows juga bisa. Fitur anti-sleep khusus untuk macOS. Di macOS, [Laravel Herd](https://herd.laravel.com) adalah cara termudah untuk memasang PHP dan database sekaligus.
 
 ---
 

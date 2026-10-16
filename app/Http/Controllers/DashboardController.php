@@ -71,7 +71,7 @@ class DashboardController extends Controller
                     'design' => $quizForm->cardDesign(),
                     'ownerName' => $quizForm->user?->name ?? 'Guru',
                     'questionsCount' => count(QuizItems::questions($quizForm->questions)),
-                    'updatedLabel' => $quizForm->published_at?->diffForHumans() ?? '',
+                    'updatedLabel' => $quizForm->published_at?->copy()->locale('id')->diffForHumans() ?? '',
                     'updatedAt' => (string) $quizForm->published_at,
                     'hasSubmitted' => $hasSubmitted,
                     // The student's results, once the teacher shows them.
