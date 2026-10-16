@@ -19,6 +19,7 @@ use App\Support\MediaUrl;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
+use App\Support\SectionFlow;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -190,6 +191,8 @@ class QuizResponseController extends Controller
                 'totalPoints' => array_sum(array_map(fn ($question) => is_numeric($question['points'] ?? null) ? (float) $question['points'] : 0, QuizItems::questions($sanitizedQuestions))),
                 'timeLimitMinutes' => $timeLimitMinutes,
                 'sectionCount' => $this->sectionCount($sanitizedQuestions),
+                // Sections that lead elsewhere by setting or by answer (see SectionFlow).
+                'branches' => SectionFlow::branches($sanitizedQuestions, is_array($quizForm->settings) ? $quizForm->settings : []),
             ],
             'session' => [
                 'token' => $quizSession->session_token,
@@ -394,6 +397,10 @@ class QuizResponseController extends Controller
             ? $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)
             : $session?->doubtful_question_ids;
 
+        // A form that sends respondents past sections keeps only what is on their way.
+        ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($answers, $assignedIds);
+        $doubts = $quizForm->onlyGiven($doubts, $givenIds);
+
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
 
@@ -413,7 +420,7 @@ class QuizResponseController extends Controller
             'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
             'answers' => $answers,
             'doubtful_question_ids' => $doubts,
-            'question_ids' => $assignedIds,
+            'question_ids' => $givenIds,
             'score' => $score,
             'is_timeout' => $isTimeout,
             'late_seconds' => $countsSavedAnswers ? null : $lateSeconds,
@@ -738,17 +745,22 @@ class QuizResponseController extends Controller
             return;
         }
 
+        $assignedIds = $examLayout->assignedIds($quizForm, $session->layout);
         $answers = array_replace(
             is_array($autoSubmitted->answers) ? $autoSubmitted->answers : [],
             array_filter(
-                app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($deviceAnswers, $examLayout->assignedIds($quizForm, $session->layout))),
+                app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($deviceAnswers, $assignedIds)),
                 fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== [],
             ),
         );
+        // The device's answers may take another way through the sections.
+        ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($answers, $assignedIds);
+        $doubts = $request->has('doubts') ? $quizForm->questionIdsAmong($request->input('doubts'), $assignedIds) : $autoSubmitted->doubtful_question_ids;
 
         $autoSubmitted->update([
             'answers' => $answers,
-            ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($request->input('doubts'), $examLayout->assignedIds($quizForm, $session->layout))] : []),
+            'question_ids' => $givenIds,
+            'doubtful_question_ids' => $quizForm->onlyGiven($doubts, $givenIds),
             'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
             'is_auto_submitted' => false,
             'late_seconds' => $this->secondsLate($session),

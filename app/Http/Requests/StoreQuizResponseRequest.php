@@ -6,6 +6,7 @@ use App\Models\QuizForm;
 use App\Models\QuizSession;
 use App\Support\ExamLayout;
 use App\Support\RespondentIdentity;
+use App\Support\SectionFlow;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -111,9 +112,20 @@ class StoreQuizResponseRequest extends FormRequest
                 return;
             }
 
+            // Sections the student's answers skipped (see SectionFlow) are not required either.
+            $onPathIds = SectionFlow::questionIdsOnPath(
+                is_array($quizForm->questions) ? $quizForm->questions : [],
+                is_array($quizForm->settings) ? $quizForm->settings : [],
+                $answers,
+            );
+
             // Validate required questions
             foreach ($formQuestions as $q) {
                 if ($assignedIds !== null && ! in_array((string) ($q['id'] ?? ''), $assignedIds, true)) {
+                    continue;
+                }
+
+                if ($onPathIds !== null && ! in_array((string) ($q['id'] ?? ''), $onPathIds, true)) {
                     continue;
                 }
 

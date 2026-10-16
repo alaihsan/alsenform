@@ -17,6 +17,7 @@ import GradingPanel from '@/components/form-editor/GradingPanel.vue';
 import ItemAnalysisPanel, { type ItemAnalysis } from '@/components/form-editor/ItemAnalysisPanel.vue';
 import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from '@/components/form-editor/QuestionLabelsEditor.vue';
 import RichTextInput from '@/components/form-editor/RichTextInput.vue';
+import SectionTargetSelect from '@/components/form-editor/SectionTargetSelect.vue';
 import SelectionFormatToolbar from '@/components/form-editor/SelectionFormatToolbar.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
@@ -33,8 +34,9 @@ import {
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
-import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload } from '@/types/quiz';
+import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
 import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
+import { BRANCHING_TYPES, FIRST_SECTION, NEXT_SECTION, SUBMIT_FORM, flowSections } from '@/utils/section-flow';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
@@ -78,6 +80,8 @@ import {
     Video,
     X,
     ZoomIn,
+    CornerDownRight,
+    GitBranch,
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
@@ -965,6 +969,62 @@ const headerSectionLabel = computed(() => {
 });
 const answerableQuestions = computed(() => form.questions.filter((question: Question) => !isContentItem(question)));
 
+/*
+ * Going to another section, like in Google Forms: "Setelah bagian N" at the end of every section,
+ * and "Buka bagian berdasarkan jawaban" on multiple-choice and drop-down questions (see
+ * utils/section-flow, and App\Support\SectionFlow which applies it to the answers).
+ */
+const editorSections = computed(() => flowSections(form.questions));
+const hasManySections = computed(() => editorSections.value.length > 1);
+/** The key of the section each item is in, by the item's place in the form. */
+const sectionKeyAt = computed<number[]>(() => {
+    let key = FIRST_SECTION;
+    return form.questions.map((item: Question) => (item.type === 'Section' ? (key = Number(item.id)) : key));
+});
+const sectionKeyOfItem = (itemId: number): number => sectionKeyAt.value[form.questions.findIndex((item: Question) => item.id === itemId)] ?? FIRST_SECTION;
+const sectionNumberOf = (key: number): number => editorSections.value.findIndex((section) => section.key === key) + 1;
+const sectionTitleOf = (key: number): string => {
+    const section = editorSections.value.find((candidate) => candidate.key === key);
+    const title = stripRichFormatting(section?.header ? section.header.title : form.title).trim();
+    return title.length > 40 ? `${title.slice(0, 40)}…` : title || 'Tanpa judul';
+};
+/** Where a section, or an answer in it, can send the student. */
+const targetChoices = (fromKey: number): { value: SectionTarget; label: string }[] => {
+    const isLast = editorSections.value[editorSections.value.length - 1]?.key === fromKey;
+    return [
+        { value: NEXT_SECTION, label: isLast ? 'Kirim formulir (bagian terakhir)' : 'Lanjutkan ke bagian berikutnya' },
+        ...editorSections.value
+            .filter((section) => section.key !== fromKey)
+            .map((section) => ({ value: section.key, label: `Buka bagian ${sectionNumberOf(section.key)} (${sectionTitleOf(section.key)})` })),
+        ...(isLast ? [] : [{ value: SUBMIT_FORM as SectionTarget, label: 'Kirim formulir' }]),
+    ];
+};
+const sectionGoToValue = (key: number): SectionTarget | undefined =>
+    key === FIRST_SECTION ? form.settings.firstSectionGoTo : form.questions.find((item: Question) => item.type === 'Section' && Number(item.id) === key)?.goTo;
+const setSectionGoTo = (key: number, target: SectionTarget) => {
+    if (key === FIRST_SECTION) {
+        form.settings.firstSectionGoTo = target;
+    } else {
+        const header = form.questions.find((item: Question) => item.type === 'Section' && Number(item.id) === key);
+        if (header) {
+            header.goTo = target;
+        }
+    }
+    markChanged('Alur bagian diperbarui');
+};
+const canSendByAnswer = (question: Question): boolean => hasManySections.value && BRANCHING_TYPES.includes(question.type);
+const toggleSendByAnswer = (question: Question) => {
+    question.branching = !question.branching;
+    question.optionGoTo = question.options.map((_, index) => question.optionGoTo?.[index] ?? NEXT_SECTION);
+    markChanged(question.branching ? 'Bagian dibuka sesuai jawaban' : 'Bagian tidak lagi sesuai jawaban');
+};
+const setOptionGoTo = (question: Question, optionIndex: number, target: SectionTarget) => {
+    const targets = question.options.map((_, index) => question.optionGoTo?.[index] ?? NEXT_SECTION);
+    targets[optionIndex] = target;
+    question.optionGoTo = targets;
+    markChanged('Bagian tujuan diperbarui');
+};
+
 const insertTextIntoQuestion = (question: any, snippet: string) => {
     if (!question.title || question.title === 'Untitled Question') {
         question.title = snippet;
@@ -1047,6 +1107,7 @@ const handleOptionEnter = (event: KeyboardEvent, question: Question) => {
 
 const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
+    question.optionGoTo?.splice(optionIndex, 1);
     if (question.options.length === 0 && !noOptionQuestionTypes.includes(question.type)) {
         question.options.push('Option 1');
     }
@@ -2293,9 +2354,23 @@ watch(
                         leave-from-class="opacity-100 translate-y-0"
                         leave-to-class="opacity-0 translate-y-2"
                     >
+                        <template v-for="(question, itemIndex) in form.questions" :key="question.id">
+                        <!-- Like Google Forms: where the student goes at the end of the section before -->
+                        <div
+                            v-if="hasManySections && question.type === 'Section' && itemIndex > 0"
+                            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 text-sm text-slate-600"
+                            data-testid="after-section"
+                        >
+                            <CornerDownRight class="h-4 w-4 shrink-0 text-slate-400" />
+                            <span class="af-on-page font-semibold">Setelah bagian {{ sectionNumberOf(sectionKeyAt[itemIndex - 1]) }}</span>
+                            <SectionTargetSelect
+                                :model-value="sectionGoToValue(sectionKeyAt[itemIndex - 1])"
+                                :choices="targetChoices(sectionKeyAt[itemIndex - 1])"
+                                :label="`Setelah bagian ${sectionNumberOf(sectionKeyAt[itemIndex - 1])}`"
+                                @update:model-value="setSectionGoTo(sectionKeyAt[itemIndex - 1], $event)"
+                            />
+                        </div>
                         <section
-                            v-for="question in form.questions"
-                            :key="question.id"
                             :draggable="draggableQuestionId === question.id"
                             :class="[
                                 'af-card relative overflow-visible rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md',
@@ -3180,6 +3255,20 @@ watch(
                                                         <span class="text-[10px] font-bold text-indigo-500">Pratinjau:</span>
                                                         <RichContent :content="question.options[optionIndex]" />
                                                     </div>
+                                                    <!-- "Buka bagian berdasarkan jawaban": where this option sends the student -->
+                                                    <div
+                                                        v-if="question.branching && canSendByAnswer(question) && option !== 'Other'"
+                                                        class="flex min-w-0 items-center gap-1.5"
+                                                        data-testid="option-go-to"
+                                                    >
+                                                        <CornerDownRight class="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                                        <SectionTargetSelect
+                                                            :model-value="question.optionGoTo?.[optionIndex]"
+                                                            :choices="targetChoices(sectionKeyOfItem(question.id))"
+                                                            :label="`Bagian tujuan bila memilih ${stripRichFormatting(option) || `pilihan ${optionIndex + 1}`}`"
+                                                            @update:model-value="setOptionGoTo(question, optionIndex, $event)"
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -3323,8 +3412,24 @@ watch(
                                                 @save="saveQuestionLabels(question, $event)"
                                             />
                                             <button
+                                                v-if="canSendByAnswer(question)"
                                                 type="button"
-                                                aria-label="Duplicate question"
+                                                :aria-pressed="question.branching === true"
+                                                title="Buka bagian berdasarkan jawaban"
+                                                :class="[
+                                                    'flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition',
+                                                    question.branching
+                                                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                                                        : 'border-slate-200 text-slate-600 hover:border-indigo-200 hover:text-indigo-700',
+                                                ]"
+                                                @click.stop="toggleSendByAnswer(question)"
+                                            >
+                                                <GitBranch class="h-3.5 w-3.5" />
+                                                Bagian sesuai jawaban
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label="Duplikat pertanyaan"
                                                 class="transition hover:text-indigo-600"
                                                 @click.stop="duplicateQuestion(question)"
                                             >
@@ -3332,7 +3437,7 @@ watch(
                                             </button>
                                             <button
                                                 type="button"
-                                                aria-label="Delete question"
+                                                aria-label="Hapus pertanyaan"
                                                 class="transition hover:text-red-500"
                                                 @click.stop="deleteQuestion(question)"
                                             >
@@ -3353,7 +3458,8 @@ watch(
                                                 <span class="text-sm font-medium">Wajib</span>
                                                 <button
                                                     type="button"
-                                                    aria-label="Toggle required"
+                                                    aria-label="Wajib diisi"
+                                                    :aria-pressed="question.required"
                                                     @click.stop="
                                                         question.required = !question.required;
                                                         markChanged('Required setting changed');
@@ -3422,7 +3528,18 @@ watch(
                                 </div>
                             </Transition>
                         </section>
+                        </template>
                     </TransitionGroup>
+                    <div v-if="hasManySections" class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 px-2 text-sm text-slate-600" data-testid="after-section">
+                        <CornerDownRight class="h-4 w-4 shrink-0 text-slate-400" />
+                        <span class="af-on-page font-semibold">Setelah bagian {{ editorSections.length }}</span>
+                        <SectionTargetSelect
+                            :model-value="sectionGoToValue(editorSections[editorSections.length - 1].key)"
+                            :choices="targetChoices(editorSections[editorSections.length - 1].key)"
+                            :label="`Setelah bagian ${editorSections.length}`"
+                            @update:model-value="setSectionGoTo(editorSections[editorSections.length - 1].key, $event)"
+                        />
+                    </div>
                 </div>
 
                 <section v-else-if="activeTab === 'responses'" class="space-y-5">

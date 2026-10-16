@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\Addons;
 use App\Support\Addon;
 use App\Support\FormDesign;
+use App\Support\SectionFlow;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Database\Factories\QuizFormFactory;
@@ -391,6 +392,43 @@ class QuizForm extends Model
             ->update(['status' => 'approved']);
 
         return $unlocked;
+    }
+
+    /**
+     * What a response keeps when the form sends respondents past sections (see SectionFlow): the
+     * answers on the respondent's way, and the questions given narrowed to that way.
+     *
+     * @param  array<int|string, mixed>  $answers
+     * @param  list<int|string>|null  $assignedIds
+     * @return array{answers: array<int|string, mixed>, questionIds: list<int|string>|null}
+     */
+    public function keepOnPath(array $answers, ?array $assignedIds): array
+    {
+        return SectionFlow::keepOnPath(
+            is_array($this->questions) ? $this->questions : [],
+            is_array($this->settings) ? $this->settings : [],
+            $answers,
+            $assignedIds,
+        );
+    }
+
+    /**
+     * The ids among the given ones that are among the questions a response was given (all of
+     * them when that is null).
+     *
+     * @param  list<int|string>|null  $ids
+     * @param  list<int|string>|null  $givenIds
+     * @return list<int|string>|null
+     */
+    public function onlyGiven(?array $ids, ?array $givenIds): ?array
+    {
+        if ($ids === null || $givenIds === null) {
+            return $ids;
+        }
+
+        $given = array_map('strval', $givenIds);
+
+        return array_values(array_filter($ids, fn (mixed $id): bool => in_array((string) $id, $given, true)));
     }
 
     /**

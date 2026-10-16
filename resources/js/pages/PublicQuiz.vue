@@ -36,7 +36,8 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
 import { deviceHintsHeader } from '@/lib/deviceHints';
-import { CONTENT_ITEM_TYPES } from '@/types/quiz';
+import { CONTENT_ITEM_TYPES, type SectionTarget } from '@/types/quiz';
+import { flowSections, sectionPath } from '@/utils/section-flow';
 import { stripRichFormatting } from '@/utils/rich-content';
 import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
@@ -60,6 +61,10 @@ type Question = {
         caption?: string;
     }[];
     points?: number;
+    /** Going to another section, like in Google Forms (see utils/section-flow). */
+    goTo?: SectionTarget;
+    branching?: boolean;
+    optionGoTo?: SectionTarget[];
 };
 
 const props = defineProps<{
@@ -85,6 +90,8 @@ const props = defineProps<{
             lockOnBlur?: boolean;
             timeLimit?: number;
             questionsPerPage?: string | number;
+            /** Where the first section leads when the form does not start with a section item. */
+            firstSectionGoTo?: SectionTarget;
             disableRespondentAutosave?: boolean;
             limitOneResponse?: boolean;
             /** Megabytes per file a student may hand in for a "File upload" question. */
@@ -109,6 +116,8 @@ const props = defineProps<{
         timeLimitMinutes: number | null;
         /** Sections of the exam (pages, like in Google Forms); 0 without sections. */
         sectionCount?: number;
+        /** Whether a section leads elsewhere than the next, by setting or by answer. */
+        branches?: boolean;
     };
     session?: {
         token?: string;
@@ -1181,7 +1190,9 @@ const examRules = computed<string[]>(() => {
     const sectionCount = props.examSummary?.sectionCount ?? 0;
     const pageCount = sectionCount > 1 ? sectionCount : questionsPerPage > 0 ? Math.ceil(examQuestionCount.value / questionsPerPage) : 1;
     rules.push(
-        sectionCount > 1
+        sectionCount > 1 && props.examSummary?.branches
+            ? `Ujian terdiri dari ${sectionCount} bagian. Bagian yang Anda kerjakan bisa berbeda sesuai jawaban Anda; soal di bagian yang terlewati tidak dihitung. Tekan "Selanjutnya" untuk ke bagian berikutnya.`
+            : sectionCount > 1
             ? `Ujian terdiri dari ${sectionCount} bagian. Tekan "Selanjutnya" untuk ke bagian selanjutnya, atau gunakan panel Nomor Soal.`
             : pageCount > 1
               ? `Soal dibagi ke dalam ${pageCount} halaman. Gunakan panel Nomor Soal untuk berpindah soal.`
@@ -1268,8 +1279,30 @@ const themeClass = computed(() => (design.value ? 'af-accent-bg' : (props.quizFo
 useDesignCss(design);
 
 const isContentItem = (question: Question) => CONTENT_ITEM_TYPES.includes(question.type as (typeof CONTENT_ITEM_TYPES)[number]);
-const answerableQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => !isContentItem(question)));
 const hasSections = computed<boolean>(() => displayQuestions.value.some((question) => question.type === 'Section'));
+
+/*
+ * The student's way through the sections, like in Google Forms: a section leads to the next one, to
+ * another, or to the end, and a question may decide by its answer. The way follows the answers given
+ * so far; only the questions on it are counted, required and sent.
+ */
+const sectionsOfExam = computed(() => flowSections(displayQuestions.value));
+const pathKeys = computed<number[]>(() =>
+    hasSections.value ? sectionPath(displayQuestions.value, props.quizForm.settings?.firstSectionGoTo, answers.value) : [],
+);
+const onPathIds = computed<Set<number> | null>(() => {
+    if (!hasSections.value) {
+        return null;
+    }
+    const keys = new Set(pathKeys.value);
+    return new Set(sectionsOfExam.value.filter((section) => keys.has(section.key)).flatMap((section) => section.items.map((item) => item.id)));
+});
+const isOnPath = (question: Question): boolean => onPathIds.value === null || onPathIds.value.has(question.id);
+const answerableQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => !isContentItem(question) && isOnPath(question)));
+/** The answers (and "Ragu-ragu" marks) of the questions on the student's way only. */
+const answersOnPath = (): Record<number, any> =>
+    onPathIds.value === null ? answers.value : Object.fromEntries(Object.entries(answers.value).filter(([id]) => onPathIds.value!.has(Number(id))));
+const doubtsOnPath = (): string[] => (onPathIds.value === null ? doubtfulIds.value : doubtfulIds.value.filter((id) => onPathIds.value!.has(Number(id))));
 
 const pages = computed<Question[][]>(() => {
     const items = displayQuestions.value;
@@ -1320,6 +1353,17 @@ const currentPage = ref(1);
 const totalPages = computed<number>(() => pages.value.length);
 
 const currentPagedQuestions = computed<Question[]>(() => pages.value[currentPage.value - 1] ?? []);
+
+/** The pages on the student's way, in order (every page without sections). */
+const pathPages = computed<number[]>(() =>
+    hasSections.value
+        ? pathKeys.value.map((key) => sectionsOfExam.value.findIndex((section) => section.key === key) + 1).filter((page) => page > 0)
+        : Array.from({ length: pages.value.length }, (_, index) => index + 1),
+);
+/** Where the current page is on the way (0 is the first). */
+const pathPosition = computed<number>(() => Math.max(0, pathPages.value.indexOf(currentPage.value)));
+/** The last page on the way: "Kirim Jawaban" instead of "Selanjutnya". */
+const isLastPageOnPath = computed<boolean>(() => pathPages.value.indexOf(currentPage.value) >= pathPages.value.length - 1);
 
 /** The page an item is on (1 is the first). */
 const pageOf = (itemId: number): number => Math.max(1, pages.value.findIndex((page) => page.some((item) => item.id === itemId)) + 1);
@@ -1492,15 +1536,20 @@ const scrollToQuizTop = () => {
 };
 
 const nextPage = () => {
-    if (currentPage.value < totalPages.value) {
-        currentPage.value++;
+    const at = pathPages.value.indexOf(currentPage.value);
+    // A page off the way (an answer just changed it) goes on to the next page that is on it.
+    const next = at >= 0 ? pathPages.value[at + 1] : pathPages.value.find((page) => page > currentPage.value);
+    if (next !== undefined) {
+        currentPage.value = next;
         scrollToQuizTop();
     }
 };
 
 const prevPage = () => {
-    if (currentPage.value > 1) {
-        currentPage.value--;
+    const at = pathPages.value.indexOf(currentPage.value);
+    const previous = at > 0 ? pathPages.value[at - 1] : [...pathPages.value].reverse().find((page) => page < currentPage.value);
+    if (previous !== undefined) {
+        currentPage.value = previous;
         scrollToQuizTop();
     }
 };
@@ -1537,7 +1586,7 @@ const goToFirstUnansweredRequired = () => {
 
 const canMarkDoubt = computed<boolean>(() => props.quizForm.settings.isQuiz !== false);
 const isDoubtful = (question: Question) => doubtfulIds.value.includes(String(question.id));
-const doubtfulQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => isDoubtful(question)));
+const doubtfulQuestions = computed<Question[]>(() => answerableQuestions.value.filter((question) => isDoubtful(question)));
 
 const toggleDoubt = (question: Question) => {
     // While locked the attempt stays as it was when the student left.
@@ -1781,7 +1830,8 @@ const validateForm = (): boolean => {
     validationErrors.value = {};
     let isValid = true;
 
-    displayQuestions.value.forEach((q) => {
+    // Only the questions on the student's way through the sections are required.
+    answerableQuestions.value.forEach((q) => {
         if (!q.required) {
             return;
         }
@@ -1979,8 +2029,8 @@ const scheduleSubmissionRetry = () => {
 const submissionPayload = (isTimeout: boolean) => ({
     email: email.value || null,
     ...identityPayload(),
-    answers: answers.value,
-    doubts: doubtfulIds.value,
+    answers: answersOnPath(),
+    doubts: doubtsOnPath(),
     respondent_identifier: respondentIdentifier,
     session_token: props.session?.token ?? null,
     is_timeout: isTimeout,
@@ -2806,7 +2856,7 @@ const submitAnotherResponse = () => {
                     <button
                         v-if="isPaginated"
                         type="button"
-                        :disabled="currentPage <= 1 || isSubmitting"
+                        :disabled="pathPosition <= 0 || isSubmitting"
                         class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                         @click="prevPage"
                     >
@@ -2817,7 +2867,7 @@ const submitAnotherResponse = () => {
 
                     <!-- Indikator Halaman -->
                     <div v-if="isPaginated" class="text-center">
-                        <span class="af-on-page text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ currentPage }} dari {{ totalPages }}</span>
+                        <span class="af-on-page text-xs font-bold uppercase tracking-wider text-slate-400 block">Halaman {{ pathPosition + 1 }} dari {{ pathPages.length }}</span>
                         <span v-if="currentPageRange" class="af-on-page text-xs font-semibold text-slate-600 mt-0.5 block">
                             Soal {{ currentPageRange[0] }}{{ currentPageRange[1] !== currentPageRange[0] ? ` - ${currentPageRange[1]}` : '' }} dari {{ totalQuestionsCount }}
                         </span>
@@ -2826,7 +2876,7 @@ const submitAnotherResponse = () => {
                     <!-- Tombol Selanjutnya atau Kirim Jawaban -->
                     <div class="w-full sm:w-auto">
                         <button
-                            v-if="isPaginated && currentPage < totalPages"
+                            v-if="isPaginated && !isLastPageOnPath"
                             type="button"
                             :disabled="isSubmitting"
                             :class="[
@@ -2925,7 +2975,7 @@ const submitAnotherResponse = () => {
             <div class="px-4 pt-3">
                 <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
                     <span>{{ totalAnsweredCount }} dari {{ totalQuestionsCount }} terjawab</span>
-                    <span v-if="isPaginated" class="text-slate-400">Hal. {{ currentPage }}/{{ totalPages }}</span>
+                    <span v-if="isPaginated" class="text-slate-400">Hal. {{ pathPosition + 1 }}/{{ pathPages.length }}</span>
                 </div>
                 <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                     <div

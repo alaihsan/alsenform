@@ -14,6 +14,7 @@ use App\Services\QuestionBank;
 use App\Support\FormDesign;
 use App\Support\MediaUrl;
 use App\Support\QuizFormPayloads;
+use App\Support\SectionFlow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -82,13 +83,14 @@ class QuizFormController extends Controller
             }
 
             $wasLockingOnBlur = $current->locksOnBlur();
+            $flow = SectionFlow::normalize($mediaUrl->normalizeQuestions($validated['questions']), $this->settingsToStore($validated['settings']));
 
             $current->update([
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? '',
                 'slug' => $validated['slug'],
-                'questions' => $mediaUrl->normalizeQuestions($validated['questions']),
-                'settings' => $this->settingsToStore($validated['settings']),
+                'questions' => $flow['items'],
+                'settings' => $flow['settings'],
                 'published_at' => $request->boolean('published') ? ($current->published_at ?? now()) : null,
             ]);
 

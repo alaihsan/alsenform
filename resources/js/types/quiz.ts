@@ -36,7 +36,16 @@ export type Question = {
     points: number;
     /** Pembahasan: why the answer is right, shown to students with their results. */
     explanation?: string;
+    /** A section: where the student goes after it (see utils/section-flow). */
+    goTo?: SectionTarget;
+    /** A multiple-choice or drop-down question: "Buka bagian berdasarkan jawaban". */
+    branching?: boolean;
+    /** With branching: where each option sends the student, in the order of the options. */
+    optionGoTo?: SectionTarget[];
 };
+
+/** Where a section leads: the next section, the end of the form, or the key of another section. */
+export type SectionTarget = 'next' | 'submit' | number;
 
 export type PreviewAnswer = string | string[] | Record<number, any>;
 
@@ -73,6 +82,8 @@ export type QuizFormPayload = {
         shuffleQuestions: boolean;
         shuffleOptions?: boolean;
         /** A random selection of the questions for each student (see App\\Support\\ExamLayout). */
+        /** Where the first section leads when the form does not start with a section item (see utils/section-flow). */
+        firstSectionGoTo?: SectionTarget;
         questionDraw?: {
             enabled: boolean;
             mode: 'count' | 'difficulty';

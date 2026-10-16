@@ -113,7 +113,8 @@ class SubmitExpiredAttempts
             $wasLocked = $attempt->isEffectivelyLocked($quizForm);
             $questions = is_array($quizForm->questions) ? $quizForm->questions : [];
             $assignedIds = $this->examLayout->assignedIds($quizForm, $attempt->layout);
-            $answers = $attempt->savedAnswersFor($quizForm, $assignedIds);
+            // A form that sends students past sections keeps only what is on their way.
+            ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($attempt->savedAnswersFor($quizForm, $assignedIds), $assignedIds);
             $isAccount = $attempt->user_id !== null;
 
             $response = new QuizResponse([
@@ -125,8 +126,8 @@ class SubmitExpiredAttempts
                 'respondent_class' => $isAccount ? null : $attempt->respondent_class,
                 'email' => $attempt->respondent_email ?? $session->user?->email,
                 'answers' => $answers,
-                'doubtful_question_ids' => $attempt->doubtful_question_ids,
-                'question_ids' => $assignedIds,
+                'doubtful_question_ids' => $quizForm->onlyGiven($attempt->doubtful_question_ids, $givenIds),
+                'question_ids' => $givenIds,
                 'score' => $this->scoring->score($questions, $answers),
                 'is_timeout' => true,
                 'is_auto_submitted' => true,

@@ -58,6 +58,12 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.points' => ['nullable', 'integer', 'min:0'],
             // Pembahasan: shown to students with their results, when the teacher shows them in full.
             'questions.*.explanation' => ['nullable', 'string', 'max:5000'],
+            // Going to another section, like in Google Forms (see SectionFlow): after a section, and
+            // by the answer to a multiple-choice or drop-down question.
+            'questions.*.goTo' => ['nullable'],
+            'questions.*.branching' => ['nullable', 'boolean'],
+            'questions.*.optionGoTo' => ['nullable', 'array'],
+            'questions.*.optionGoTo.*' => ['nullable'],
             'settings' => ['required', 'array'],
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],
@@ -98,6 +104,7 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.lockOnBlur' => ['nullable', 'boolean'],
             'settings.timeLimit' => ['nullable', 'integer', 'min:0'],
             'settings.questionsPerPage' => ['nullable'],
+            'settings.firstSectionGoTo' => ['nullable'],
             'settings.questionDraw' => ['nullable', 'array'],
             'settings.questionDraw.enabled' => ['nullable', 'boolean'],
             'settings.questionDraw.mode' => ['nullable', 'string', Rule::in(['count', 'difficulty'])],
