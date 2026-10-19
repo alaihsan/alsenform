@@ -12,7 +12,7 @@ use Symfony\Component\Process\Process;
 test('lan:serve command is registered and outputs description and force option', function () {
     $this->artisan('lan:serve --help')
         ->assertSuccessful()
-        ->expectsOutputToContain('Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN)')
+        ->expectsOutputToContain('Jalankan aplikasi Falcon Forms di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN)')
         ->expectsOutputToContain('--force')
         ->expectsOutputToContain('--daemon')
         ->expectsOutputToContain('--status')
@@ -127,7 +127,7 @@ test('lan:stop stops an alsenform server that has no background metadata', funct
         $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
 
         expect($command->stop())->toBe(0)
-            ->and($buffer->fetch())->toContain("Server Alsenform pada port {$port} telah dihentikan")
+            ->and($buffer->fetch())->toContain("Server Falcon Forms pada port {$port} telah dihentikan")
             ->and($command->isPortInUse($port))->toBeFalse();
     } finally {
         $server->stop(0);
@@ -145,7 +145,7 @@ test('lan:stop leaves a server of another application running', function () {
         $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
 
         expect($command->stop())->toBe(1)
-            ->and($buffer->fetch())->toContain('bukan oleh server Alsenform')
+            ->and($buffer->fetch())->toContain('bukan oleh server Falcon Forms')
             ->and($command->isPortInUse($port))->toBeTrue();
     } finally {
         $server->stop(0);

@@ -15,7 +15,9 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex">
-        <title>{{ $page['title'] }} - Alsenform</title>
+        <title>{{ $page['title'] }} - Falcon Forms</title>
+        <link rel="icon" href="/favicon.ico" sizes="32x32">
+        <link rel="icon" href="/falcon-forms-icon.svg" type="image/svg+xml">
         {{-- Optional web font, fetched once the page has loaded so a missing internet connection never delays it. --}}
         <script>
             window.addEventListener('load', function () {
@@ -39,9 +41,7 @@
             .header { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid #f1f5f9; background: #fff; }
             .header-inner { display: flex; align-items: center; gap: .75rem; max-width: 72rem; height: 3.5rem; margin: 0 auto; padding: 0 1rem; }
             .brand { display: flex; align-items: center; gap: .625rem; }
-            .brand-mark { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem; width: 2rem; height: 2rem; padding: .375rem; border-radius: .75rem; background: #6366f1; box-shadow: 0 2px 0 #4338ca; }
-            .brand-mark span { border-radius: .5rem; background: rgba(255, 255, 255, .95); }
-            .brand-mark span:nth-child(2), .brand-mark span:nth-child(3) { background: rgba(255, 255, 255, .7); }
+            .brand-mark { display: block; flex-shrink: 0; width: 2rem; height: 2rem; }
             .brand-name { display: block; font-size: 1rem; font-weight: 700; line-height: 1.25; letter-spacing: -.025em; }
             .brand-tagline { display: block; font-size: 9px; font-weight: 500; line-height: 1; color: #64748b; }
             .main { display: flex; justify-content: center; padding: 2.5rem 1rem; }
@@ -87,10 +87,10 @@
         <header class="header">
             <div class="header-inner">
                 <div class="brand">
-                    <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+                    <img class="brand-mark" src="/falcon-forms-icon.svg" alt="" width="32" height="32">
                     <div>
-                        <span class="brand-name">Alsenform</span>
-                        <span class="brand-tagline">CBT &amp; Exam Platform</span>
+                        <span class="brand-name">Falcon Forms</span>
+                        <span class="brand-tagline">Formulir dan ujian tetap jalan, walau internet putus.</span>
                     </div>
                 </div>
             </div>

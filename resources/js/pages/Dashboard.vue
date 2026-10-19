@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BrandMark from '@/components/BrandMark.vue';
+import { BRAND_NAME } from '@/lib/brand';
 import AccountMenu from '@/components/AccountMenu.vue';
 import FormCardPreview from '@/components/FormCardPreview.vue';
 import {
@@ -810,7 +811,7 @@ function closeDonationModal(): void {
                                     <Grid3X3 class="h-3.5 w-3.5 text-slate-500" />
                                     Aplikasi & Pintasan
                                 </span>
-                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Alsenform</span>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{{ BRAND_NAME }}</span>
                             </div>
 
                             <!-- 3-Column App Tiles Grid -->
@@ -2103,7 +2104,7 @@ function closeDonationModal(): void {
                         </div>
                         <div>
                             <h2 class="text-lg font-extrabold text-slate-900">Dukung Developer</h2>
-                            <p class="text-xs text-slate-500">Dukung keberlanjutan dan pengembangan Alsenform.</p>
+                            <p class="text-xs text-slate-500">Dukung keberlanjutan dan pengembangan Falcon Forms.</p>
                         </div>
                     </div>
                     <button
@@ -2207,7 +2208,7 @@ function closeDonationModal(): void {
                                     </div>
                                 </div>
                             </div>
-                            <div class="text-[8px] font-extrabold text-slate-400">ALSENFORM DEV SUPPORT</div>
+                            <div class="text-[8px] font-extrabold text-slate-400">FALCON FORMS DEV SUPPORT</div>
                         </div>
 
                         <div class="mx-auto max-w-sm text-center text-xs leading-relaxed text-slate-500">
@@ -2240,7 +2241,7 @@ function closeDonationModal(): void {
                             <div class="text-xs font-bold uppercase tracking-widest opacity-80">Dukung Developer</div>
                             <p class="mt-2 text-[10px] font-medium leading-relaxed opacity-90">
                                 Bantuan donasi Anda digunakan untuk biaya operasional hosting, domain kustom, serta kelancaran pemeliharaan aplikasi
-                                Alsenform.
+                                Falcon Forms.
                             </p>
                         </div>
 

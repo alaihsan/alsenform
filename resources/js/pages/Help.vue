@@ -223,7 +223,7 @@ const teacherTopics: HelpTopic[] = [
         icon: UploadCloud,
         badge: 'Import',
         badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-        summary: 'Panduan ekspor Blackboard 6.0-9.0 dari ExamView dan impor ke Alsenform lengkap dengan gambar soal.',
+        summary: 'Panduan ekspor Blackboard 6.0-9.0 dari ExamView dan impor ke Falcon Forms lengkap dengan gambar soal.',
     },
     {
         id: 'docx-import',
@@ -323,7 +323,7 @@ const selectTopic = (id: string) => {
                     <p class="mt-1 text-sm text-slate-500">
                         {{
                             isStudent
-                                ? 'Panduan singkat masuk, mengerjakan ujian, dan mengirim jawaban di Alsenform.'
+                                ? 'Panduan singkat masuk, mengerjakan ujian, dan mengirim jawaban di Falcon Forms.'
                                 : 'Panduan membuat ujian, menulis soal Arab & rumus, pengawasan CBT, hingga rekap nilai siswa.'
                         }}
                     </p>
@@ -448,13 +448,13 @@ const selectTopic = (id: string) => {
                                 </div>
                                 <div>
                                     <h2 class="text-xl font-bold text-slate-900">1. Memulai & Alur Kerja Kuis</h2>
-                                    <p class="text-xs text-slate-500">Langkah mudah menyusun dan mendistribusikan kuis di Alsenform</p>
+                                    <p class="text-xs text-slate-500">Langkah mudah menyusun dan mendistribusikan kuis di Falcon Forms</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Alsenform dirancang dengan alur kerja formulir yang mudah dikenali, dan disiapkan khusus untuk ujian sekolah berbasis komputer (CBT).
+                                    Falcon Forms dirancang dengan alur kerja formulir yang mudah dikenali, dan disiapkan khusus untuk ujian sekolah berbasis komputer (CBT).
                                 </p>
 
                                 <h3 class="font-bold text-slate-900 text-base">Alur 4 Langkah Pelaksanaan Ujian:</h3>
@@ -515,12 +515,12 @@ const selectTopic = (id: string) => {
                                 </div>
                                 <div>
                                     <h2 class="text-xl font-bold text-slate-900">2. Editor Soal & Tipe Pertanyaan</h2>
-                                    <p class="text-xs text-slate-500">Mengenal berbagai jenis butir soal yang didukung Alsenform</p>
+                                    <p class="text-xs text-slate-500">Mengenal berbagai jenis butir soal yang didukung Falcon Forms</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-4 text-sm text-slate-700 leading-relaxed">
-                                <p>Alsenform menyediakan fleksibilitas penuh untuk berbagai format penilaian ujian:</p>
+                                <p>Falcon Forms menyediakan fleksibilitas penuh untuk berbagai format penilaian ujian:</p>
 
                                 <div class="space-y-3">
                                     <div class="rounded-xl border border-slate-100 p-3.5">
@@ -586,7 +586,7 @@ const selectTopic = (id: string) => {
 
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Alsenform memiliki integrasi font khusus untuk pembelajaran Pendidikan Agama Islam (PAI), Tahfidz, dan Bahasa Arab dengan font bawaan: <strong>Amiri Quran</strong> (khas Mushaf Standar Madinah) dan <strong>Scheherazade New</strong>.
+                                    Falcon Forms memiliki integrasi font khusus untuk pembelajaran Pendidikan Agama Islam (PAI), Tahfidz, dan Bahasa Arab dengan font bawaan: <strong>Amiri Quran</strong> (khas Mushaf Standar Madinah) dan <strong>Scheherazade New</strong>.
                                 </p>
 
                                 <div class="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
@@ -737,7 +737,7 @@ const selectTopic = (id: string) => {
                                 </div>
                                 <div>
                                     <h2 class="text-xl font-bold text-slate-900">5. Import Bank Soal dari ExamView (ZIP)</h2>
-                                    <p class="text-xs text-slate-500">Hemat waktu dengan mengimpor ratusan bank soal ExamView langsung ke Alsenform</p>
+                                    <p class="text-xs text-slate-500">Hemat waktu dengan mengimpor ratusan bank soal ExamView langsung ke Falcon Forms</p>
                                 </div>
                             </div>
 
@@ -747,8 +747,8 @@ const selectTopic = (id: string) => {
                                     <li>Buka berkas bank soal Anda di program desktop <strong>ExamView Test Generator</strong>.</li>
                                     <li>Klik menu <strong>File &gt; Export &gt; Blackboard 6.0-7.0 (atau Blackboard 7.1-9.0)</strong>.</li>
                                     <li>Beri nama berkas dan simpan sebagai file arsip berformat <code>.zip</code>.</li>
-                                    <li>Buka editor Alsenform, klik tombol <strong>Import Soal &gt; Upload ExamView ZIP</strong>.</li>
-                                    <li>Alsenform akan mengekstrak butir soal, kunci jawaban, dan seluruh gambar diagram soal secara otomatis ke dalam kuis!</li>
+                                    <li>Buka editor Falcon Forms, klik tombol <strong>Import Soal &gt; Upload ExamView ZIP</strong>.</li>
+                                    <li>Falcon Forms akan mengekstrak butir soal, kunci jawaban, dan seluruh gambar diagram soal secara otomatis ke dalam kuis!</li>
                                 </ol>
                             </div>
                         </section>

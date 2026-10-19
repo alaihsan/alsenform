@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import BrandMark from '@/components/BrandMark.vue';
+import { BRAND_NAME, BRAND_PARENT } from '@/lib/brand';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { Eye, EyeOff, KeyRound, Loader2, LogIn } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
@@ -137,7 +138,7 @@ const submit = () => {
                             >
                                 <Loader2 v-if="form.processing" class="h-4 w-4 animate-spin" />
                                 <LogIn v-else class="h-4 w-4" />
-                                <span>Masuk ke Alsenform</span>
+                                <span>Masuk ke {{ BRAND_NAME }}</span>
                             </button>
 
                             <!-- Link to Register -->
@@ -152,7 +153,7 @@ const submit = () => {
 
         <!-- Footer -->
         <footer class="py-4 text-center text-xs font-semibold text-slate-400">
-            &copy; {{ new Date().getFullYear() }} Alsenform · Perangkat lunak sumber terbuka berlisensi MIT
+            &copy; {{ new Date().getFullYear() }} {{ BRAND_NAME }} · {{ BRAND_PARENT }} · Perangkat lunak sumber terbuka berlisensi MIT
         </footer>
     </main>
 </template>

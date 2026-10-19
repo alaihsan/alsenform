@@ -11,14 +11,14 @@ class StatusLanCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'lan:status {--port=8000 : Port server Alsenform}';
+    protected $signature = 'lan:status {--port=8000 : Port server Falcon Forms}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Periksa status server Alsenform yang sedang berjalan di latar belakang';
+    protected $description = 'Periksa status server Falcon Forms yang sedang berjalan di latar belakang';
 
     /**
      * Execute the console command.

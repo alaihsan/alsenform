@@ -44,7 +44,7 @@ test('every error status gets an alsenform page instead of the laravel default',
         ->assertStatus($status)
         ->assertSee($title)
         ->assertSee("Kode Error {$status}")
-        ->assertSee('Alsenform')
+        ->assertSee('Falcon Forms')
         ->assertDontSee(Response::$statusTexts[$status] ?? 'Page Expired');
 })->with([
     [400, 'Permintaan Tidak Valid'],

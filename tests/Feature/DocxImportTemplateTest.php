@@ -49,7 +49,7 @@ test('teachers download the Word template', function () {
 
     $response = $this->actingAs($teacher)->get(route('questions.import.template'))->assertOk();
 
-    expect($response->headers->get('Content-Disposition'))->toContain('template_import_soal_alsenform.docx')
+    expect($response->headers->get('Content-Disposition'))->toContain('template_import_soal_falcon_forms.docx')
         ->and($response->headers->get('Content-Type'))->toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 
     $path = $response->baseResponse->getFile()->getPathname();

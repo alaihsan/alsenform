@@ -69,7 +69,7 @@ export type DesignPreset = {
 
 /** Ready-made themes, a starting point the teacher then adjusts. */
 export const DESIGN_PRESETS: DesignPreset[] = [
-    { key: 'klasik', name: 'Klasik Alsen', description: 'Ungu lembut, bawaan Alsenform.', design: {} },
+    { key: 'klasik', name: 'Klasik Falcon', description: 'Ungu lembut, bawaan Falcon Forms.', design: {} },
     {
         key: 'google',
         name: 'Ungu Tua',

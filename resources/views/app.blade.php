@@ -4,7 +4,10 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>Alsenform</title>
+        <title inertia>Falcon Forms</title>
+        <link rel="icon" href="/favicon.ico" sizes="32x32">
+        <link rel="icon" href="/falcon-forms-icon.svg" type="image/svg+xml">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         {{-- Web fonts are an optional enhancement, fetched only once the page has loaded: on an intranet
              without internet a font request can hang for minutes, which left pages loading forever

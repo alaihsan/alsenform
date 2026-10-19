@@ -37,7 +37,7 @@ class ServeLanCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Jalankan aplikasi Alsenform di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN) dengan proteksi Anti-Sleep';
+    protected $description = 'Jalankan aplikasi Falcon Forms di jaringan lokal (Wi-Fi 5GHz, 2.4GHz, dan Kabel LAN) dengan proteksi Anti-Sleep';
 
     /**
      * How often (in seconds) the server checks whether its IP address changed.
@@ -514,7 +514,7 @@ class ServeLanCommand extends Command
 
             $pids = $this->getPortPids($port);
             if (! $this->isAlsenformServer($pids)) {
-                $this->warn("⚠️  Port {$port} sedang digunakan, tetapi bukan oleh server Alsenform ini.");
+                $this->warn("⚠️  Port {$port} sedang digunakan, tetapi bukan oleh server Falcon Forms ini.");
                 $this->line('   Demi keamanan, tidak ada proses yang dihentikan. Periksa proses tersebut secara manual.');
                 $this->explainBusyPort($port, []);
 
@@ -523,13 +523,13 @@ class ServeLanCommand extends Command
 
             // A foreground server left in another terminal window, or one whose metadata is gone.
             if (! $this->killPortProcesses($port)) {
-                $this->error("Gagal menghentikan server Alsenform pada port {$port}.");
+                $this->error("Gagal menghentikan server Falcon Forms pada port {$port}.");
                 $this->explainBusyPort($port, $pids);
 
                 return self::FAILURE;
             }
 
-            $this->info("✓ Server Alsenform pada port {$port} telah dihentikan.");
+            $this->info("✓ Server Falcon Forms pada port {$port} telah dihentikan.");
 
             return self::SUCCESS;
         }
@@ -549,7 +549,7 @@ class ServeLanCommand extends Command
 
         $this->newLine();
         $this->output->writeln('<bg=green;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=green;fg=white;options=bold>   🛑 SERVER ALSENFORM LATAR BELAKANG BERHASIL DIHENTIKAN                 </>');
+        $this->output->writeln('<bg=green;fg=white;options=bold>   🛑 SERVER FALCON FORMS LATAR BELAKANG BERHASIL DIHENTIKAN              </>');
         $this->output->writeln('<bg=green;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
         $this->info("✓ Server pada port {$serverPort} telah dihentikan.");
@@ -571,7 +571,7 @@ class ServeLanCommand extends Command
             if ($this->isPortInUse($port)) {
                 $this->warn("⚠️  Server berjalan pada port {$port} (tanpa rekaman metadata background).");
             } else {
-                $this->info('ℹ️  Server Alsenform sedang TIDAK berjalan di latar belakang.');
+                $this->info('ℹ️  Server Falcon Forms sedang TIDAK berjalan di latar belakang.');
                 $this->line('   Jalankan dengan: <fg=yellow>php artisan lan:serve --daemon</>');
             }
 
@@ -597,7 +597,7 @@ class ServeLanCommand extends Command
 
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=blue;fg=white;options=bold>   🟢 STATUS SERVER ALSENFORM (BACKGROUND DAEMON)                         </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🟢 STATUS SERVER FALCON FORMS (BACKGROUND DAEMON)                      </>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
         $this->output->writeln('   • Status           : <fg=green;options=bold>AKTIF / BERJALAN DI LATAR BELAKANG</>');
@@ -1027,7 +1027,7 @@ class ServeLanCommand extends Command
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 ALSENFORM BERJALAN DI LATAR BELAKANG (BACKGROUND DAEMON)           </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 FALCON FORMS BERJALAN DI LATAR BELAKANG (BACKGROUND DAEMON)        </>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
 
@@ -1074,7 +1074,7 @@ class ServeLanCommand extends Command
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
-        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 ALSENFORM - SIAP DIGUNAKAN DI JARINGAN LOKAL (LAN / WI-FI)        </>');
+        $this->output->writeln('<bg=blue;fg=white;options=bold>   🚀 FALCON FORMS - SIAP DIGUNAKAN DI JARINGAN LOKAL (LAN / WI-FI)     </>');
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
 

@@ -23,7 +23,7 @@ class ImportSqliteDatabaseCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Pindahkan seluruh data Alsenform dari database SQLite lama ke PostgreSQL';
+    protected $description = 'Pindahkan seluruh data Falcon Forms dari database SQLite lama ke PostgreSQL';
 
     /**
      * Tables that only hold temporary runtime data and are not copied.

@@ -195,7 +195,7 @@ class ProfileController extends Controller
 
         $exportData = [
             'exported_at' => now()->toIso8601String(),
-            'platform' => 'Alsenform',
+            'platform' => 'Falcon Forms',
             'author' => [
                 'name' => $user->name,
                 'email' => $user->email,

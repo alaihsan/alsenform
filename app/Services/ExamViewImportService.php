@@ -139,7 +139,7 @@ class ExamViewImportService
             // Check if user accidentally zipped a raw .bnk file instead of exporting
             foreach ($this->entries as $path => $entry) {
                 if (str_ends_with(strtolower($path), '.bnk')) {
-                    throw new \RuntimeException('Berkas ZIP memuat berkas .bnk mentah ('.basename($entry).'). Alsenform membutuhkan file ZIP hasil ekspor ExamView. Silakan buka bank soal di aplikasi ExamView Test Generator, klik menu File -> Export -> Blackboard 7.1-9.0 (atau Blackboard 6.0-7.0), lalu unggah file ZIP hasil ekspor tersebut.');
+                    throw new \RuntimeException('Berkas ZIP memuat berkas .bnk mentah ('.basename($entry).'). Falcon Forms membutuhkan file ZIP hasil ekspor ExamView. Silakan buka bank soal di aplikasi ExamView Test Generator, klik menu File -> Export -> Blackboard 7.1-9.0 (atau Blackboard 6.0-7.0), lalu unggah file ZIP hasil ekspor tersebut.');
                 }
             }
 

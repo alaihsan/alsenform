@@ -37,6 +37,7 @@ import {
     UNTITLED_QUESTION,
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
+import { BRAND_ICON } from '@/lib/brand';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
 import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
@@ -1561,7 +1562,7 @@ const addQuestionsFromBank = (bankQuestions: Record<string, any>[]) => {
 const downloadImportTemplate = () => {
     const link = document.createElement('a');
     link.href = route('questions.import.template');
-    link.download = 'template_import_soal_alsenform.docx';
+    link.download = 'template_import_soal_falcon_forms.docx';
     link.click();
     markChanged('Template DOCX diunduh');
 };
@@ -1998,15 +1999,12 @@ watch(
             <div class="flex h-16 items-center gap-3 px-4 sm:px-5">
                 <button
                     type="button"
-                    class="grid h-9 w-9 shrink-0 grid-cols-2 gap-1 rounded-xl bg-indigo-500 p-1.5 text-white shadow-[0_3px_0_#4338ca] transition hover:-translate-y-0.5 hover:shadow-[0_5px_0_#4338ca]"
+                    class="h-9 w-9 shrink-0 rounded-[22%] transition hover:-translate-y-0.5 hover:shadow-[0_4px_0_#311a72]"
                     aria-label="Kembali ke beranda"
                     title="Kembali ke Dashboard"
                     @click="navigateBackToDashboard"
                 >
-                    <span class="rounded-lg bg-white/95"></span>
-                    <span class="rounded-lg bg-white/70"></span>
-                    <span class="rounded-lg bg-white/70"></span>
-                    <span class="rounded-lg bg-white/95"></span>
+                    <img :src="BRAND_ICON" alt="" class="h-9 w-9" width="36" height="36" />
                 </button>
 
                 <div class="flex min-w-0 items-center gap-3">

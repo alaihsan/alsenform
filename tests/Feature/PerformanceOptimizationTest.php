@@ -12,7 +12,7 @@ test('exam:optimize command runs successfully', function () {
     try {
         $this->artisan('exam:optimize')
             ->assertSuccessful()
-            ->expectsOutputToContain('OPTIMASI ALSENFORM UNTUK UJIAN SERENTAK')
+            ->expectsOutputToContain('OPTIMASI FALCON FORMS UNTUK UJIAN SERENTAK')
             ->expectsOutputToContain('PostgreSQL max_connections');
     } finally {
         // The command writes real framework caches. Never leave the testing

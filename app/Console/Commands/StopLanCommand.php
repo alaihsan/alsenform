@@ -11,14 +11,14 @@ class StopLanCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'lan:stop {--port=8000 : Port server Alsenform}';
+    protected $signature = 'lan:stop {--port=8000 : Port server Falcon Forms}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Hentikan server Alsenform yang sedang berjalan di latar belakang';
+    protected $description = 'Hentikan server Falcon Forms yang sedang berjalan di latar belakang';
 
     /**
      * Execute the console command.

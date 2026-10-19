@@ -97,7 +97,7 @@ class XlsxWriter
     /**
      * Write the workbook to a file.
      */
-    public function save(string $path, string $title = '', string $creator = 'Alsenform'): void
+    public function save(string $path, string $title = '', string $creator = 'Falcon Forms'): void
     {
         if ($this->sheets === []) {
             throw new RuntimeException('A workbook needs at least one sheet.');
@@ -398,7 +398,7 @@ class XlsxWriter
     protected function appProperties(): string
     {
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            .'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Alsenform</Application></Properties>';
+            .'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Falcon Forms</Application></Properties>';
     }
 
     protected function coreProperties(string $title, string $creator): string
