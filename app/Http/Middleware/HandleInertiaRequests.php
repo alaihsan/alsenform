@@ -44,6 +44,8 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+                // Students see no footer and no teacher menus (User::isStudent decides, also for old roles).
+                'isStudent' => (bool) $request->user()?->isStudent(),
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

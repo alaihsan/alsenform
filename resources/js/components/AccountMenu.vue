@@ -2,7 +2,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { router, usePage } from '@inertiajs/vue3';
-import { BookOpen, ChartColumn, Home, Library, LogOut, Puzzle, UserRound, Users } from 'lucide-vue-next';
+import { BookOpen, ChartColumn, Home, Library, LogOut, Puzzle, ShieldCheck, UserRound, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = withDefaults(
@@ -46,6 +46,7 @@ const goToReports = () => props.leave(() => router.visit(route('reports.index'))
 const goToQuestionBank = () => props.leave(() => router.visit(route('question-bank.page')));
 const goToAddons = () => props.leave(() => router.visit(route('addons.index')));
 const goToProfile = () => props.leave(() => router.visit(route('profile.edit')));
+const goToPrivacy = () => props.leave(() => router.visit(route('privacy')));
 const logout = () => props.leave(() => router.post(route('logout')));
 </script>
 
@@ -91,7 +92,7 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 @select="goHome"
             >
                 <Home class="h-4 w-4 text-slate-500" />
-                <span>Home</span>
+                <span>Beranda</span>
             </DropdownMenuItem>
             <DropdownMenuItem
                 class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
@@ -137,6 +138,15 @@ const logout = () => props.leave(() => router.post(route('logout')));
                     <span>Add-on</span>
                 </DropdownMenuItem>
             </template>
+            <!-- Students have no footer: the privacy policy is here for them. -->
+            <DropdownMenuItem
+                v-if="isStudent"
+                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                @select="goToPrivacy"
+            >
+                <ShieldCheck class="h-4 w-4 text-slate-500" />
+                <span>Kebijakan Privasi</span>
+            </DropdownMenuItem>
             <!-- Extra page-specific items, e.g. on the dashboard -->
             <slot />
             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />

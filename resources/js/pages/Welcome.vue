@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import BrandFooter from '@/components/BrandFooter.vue';
 import BrandMark from '@/components/BrandMark.vue';
 import { BRAND_NAME } from '@/lib/brand';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
@@ -153,6 +152,5 @@ const submit = () => {
         </div>
 
         <!-- Footer -->
-        <BrandFooter />
     </main>
 </template>

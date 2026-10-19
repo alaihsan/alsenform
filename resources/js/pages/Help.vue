@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import BrandFooter from '@/components/BrandFooter.vue';
 import DocxImportGuide, { type DocxGuideSample } from '@/components/help/DocxImportGuide.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
@@ -891,6 +890,5 @@ const selectTopic = (id: string) => {
                 </section>
             </div>
         </main>
-        <BrandFooter />
     </AlsenformLayout>
 </template>

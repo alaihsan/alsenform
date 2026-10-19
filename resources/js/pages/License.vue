@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import BrandFooter from '@/components/BrandFooter.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { BRAND_NAME, BRAND_PARENT } from '@/lib/brand';
 import { Head, Link, usePage } from '@inertiajs/vue3';
@@ -136,6 +135,5 @@ const summary: { title: string; tone: string; items: string[] }[] = [
             </article>
         </main>
 
-        <BrandFooter />
     </AlsenformLayout>
 </template>
