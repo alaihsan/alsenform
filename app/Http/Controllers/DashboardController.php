@@ -6,6 +6,8 @@ use App\Models\QuizFolder;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\UnlockRequest;
+use App\Services\Addons;
+use App\Support\Addon;
 use App\Support\QuizFormPayloads;
 use App\Support\QuizItems;
 use Illuminate\Http\Request;
@@ -14,7 +16,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, QuizFormPayloads $payloads): Response
+    public function __invoke(Request $request, QuizFormPayloads $payloads, Addons $addons): Response
     {
         $user = $request->user();
 
@@ -141,6 +143,8 @@ class DashboardController extends Controller
             'folders' => $folders,
             'createFolderUrl' => route('folders.store'),
             'stats' => $stats,
+            // Rekap Kuis add-on: its tile in the apps menu is there while the add-on is installed.
+            'quizRecapEnabled' => $addons->isInstalledFor(Addon::QuizRecap, $user),
         ]);
     }
 

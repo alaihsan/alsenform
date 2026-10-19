@@ -482,7 +482,8 @@ const markSettingsChanged = () => {
  */
 const addonCatalog = ref<AddonEntry[]>(props.quizForm?.addons ?? []);
 const isAddonGalleryOpen = ref(false);
-const examAddons = computed(() => addonCatalog.value.filter((addon) => addon.installed || addon.installedForOwner));
+// Add-ons that are not switched per exam (Rekap Kuis) have nothing to switch here.
+const examAddons = computed(() => addonCatalog.value.filter((addon) => addon.perExam && (addon.installed || addon.installedForOwner)));
 const isAddonOnForExam = (addon: AddonEntry) => Boolean(addon.installedForOwner) && (form.settings.addons[addon.key] ?? addon.onByDefault);
 const itemAnalysisAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'item-analysis') ?? null);
 const examTokenAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'exam-token') ?? null);

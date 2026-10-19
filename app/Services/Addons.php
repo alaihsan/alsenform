@@ -101,6 +101,7 @@ class Addons
             'adds' => $addon->adds(),
             'reads' => $addon->reads(),
             'onByDefault' => $addon->onByDefault(),
+            'perExam' => $addon->perExam(),
             'installed' => isset($installations[$addon->value]),
             'installedForEveryone' => ($installations[$addon->value] ?? null) === 'everyone',
             // An add-on an admin installed for everyone is removed by an admin only.

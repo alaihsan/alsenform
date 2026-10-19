@@ -14,6 +14,7 @@ import {
     Plus,
     Puzzle,
     RefreshCw,
+    Sheet,
     Sparkles,
     Trash2,
     X,
@@ -29,6 +30,8 @@ export type AddonEntry = {
     adds: string[];
     reads: string[];
     onByDefault: boolean;
+    /** Switched on or off per exam; one that is not (Rekap Kuis) works while installed. */
+    perExam: boolean;
     installed: boolean;
     installedForEveryone: boolean;
     canUninstall: boolean;
@@ -55,6 +58,7 @@ const ICONS: Record<string, unknown> = {
     'graduation-cap': GraduationCap,
     brain: Brain,
     paintbrush: Paintbrush,
+    sheet: Sheet,
 };
 
 /** A colour per add-on, so the cards are told apart at a glance. */
@@ -64,6 +68,7 @@ const TONES: Record<string, string> = {
     remedial: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
     misconception: 'bg-rose-50 text-rose-600 ring-rose-100',
     'form-designer': 'bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-100',
+    'quiz-recap': 'bg-violet-50 text-violet-600 ring-violet-100',
 };
 const toneOf = (addon: AddonEntry) => TONES[addon.key] ?? 'bg-slate-100 text-slate-600 ring-slate-200';
 
@@ -227,7 +232,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                 <h3 class="mt-4 text-base font-extrabold text-slate-900">{{ addon.name }}</h3>
                 <p class="mt-1.5 line-clamp-4 flex-1 text-sm leading-relaxed text-slate-600">{{ addon.tagline }}</p>
                 <p class="mt-3 text-[11px] font-semibold text-slate-400">
-                    {{ addon.onByDefault ? 'Langsung aktif di ujian setelah dipasang' : 'Dinyalakan per ujian setelah dipasang' }}
+                    {{
+                        !addon.perExam
+                            ? 'Muncul di menu Aplikasi setelah dipasang'
+                            : addon.onByDefault
+                              ? 'Langsung aktif di ujian setelah dipasang'
+                              : 'Dinyalakan per ujian setelah dipasang'
+                    }}
                 </p>
 
                 <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
@@ -326,7 +337,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                                 </ul>
                             </div>
                         </div>
-                        <p class="text-xs leading-relaxed text-slate-500">
+                        <p v-if="!detail.perExam" class="text-xs leading-relaxed text-slate-500">
+                            Setelah dipasang, add-on ini muncul di menu Aplikasi di Beranda. Melepasnya menyembunyikan menu itu tanpa menghapus data.
+                        </p>
+                        <p v-else class="text-xs leading-relaxed text-slate-500">
                             Setelah dipasang, add-on {{ detail.onByDefault ? 'langsung aktif di semua ujian Anda' : 'perlu diaktifkan per ujian' }}.
                             Matikan untuk ujian tertentu lewat tombol Add-ons di editor. Melepas add-on mematikannya di semua ujian Anda tanpa
                             menghapus data.
@@ -389,12 +403,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                                 {{
                                     pending.action.everyone
                                         ? 'Semua guru di lembaga ini mendapat add-on ini, dan hanya admin yang dapat melepasnya.'
-                                        : 'Add-on ini dipasang untuk ujian-ujian milik Anda.'
+                                        : pending.addon.perExam
+                                          ? 'Add-on ini dipasang untuk ujian-ujian milik Anda.'
+                                          : 'Add-on ini dipasang untuk akun Anda.'
                                 }}
                                 {{
-                                    pending.addon.onByDefault
-                                        ? 'Add-on langsung aktif di ujian; matikan per ujian lewat tombol Add-ons di editor.'
-                                        : 'Add-on belum aktif sampai dinyalakan di ujian tertentu.'
+                                    !pending.addon.perExam
+                                        ? 'Add-on langsung muncul di menu Aplikasi di Beranda.'
+                                        : pending.addon.onByDefault
+                                          ? 'Add-on langsung aktif di ujian; matikan per ujian lewat tombol Add-ons di editor.'
+                                          : 'Add-on belum aktif sampai dinyalakan di ujian tertentu.'
                                 }}
                             </p>
                             <div class="rounded-2xl bg-slate-50 p-3">

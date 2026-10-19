@@ -17,6 +17,7 @@ use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
 use App\Http\Controllers\QuizFormCollaboratorController;
 use App\Http\Controllers\QuizFormController;
+use App\Http\Controllers\QuizRecapController;
 use App\Http\Controllers\QuizResponseController;
 use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\QuizResultController;
@@ -107,6 +108,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         // Laporan: logins and exam participation with device, browser and time
         Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');
         Route::get('reports/export', [ActivityReportController::class, 'export'])->name('reports.export');
+
+        // Rekap Kuis add-on: every quiz of the teacher in one table, by class
+        Route::get('rekap-kuis', [QuizRecapController::class, 'index'])->name('quiz-recap.index');
+        Route::get('rekap-kuis/unduh', [QuizRecapController::class, 'export'])->name('quiz-recap.export');
 
         // Unlock Request Admin / Teacher Routes
         Route::get('forms/{quizForm}/unlock-requests', [UnlockRequestController::class, 'index'])->name('forms.unlock-requests.index');

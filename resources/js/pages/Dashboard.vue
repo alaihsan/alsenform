@@ -43,6 +43,7 @@ import {
     Search,
     Settings,
     Shield,
+    Sheet,
     Sparkles,
     Trash2,
     Users,
@@ -70,6 +71,8 @@ const props = defineProps<{
         pending: number;
         className: string;
     };
+    /** Rekap Kuis add-on installed: its tile shows in the apps menu. */
+    quizRecapEnabled?: boolean;
 }>();
 
 const page = usePage<any>();
@@ -795,7 +798,7 @@ function closeDonationModal(): void {
                         <DropdownMenuTrigger :as-child="true">
                             <button
                                 type="button"
-                                aria-label="Apps launcher"
+                                aria-label="Menu aplikasi"
                                 class="hidden h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 sm:flex"
                             >
                                 <Grid3X3 class="h-5 w-5" />
@@ -909,6 +912,24 @@ function closeDonationModal(): void {
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
                                             >Laporan</span
+                                        >
+                                    </Link>
+                                </DropdownMenuItem>
+
+                                <!-- Rekap Kuis: add-on, only while it is installed (Guru / Admin) -->
+                                <DropdownMenuItem v-if="quizRecapEnabled && !isStudent" :as-child="true" class="cursor-pointer p-0 focus:bg-transparent">
+                                    <Link
+                                        :href="route('quiz-recap.index')"
+                                        class="group flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all hover:bg-slate-100/80"
+                                        data-testid="quiz-recap-tile"
+                                    >
+                                        <div
+                                            class="shadow-xs flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 transition-all group-hover:bg-violet-600 group-hover:text-white"
+                                        >
+                                            <Sheet class="h-5 w-5" />
+                                        </div>
+                                        <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
+                                            >Rekap Kuis</span
                                         >
                                     </Link>
                                 </DropdownMenuItem>
