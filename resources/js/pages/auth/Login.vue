@@ -30,7 +30,7 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Masuk ke akunmu" description="Admin memakai email, guru memakai NIP, dan murid memakai NIS.">
+    <AuthBase title="Masuk ke akun Anda" description="Masuk dengan email atau nomor induk dari lembaga Anda.">
         <Head title="Masuk" />
 
         <div v-if="status" class="mb-4 text-center text-sm font-medium text-green-600">
@@ -40,7 +40,7 @@ const submit = () => {
         <form @submit.prevent="submit" class="flex flex-col gap-6">
             <div class="grid gap-6">
                 <div class="grid gap-2">
-                    <Label for="identifier">Email / NIP / NIS</Label>
+                    <Label for="identifier">Email atau nomor induk</Label>
                     <Input
                         id="identifier"
                         type="text"
@@ -49,7 +49,7 @@ const submit = () => {
                         tabindex="1"
                         autocomplete="username"
                         v-model="form.identifier"
-                        placeholder="Masukkan email admin, NIP, atau NIS"
+                        placeholder="Contoh: NIS, NIP, atau email"
                     />
                     <InputError :message="form.errors.identifier" />
                 </div>
@@ -80,11 +80,11 @@ const submit = () => {
 
                 <Button type="submit" class="mt-4 w-full" tabindex="4" :disabled="form.processing">
                     <LoaderCircle v-if="form.processing" class="h-4 w-4 animate-spin" />
-                    Login
+                    Masuk
                 </Button>
             </div>
 
-            <div class="text-center text-xs text-muted-foreground">Akun dikelola oleh Administrator Sekolah.</div>
+            <div class="text-center text-xs text-muted-foreground">Akun dibuat oleh admin lembaga Anda. Belum punya akun? Hubungi admin.</div>
             <div class="text-center text-xs">
                 <TextLink :href="route('connection-check')" class="text-xs">Halaman lambat terbuka? Cek koneksi</TextLink>
             </div>

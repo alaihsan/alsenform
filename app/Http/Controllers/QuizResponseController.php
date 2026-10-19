@@ -43,7 +43,7 @@ class QuizResponseController extends Controller
         // If quiz is restricted to cohorts, or to the students chosen for it (remedial / enrichment)
         if ($quizForm->isRestricted()) {
             if (! $user) {
-                return redirect()->guest(route('login'))->with('error', 'Kuis ini hanya dapat diakses oleh peserta terdaftar (Cohort). Silakan masuk terlebih dahulu.');
+                return redirect()->guest(route('login'))->with('error', 'Formulir ini hanya dapat diakses oleh peserta terdaftar di kelompoknya. Silakan masuk terlebih dahulu.');
             }
 
             if (! $quizForm->allowsUser($user)) {
@@ -61,7 +61,7 @@ class QuizResponseController extends Controller
                     'accessRestricted' => true,
                     'restrictionReason' => $quizForm->isRestrictedToParticipants() && ! $quizForm->isRestrictedToCohorts()
                         ? 'Ujian ini hanya untuk siswa yang dipilih guru (remedial atau pengayaan).'
-                        : 'Akun Anda tidak terdaftar dalam kelompok (Cohort) peserta untuk kuis ini.',
+                        : 'Akun Anda tidak terdaftar dalam kelompok peserta untuk formulir ini.',
                     'allowedCohorts' => $quizForm->cohorts()->pluck('name')->all(),
                 ]);
             }
@@ -226,7 +226,7 @@ class QuizResponseController extends Controller
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
         if ($quizForm->isRestricted() && ! $quizForm->allowsUser($request->user())) {
-            abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan kuis ini.');
+            abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan formulir ini.');
         }
 
         $validated = $request->validate([
@@ -307,7 +307,7 @@ class QuizResponseController extends Controller
         abort_unless($quizForm->published_at || $request->user()?->is($quizForm->user), 404);
 
         if ($quizForm->isRestricted() && ! $quizForm->allowsUser($request->user())) {
-            abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan kuis ini.');
+            abort(403, 'Anda tidak memiliki hak akses untuk mengerjakan formulir ini.');
         }
 
         $validated = $request->validated();
@@ -368,7 +368,7 @@ class QuizResponseController extends Controller
             // A locked attempt waits for the teacher, except when its time is up: the answers
             // given so far are then stored instead of being lost.
             if ($session->isEffectivelyLocked($quizForm) && ! $this->timeIsUp($session)) {
-                abort(403, 'Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.');
+                abort(403, 'Ujian sedang terkunci. Silakan hubungi pengawas atau guru untuk membuka kunci.');
             }
 
             $lateSeconds = $this->secondsLate($session);
@@ -792,7 +792,7 @@ class QuizResponseController extends Controller
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'Tanggapan kuis berhasil disimpan.',
+                'message' => 'Jawaban berhasil disimpan.',
             ]);
         }
 

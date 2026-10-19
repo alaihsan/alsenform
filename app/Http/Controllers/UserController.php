@@ -169,7 +169,7 @@ class UserController extends Controller
         $roleLabel = match ($role) {
             'admin' => 'Administrator',
             'guru' => 'Guru',
-            default => 'Murid',
+            default => 'Siswa',
         };
 
         return back()->with('success', "Akun {$roleLabel} '{$validated['name']}' berhasil ditambahkan.");
@@ -247,7 +247,7 @@ class UserController extends Controller
         $roleLabel = match ($newRole) {
             'admin' => 'Administrator',
             'guru' => 'Guru',
-            default => 'Murid',
+            default => 'Siswa',
         };
 
         return back()->with('success', "Peran '{$user->name}' berhasil diubah menjadi {$roleLabel}.");
@@ -322,12 +322,12 @@ class UserController extends Controller
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.",
+                    'message' => "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.",
                     'data' => $result,
                 ]);
             }
 
-            return back()->with('success', "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.");
+            return back()->with('success', "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.");
         }
 
         $request->validate([
@@ -344,7 +344,7 @@ class UserController extends Controller
             $parsed = $service->parseContent($request->input('text'));
         } else {
             return response()->json([
-                'message' => 'Silakan unggah file CSV atau tempel (paste) data murid.',
+                'message' => 'Silakan unggah file CSV atau tempel (paste) data siswa.',
             ], 422);
         }
 
@@ -360,12 +360,12 @@ class UserController extends Controller
         }
 
         if (empty($parsed['valid'])) {
-            return back()->withErrors(['error' => 'Tidak ada baris data murid yang valid untuk diimpor.']);
+            return back()->withErrors(['error' => 'Tidak ada baris data siswa yang valid untuk diimpor.']);
         }
 
         $result = $service->import($parsed['valid']);
 
-        return back()->with('success', "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.");
+        return back()->with('success', "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.");
     }
 
     /**

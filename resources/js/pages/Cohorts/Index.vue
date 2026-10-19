@@ -187,7 +187,7 @@ function syncFromClasses(): void {
 </script>
 
 <template>
-    <Head title="Kelompok Belajar (Cohort)" />
+    <Head title="Kelompok & Kelas" />
 
     <SettingsLayout wide>
         <!-- Toast Notification -->
@@ -215,9 +215,9 @@ function syncFromClasses(): void {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Cohort & Kelas</h2>
+                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Kelompok & Kelas</h2>
                 </div>
-                <p class="mt-1 text-sm text-slate-500">Kelompokkan murid per rombel atau kelas untuk membagikan kuis sekaligus.</p>
+                <p class="mt-1 text-sm text-slate-500">Kelompokkan siswa per rombel atau kelas untuk membagikan formulir sekaligus.</p>
             </div>
         <div class="flex flex-wrap items-center gap-2">
             <button
@@ -225,7 +225,7 @@ function syncFromClasses(): void {
                 @click="syncFromClasses"
                 :disabled="isSyncing || availableClasses.length === 0"
                 class="inline-flex items-center gap-2 rounded-xl border border-indigo-600/30 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 hover:border-indigo-600/50 shadow-sm disabled:opacity-50"
-                title="Buat cohort otomatis dari data kelas siswa di database"
+                title="Buat kelompok otomatis dari data kelas siswa di database"
             >
                 <RefreshCw class="h-4 w-4 text-indigo-600" :class="{ 'animate-spin': isSyncing }" />
                 <span class="hidden sm:inline">Sinkronkan dari Kelas</span>
@@ -237,7 +237,7 @@ function syncFromClasses(): void {
                 class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/30 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
             >
                 <Plus class="h-4 w-4" />
-                <span>Buat Cohort</span>
+                <span>Buat Kelompok</span>
             </button>
         </div>
         </div>
@@ -248,7 +248,7 @@ function syncFromClasses(): void {
                 <!-- Total Cohort -->
                 <div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Cohort</span>
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Kelompok</span>
                         <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                             <BookOpen class="h-4 w-4" />
                         </div>
@@ -266,7 +266,7 @@ function syncFromClasses(): void {
                         </div>
                     </div>
                     <div class="mt-2 text-2xl font-black text-emerald-950">{{ stats.total_members }}</div>
-                    <p class="mt-0.5 text-xs text-emerald-600/70">Siswa tergabung dalam cohort</p>
+                    <p class="mt-0.5 text-xs text-emerald-600/70">Siswa tergabung dalam kelompok</p>
                 </div>
 
                 <!-- Total Kelas -->
@@ -278,7 +278,7 @@ function syncFromClasses(): void {
                         </div>
                     </div>
                     <div class="mt-2 text-2xl font-black text-blue-950">{{ stats.total_classes }}</div>
-                    <p class="mt-0.5 text-xs text-blue-600/70">Kelas siap dijadikan cohort</p>
+                    <p class="mt-0.5 text-xs text-blue-600/70">Kelas siap dijadikan kelompok</p>
                 </div>
             </div>
 
@@ -290,7 +290,7 @@ function syncFromClasses(): void {
                         v-model="searchInput"
                         type="text"
                         @input="applySearch"
-                        placeholder="Cari nama atau kode cohort..."
+                        placeholder="Cari nama atau kode kelompok..."
                         class="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-xs font-medium text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-xs"
                     />
                     <button
@@ -322,7 +322,7 @@ function syncFromClasses(): void {
                                     type="button"
                                     @click="openEditModal(c)"
                                     class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
-                                    title="Edit Cohort"
+                                    title="Edit Kelompok"
                                 >
                                     <Pencil class="h-3.5 w-3.5" />
                                 </button>
@@ -330,7 +330,7 @@ function syncFromClasses(): void {
                                     type="button"
                                     @click="openDeleteModal(c)"
                                     class="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
-                                    title="Hapus Cohort"
+                                    title="Hapus Kelompok"
                                 >
                                     <Trash2 class="h-3.5 w-3.5" />
                                 </button>
@@ -351,11 +351,11 @@ function syncFromClasses(): void {
                         <div class="flex items-center justify-between text-xs text-slate-600 mb-3">
                             <div class="flex items-center gap-1.5">
                                 <Users class="h-4 w-4 text-emerald-600" />
-                                <span class="font-bold text-slate-900">{{ c.users_count }}</span> Murid
+                                <span class="font-bold text-slate-900">{{ c.users_count }}</span> Siswa
                             </div>
                             <div class="flex items-center gap-1.5">
                                 <ClipboardList class="h-4 w-4 text-indigo-600" />
-                                <span class="font-bold text-slate-900">{{ c.quiz_forms_count }}</span> Kuis Tertaut
+                                <span class="font-bold text-slate-900">{{ c.quiz_forms_count }}</span> Formulir Tertaut
                             </div>
                         </div>
 
@@ -373,7 +373,7 @@ function syncFromClasses(): void {
             <!-- Empty State -->
             <div v-else class="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center my-6">
                 <BookOpen class="mx-auto h-12 w-12 text-slate-300 mb-3" />
-                <h3 class="text-base font-bold text-slate-800">Belum ada Cohort</h3>
+                <h3 class="text-base font-bold text-slate-800">Belum ada Kelompok</h3>
                 <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                     Buat kelompok belajar secara manual atau klik tombol di bawah untuk otomatis mengelompokkan siswa berdasarkan kelas yang sudah ada.
                 </p>
@@ -393,7 +393,7 @@ function syncFromClasses(): void {
                         class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-sm"
                     >
                         <Plus class="h-4 w-4" />
-                        <span>Buat Cohort Baru</span>
+                        <span>Buat Kelompok Baru</span>
                     </button>
                 </div>
             </div>
@@ -403,7 +403,7 @@ function syncFromClasses(): void {
                 <div>
                     Menampilkan <span class="font-bold text-slate-800">{{ cohorts.from }}</span> -
                     <span class="font-bold text-slate-800">{{ cohorts.to }}</span> dari
-                    <span class="font-bold text-slate-800">{{ cohorts.total }}</span> Cohort
+                    <span class="font-bold text-slate-800">{{ cohorts.total }}</span> Kelompok
                 </div>
                 <div class="flex items-center gap-1">
                     <Link
@@ -434,8 +434,8 @@ function syncFromClasses(): void {
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Buat Cohort Baru</h3>
-                        <p class="text-xs text-slate-500">Kelompok siswa / rombel untuk kuis</p>
+                        <h3 class="text-base font-bold text-slate-900">Buat Kelompok Baru</h3>
+                        <p class="text-xs text-slate-500">Kelompok siswa / rombel untuk formulir</p>
                     </div>
                     <button
                         type="button"
@@ -449,7 +449,7 @@ function syncFromClasses(): void {
                 <form @submit.prevent="submitCreateCohort" class="mt-5 space-y-4">
                     <!-- Nama Cohort -->
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Nama Cohort</label>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nama Kelompok</label>
                         <input
                             v-model="createForm.name"
                             type="text"
@@ -462,7 +462,7 @@ function syncFromClasses(): void {
 
                     <!-- Kode Cohort -->
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Kode Cohort (Opsional / Otomatis)</label>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Kode Kelompok (Opsional / Otomatis)</label>
                         <input
                             v-model="createForm.code"
                             type="text"
@@ -475,7 +475,7 @@ function syncFromClasses(): void {
                     <!-- Isi Otomatis dari Kelas -->
                     <div v-if="availableClasses.length > 0">
                         <label class="block text-xs font-bold text-slate-700 mb-1">
-                            Masukkan Murid dari Kelas (Opsional)
+                            Masukkan Siswa dari Kelas (Opsional)
                         </label>
                         <select
                             v-model="createForm.source_class"
@@ -483,11 +483,11 @@ function syncFromClasses(): void {
                         >
                             <option value="">Pilih kelas (kosongkan jika buat kelompok manual)</option>
                             <option v-for="cls in availableClasses" :key="cls" :value="cls">
-                                Masukkan semua murid Kelas {{ cls }}
+                                Masukkan semua siswa Kelas {{ cls }}
                             </option>
                         </select>
                         <p class="text-[11px] text-slate-400 mt-1">
-                            Jika dipilih, semua murid yang memiliki kelas ini otomatis dimasukkan ke dalam cohort.
+                            Jika dipilih, semua siswa yang memiliki kelas ini otomatis dimasukkan ke dalam kelompok.
                         </p>
                     </div>
 
@@ -517,7 +517,7 @@ function syncFromClasses(): void {
                         >
                             <Loader2 v-if="createForm.processing" class="h-4 w-4 animate-spin" />
                             <Plus v-else class="h-4 w-4" />
-                            <span>Simpan Cohort</span>
+                            <span>Simpan Kelompok</span>
                         </button>
                     </div>
                 </form>
@@ -534,7 +534,7 @@ function syncFromClasses(): void {
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Ubah Data Cohort</h3>
+                        <h3 class="text-base font-bold text-slate-900">Ubah Data Kelompok</h3>
                         <p class="text-xs text-slate-500">Perbarui nama atau kode kelompok</p>
                     </div>
                     <button
@@ -548,7 +548,7 @@ function syncFromClasses(): void {
 
                 <form @submit.prevent="submitEditCohort" class="mt-5 space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Nama Cohort</label>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Nama Kelompok</label>
                         <input
                             v-model="editForm.name"
                             type="text"
@@ -559,7 +559,7 @@ function syncFromClasses(): void {
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Kode Cohort</label>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Kode Kelompok</label>
                         <input
                             v-model="editForm.code"
                             type="text"
@@ -611,13 +611,13 @@ function syncFromClasses(): void {
                         <Trash2 class="h-5 w-5" />
                     </div>
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Hapus Cohort</h3>
-                        <p class="text-xs text-slate-500">Tindakan ini tidak menghapus akun murid</p>
+                        <h3 class="text-base font-bold text-slate-900">Hapus Kelompok</h3>
+                        <p class="text-xs text-slate-500">Tindakan ini tidak menghapus akun siswa</p>
                     </div>
                 </div>
 
                 <p class="text-xs text-slate-600 leading-relaxed">
-                    Apakah Anda yakin ingin menghapus cohort <strong>{{ cohortToDelete?.name }}</strong>? Anggota murid di dalamnya akan dilepas dari kelompok ini, namun akun murid tetap ada.
+                    Apakah Anda yakin ingin menghapus kelompok <strong>{{ cohortToDelete?.name }}</strong>? Anggota siswa di dalamnya akan dilepas dari kelompok ini, namun akun siswa tetap ada.
                 </p>
 
                 <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 mt-6">
@@ -635,7 +635,7 @@ function syncFromClasses(): void {
                         class="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-red-700 transition disabled:opacity-50"
                     >
                         <Loader2 v-if="isDeleting" class="h-4 w-4 animate-spin" />
-                        <span>Ya, Hapus Cohort</span>
+                        <span>Ya, Hapus Kelompok</span>
                     </button>
                 </div>
             </div>

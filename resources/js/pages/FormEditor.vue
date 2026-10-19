@@ -37,7 +37,7 @@ import {
     UNTITLED_QUESTION,
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
-import { BRAND_ICON } from '@/lib/brand';
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
 import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
@@ -168,6 +168,7 @@ const form = reactive({
         confirmationMessage: props.quizForm?.settings?.confirmationMessage ?? 'Jawaban Anda sudah tercatat.',
         showSubmitAnotherResponse: props.quizForm?.settings?.showSubmitAnotherResponse ?? true,
         showResultsSummary: props.quizForm?.settings?.showResultsSummary ?? false,
+        showMadeWith: props.quizForm?.settings?.showMadeWith ?? true,
         // What students see once results are shown: the grade only, or also the key and pembahasan.
         resultsDetail: (props.quizForm?.settings?.resultsDetail ?? 'score') as 'score' | 'full',
         // When students may start the exam (ISO times, empty: any time).
@@ -206,7 +207,7 @@ const toggleCohort = (id: number) => {
     } else {
         selectedCohortIds.value.push(id);
     }
-    markChanged('Cohort diperbarui');
+    markChanged('Kelompok diperbarui');
 };
 
 const setCohortRestriction = (restricted: boolean) => {
@@ -214,7 +215,7 @@ const setCohortRestriction = (restricted: boolean) => {
     if (!restricted) {
         selectedCohortIds.value = [];
     }
-    markChanged('Batasan cohort diperbarui');
+    markChanged('Batasan kelompok diperbarui');
 };
 const showPreview = ref(false);
 const showPublish = ref(false);
@@ -296,7 +297,7 @@ const collaboratorError = ref('');
 
 const openCollaboratorModal = () => {
     if (!props.quizForm?.id) {
-        triggerToast('Simpan kuis terlebih dahulu sebelum mengundang kolaborator.');
+        triggerToast('Simpan formulir terlebih dahulu sebelum mengundang kolaborator.');
         return;
     }
     collaboratorError.value = '';
@@ -336,7 +337,7 @@ const removeCollaborator = (collaboratorId: number, isSelf = false) => {
         return;
     }
 
-    const confirmMsg = isSelf ? 'Apakah Anda yakin ingin keluar dari kolaborasi kuis ini?' : 'Hapus guru ini dari daftar kolaborator?';
+    const confirmMsg = isSelf ? 'Apakah Anda yakin ingin keluar dari kolaborasi formulir ini?' : 'Hapus guru ini dari daftar kolaborator?';
 
     if (!window.confirm(confirmMsg)) {
         return;
@@ -838,7 +839,7 @@ const saveDraft = (publishAfterSave = false, onComplete?: () => void, onSaved?: 
                     onComplete?.();
                     return;
                 }
-                slugWarning.value = errors.slug ?? 'Form belum bisa disimpan. Periksa kembali data quiz.';
+                slugWarning.value = errors.slug ?? 'Formulir belum bisa disimpan. Periksa kembali data formulir.';
                 markChanged('Gagal menyimpan perubahan');
                 showPublish.value = true;
                 onComplete?.();
@@ -1564,7 +1565,7 @@ const downloadImportTemplate = () => {
     link.href = route('questions.import.template');
     link.download = 'template_import_soal_falcon_forms.docx';
     link.click();
-    markChanged('Template DOCX diunduh');
+    markChanged('Templat DOCX diunduh');
 };
 
 const handleImportDocxFile = async (event: Event) => {
@@ -1822,7 +1823,7 @@ const setStatus = (status: boolean) => {
     writeLocalDraft();
     // Save to server immediately
     saveDraft(false);
-    triggerToast(status ? 'Quiz berhasil dipublikasikan' : 'Quiz diubah menjadi Draft');
+    triggerToast(status ? 'Formulir diterbitkan' : 'Formulir dijadikan draf');
 };
 
 /*
@@ -2001,7 +2002,7 @@ watch(
                     type="button"
                     class="h-9 w-9 shrink-0 rounded-[22%] transition hover:-translate-y-0.5 hover:shadow-[0_4px_0_#311a72]"
                     aria-label="Kembali ke beranda"
-                    title="Kembali ke Dashboard"
+                    title="Kembali ke Beranda"
                     @click="navigateBackToDashboard"
                 >
                     <img :src="BRAND_ICON" alt="" class="h-9 w-9" width="36" height="36" />
@@ -2057,7 +2058,7 @@ watch(
                         type="button"
                         class="hidden rounded-full p-2 transition hover:bg-slate-100 lg:block"
                         aria-label="Tema"
-                        :title="isDesignerOn ? 'Desainer Form' : 'Tema'"
+                        :title="isDesignerOn ? 'Desainer Formulir' : 'Tema'"
                         @click="openThemeEditor"
                     >
                         <Palette class="h-5 w-5" />
@@ -2097,7 +2098,7 @@ watch(
                         type="button"
                         class="relative hidden rounded-full p-2 transition hover:bg-slate-100 md:block"
                         aria-label="Undang kolaborator"
-                        title="Kolaborasi Kuis Antar Guru"
+                        title="Kolaborasi Formulir Antar Guru"
                         @click="openCollaboratorModal"
                     >
                         <UserPlus class="h-5 w-5" />
@@ -2167,7 +2168,7 @@ watch(
                                 "
                             >
                                 <UserPlus class="h-4 w-4 text-indigo-600" />
-                                Kolaborasi Kuis
+                                Kolaborasi Formulir
                             </button>
                             <button type="button" class="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-50" @click="openPreview">
                                 Buka pratinjau
@@ -2811,7 +2812,7 @@ watch(
                                                         ]"
                                                         @click="media.sourceType = 'link'"
                                                     >
-                                                        {{ media.type === 'video' ? 'Link YouTube' : 'Link URL' }}
+                                                        {{ media.type === 'video' ? 'Tautan YouTube' : 'Tautan URL' }}
                                                     </button>
                                                 </div>
 
@@ -2860,8 +2861,8 @@ watch(
                                                         type="text"
                                                         :placeholder="
                                                             media.type === 'image'
-                                                                ? 'Masukkan URL link gambar (http://...)'
-                                                                : 'Masukkan Link YouTube (https://youtube.com/...)'
+                                                                ? 'Masukkan URL tautan gambar (http://...)'
+                                                                : 'Masukkan Tautan YouTube (https://youtube.com/...)'
                                                         "
                                                         class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-indigo-500"
                                                         @input="markChanged('URL media diperbarui')"
@@ -3549,7 +3550,7 @@ watch(
                         <div class="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <h2 class="text-2xl font-semibold">Jawaban</h2>
-                                <p class="mt-2 text-sm text-slate-500">Ringkasan jawaban responden dari link publik form ini.</p>
+                                <p class="mt-2 text-sm text-slate-500">Ringkasan jawaban responden dari tautan publik formulir ini.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <a
@@ -3772,7 +3773,7 @@ watch(
                         <FileText class="mx-auto h-10 w-10 text-slate-400" />
                         <h3 class="mt-4 text-lg font-semibold text-slate-700">Belum ada respons masuk</h3>
                         <p class="mt-2 text-sm text-slate-500">
-                            Bagikan link publik, lalu jawaban akan muncul di sini dalam bentuk ringkasan dan grafik.
+                            Bagikan tautan publik, lalu jawaban akan muncul di sini dalam bentuk ringkasan dan grafik.
                         </p>
                     </div>
                 </section>
@@ -3785,7 +3786,7 @@ watch(
 
                             <div class="flex items-center justify-between gap-4 py-8 sm:gap-6 sm:px-11 sm:py-16">
                                 <div>
-                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Jadikan kuis (dinilai)</h3>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Jadikan ujian (dinilai)</h3>
                                     <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
                                         Beri poin dan kunci jawaban: jawaban dinilai otomatis, esai dan berkas dinilai guru
                                     </p>
@@ -3879,16 +3880,16 @@ watch(
                                 >
                                     <span>
                                         <span class="flex flex-wrap items-center gap-2 text-base font-normal text-slate-950 sm:text-xl">
-                                            <span>Peserta & Kelompok (Cohort)</span>
+                                            <span>Peserta & Kelompok</span>
                                             <span
                                                 v-if="selectedCohortIds.length > 0"
                                                 class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800"
                                             >
-                                                {{ selectedCohortIds.length }} Cohort Terpilih
+                                                {{ selectedCohortIds.length }} Kelompok Terpilih
                                             </span>
                                         </span>
                                         <span class="mt-1 block text-sm text-slate-600 sm:mt-2 sm:text-lg">
-                                            Batasi kuis agar hanya dapat dikerjakan oleh anggota kelompok/rombel tertentu
+                                            Batasi formulir agar hanya dapat dikerjakan oleh anggota kelompok/rombel tertentu
                                         </span>
                                     </span>
                                     <ChevronDown :class="['mt-2 h-6 w-6 shrink-0 transition-transform', isCohortSettingsOpen ? 'rotate-180' : '']" />
@@ -3914,7 +3915,7 @@ watch(
                                             <div>
                                                 <span class="block text-base font-bold text-slate-900">Terbuka untuk Semua (Publik)</span>
                                                 <span class="text-sm text-slate-500"
-                                                    >Siapapun yang memiliki link dapat mengisi dan mengerjakan kuis ini.</span
+                                                    >Siapapun yang memiliki tautan dapat mengisi dan mengerjakan formulir ini.</span
                                                 >
                                             </div>
                                         </label>
@@ -3935,9 +3936,9 @@ watch(
                                                 class="mt-1 text-indigo-600 focus:ring-indigo-500"
                                             />
                                             <div>
-                                                <span class="block text-base font-bold text-slate-900">Khusus Cohort Tertentu</span>
+                                                <span class="block text-base font-bold text-slate-900">Khusus Kelompok Tertentu</span>
                                                 <span class="text-sm text-slate-500"
-                                                    >Hanya murid yang terdaftar di kelompok terpilih yang dapat mengakses kuis.</span
+                                                    >Hanya siswa yang terdaftar di kelompok terpilih yang dapat mengakses formulir.</span
                                                 >
                                             </div>
                                         </label>
@@ -3956,7 +3957,7 @@ watch(
 
                                     <!-- Cohort Checklist when restricted -->
                                     <div v-if="isCohortRestricted" class="mt-5 space-y-3">
-                                        <p class="text-sm font-bold uppercase tracking-wider text-slate-500">Pilih Cohort yang Diizinkan:</p>
+                                        <p class="text-sm font-bold uppercase tracking-wider text-slate-500">Pilih Kelompok yang Diizinkan:</p>
 
                                         <div
                                             v-if="props.quizForm?.availableCohorts?.length"
@@ -3997,13 +3998,13 @@ watch(
                                             class="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
                                         >
                                             <span
-                                                >Belum ada Cohort yang tersedia di sistem. Buat Cohort terlebih dahulu di menu Kelompok Belajar.</span
+                                                >Belum ada Kelompok yang tersedia di sistem. Buat Kelompok terlebih dahulu di menu Kelompok & Kelas.</span
                                             >
-                                            <Link :href="route('cohorts.index')" class="ml-2 font-bold underline">Kelola Cohort</Link>
+                                            <Link :href="route('cohorts.index')" class="ml-2 font-bold underline">Kelola Kelompok</Link>
                                         </div>
 
                                         <p v-if="selectedCohortIds.length === 0" class="text-sm font-medium text-red-600">
-                                            * Harap pilih minimal satu Cohort jika pembatasan aktif, atau pilih "Terbuka untuk Semua".
+                                            * Harap pilih minimal satu Kelompok jika pembatasan aktif, atau pilih "Terbuka untuk Semua".
                                         </p>
                                     </div>
                                 </div>
@@ -4167,6 +4168,28 @@ watch(
                                         </button>
                                     </div>
 
+                                    <div class="flex items-center justify-between gap-4 sm:gap-8 sm:pl-11">
+                                        <span>
+                                            <span class="block text-base font-normal text-slate-950 sm:text-xl">Tampilkan "Dibuat dengan {{ BRAND_NAME }}"</span>
+                                            <span class="mt-1 block text-sm text-slate-600 sm:text-lg">Satu baris kecil di bawah layar selesai.</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            :aria-checked="Boolean(form.settings.showMadeWith)"
+                                            :aria-label="`Tampilkan Dibuat dengan ${BRAND_NAME}`"
+                                            :class="['relative h-5 w-11 shrink-0 rounded-full transition', form.settings.showMadeWith ? 'bg-indigo-500' : 'bg-slate-300']"
+                                            @click="toggleSetting('showMadeWith')"
+                                        >
+                                            <span
+                                                :class="[
+                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                                    form.settings.showMadeWith ? 'left-5' : '-left-1',
+                                                ]"
+                                            ></span>
+                                        </button>
+                                    </div>
+
                                     <div class="sm:pl-11">
                                         <div class="flex items-center justify-between gap-4 sm:gap-8">
                                             <span>
@@ -4285,7 +4308,7 @@ watch(
                                 <div>
                                     <h3 class="text-base font-normal text-slate-950 sm:text-xl">Batas Waktu Pengerjaan (Menit)</h3>
                                     <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
-                                        Batasi waktu pengisian kuis (0 atau kosong untuk tanpa batas waktu)
+                                        Batasi waktu pengisian formulir (0 atau kosong untuk tanpa batas waktu)
                                     </p>
                                 </div>
                                 <div class="flex shrink-0 items-center gap-2">
@@ -4912,8 +4935,8 @@ Jawaban: A, C</pre
                             <UserPlus class="h-6 w-6" />
                         </div>
                         <div>
-                            <h2 class="text-xl font-extrabold text-slate-900">Kolaborasi Kuis</h2>
-                            <p class="text-xs text-slate-500">Kelola guru yang dapat melihat dan mengedit kuis ini.</p>
+                            <h2 class="text-xl font-extrabold text-slate-900">Kolaborasi Formulir</h2>
+                            <p class="text-xs text-slate-500">Kelola guru yang dapat melihat dan mengedit formulir ini.</p>
                         </div>
                     </div>
                     <button
@@ -4930,20 +4953,20 @@ Jawaban: A, C</pre
                     <School class="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
                     <div class="leading-relaxed">
                         <span class="font-bold">Khusus Antar Guru:</span>
-                        Kolaborasi kuis hanya dapat dilakukan antar sesama akun Guru. Akun Murid (Siswa) tidak dapat ditambahkan ke kuis.
+                        Kolaborasi formulir hanya dapat dilakukan antar sesama akun Guru. Akun siswa tidak dapat ditambahkan ke formulir.
                     </div>
                 </div>
 
                 <!-- Section: Pemilik (Owner) -->
                 <div class="space-y-2">
-                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pemilik Kuis</label>
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Pemilik Formulir</label>
                     <div class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3">
                         <div class="flex items-center gap-3">
                             <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">
                                 {{ (props.quizForm?.owner?.name || 'G')[0].toUpperCase() }}
                             </div>
                             <div>
-                                <div class="text-sm font-bold text-slate-900">{{ props.quizForm?.owner?.name ?? 'Pemilik Form' }}</div>
+                                <div class="text-sm font-bold text-slate-900">{{ props.quizForm?.owner?.name ?? 'Pemilik Formulir' }}</div>
                                 <div class="text-xs text-slate-500">{{ props.quizForm?.owner?.email ?? '-' }}</div>
                             </div>
                         </div>
@@ -5064,11 +5087,11 @@ Jawaban: A, C</pre
             <section role="dialog" aria-modal="true" aria-labelledby="publish-identity-title" class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
                 <h2 id="publish-identity-title" class="text-xl font-black text-slate-900">Publikasikan untuk Publik</h2>
                 <p class="mt-1.5 text-sm text-slate-500">
-                    Siapa pun yang punya link dapat mengerjakan kuis ini tanpa akun. Pilih data yang wajib diisi peserta di layar konfirmasi
+                    Siapa pun yang punya tautan dapat mengerjakan formulir ini tanpa akun. Pilih data yang wajib diisi peserta di layar konfirmasi
                     sebelum mulai.
                 </p>
                 <IdentityFieldsChecklist v-model="publishIdentityChoice" class="mt-5" />
-                <p class="mt-3 text-xs text-slate-400">Murid yang masuk dengan akun tidak perlu mengisi: data diambil dari akunnya.</p>
+                <p class="mt-3 text-xs text-slate-400">Siswa yang masuk dengan akun tidak perlu mengisi: data diambil dari akunnya.</p>
                 <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <button
                         type="button"
@@ -5091,7 +5114,7 @@ Jawaban: A, C</pre
         <div v-if="showPublish" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <section class="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
                 <h2 class="text-2xl font-bold">Terbitkan ujian</h2>
-                <p class="mt-2 text-slate-500">Form siap dibagikan. Link tetap memakai slug ini meskipun judul quiz diganti.</p>
+                <p class="mt-2 text-slate-500">Formulir siap dibagikan. Tautan tetap memakai slug ini meskipun judul formulir diganti.</p>
                 <div class="mt-5 rounded-2xl bg-slate-50 p-4">
                     <label class="text-sm font-bold text-slate-500" for="public-slug">Tautan publik</label>
                     <div class="mt-2 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center">
@@ -5162,13 +5185,13 @@ Jawaban: A, C</pre
                     <div v-if="formDesignerAddon" class="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4" data-testid="designer-callout">
                         <p class="flex items-center gap-2 text-sm font-black text-slate-900">
                             <Paintbrush class="h-4 w-4 text-indigo-600" />
-                            Desainer Form
+                            Desainer Formulir
                         </p>
                         <p class="mt-1 text-xs leading-relaxed text-slate-600">
-                            Tema siap pakai, gambar header, logo sekolah, foto latar, huruf, bentuk kartu dan CSS sendiri, untuk editor dan semua halaman siswa.
+                            Tema siap pakai, gambar header, logo lembaga, foto latar, huruf, bentuk kartu dan CSS sendiri, untuk editor dan semua halaman siswa.
                         </p>
                         <p v-if="formDesignerAddon.installed && !formDesignerAddon.installedForOwner" class="mt-3 text-xs font-semibold text-amber-700">
-                            Pemilik ujian ini belum memasang Desainer Form, jadi desain belum dapat dipakai di ujian ini.
+                            Pemilik ujian ini belum memasang Desainer Formulir, jadi desain belum dapat dipakai di ujian ini.
                         </p>
                         <button
                             v-else
@@ -5176,7 +5199,7 @@ Jawaban: A, C</pre
                             class="mt-3 w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"
                             @click="startFormDesigner"
                         >
-                            {{ formDesignerAddon.installedForOwner ? 'Aktifkan & buka Desainer Form' : 'Pasang add-on Desainer Form' }}
+                            {{ formDesignerAddon.installedForOwner ? 'Aktifkan & buka Desainer Formulir' : 'Pasang add-on Desainer Formulir' }}
                         </button>
                     </div>
 

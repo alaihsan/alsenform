@@ -392,7 +392,7 @@ async function runPreview(): Promise<void> {
         formData.append('text', importText.value.trim());
     } else {
         isParsing.value = false;
-        showToast('Silakan pilih file CSV atau tempel teks data murid.');
+        showToast('Silakan pilih file CSV atau tempel teks data siswa.');
         return;
     }
 
@@ -412,7 +412,7 @@ async function runPreview(): Promise<void> {
             hasParsed.value = true;
         }
     } catch (err: any) {
-        showToast(err.response?.data?.message || 'Gagal memproses data murid.');
+        showToast(err.response?.data?.message || 'Gagal memproses data siswa.');
     } finally {
         isParsing.value = false;
     }
@@ -429,11 +429,11 @@ async function executeImport(): Promise<void> {
 
         if (response.data.success) {
             isImportModalOpen.value = false;
-            showToast(response.data.message || 'Impor murid berhasil diselesaikan!');
+            showToast(response.data.message || 'Impor siswa berhasil diselesaikan!');
             router.reload({ preserveScroll: true });
         }
     } catch (err: any) {
-        showToast(err.response?.data?.message || 'Terjadi kesalahan saat mengimpor murid.');
+        showToast(err.response?.data?.message || 'Terjadi kesalahan saat mengimpor siswa.');
     } finally {
         isSubmittingImport.value = false;
     }
@@ -471,7 +471,7 @@ async function executeImport(): Promise<void> {
                 <div class="flex flex-wrap items-center gap-2">
                     <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Pengguna</h2>
                 </div>
-                <p class="mt-1 text-sm text-slate-500">Kelola akun admin, guru, dan murid: peran, password, dan impor data murid.</p>
+                <p class="mt-1 text-sm text-slate-500">Kelola akun admin, guru, dan siswa: peran, password, dan impor data siswa.</p>
             </div>
         <div class="flex flex-wrap items-center gap-2">
             <button
@@ -480,7 +480,7 @@ async function executeImport(): Promise<void> {
                 class="inline-flex items-center gap-2 rounded-xl border border-emerald-600/30 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:border-emerald-600/50 hover:bg-emerald-100"
             >
                 <UploadCloud class="h-4 w-4 text-emerald-600" />
-                <span class="hidden sm:inline">Impor Murid</span>
+                <span class="hidden sm:inline">Impor Siswa</span>
                 <span class="sm:hidden">Impor</span>
             </button>
             <button
@@ -542,7 +542,7 @@ async function executeImport(): Promise<void> {
                         </div>
                     </div>
                     <div class="mt-2 text-2xl font-black text-blue-950">{{ stats.total_teachers }}</div>
-                    <p class="mt-0.5 text-xs text-blue-600/70">Pembuat kuis / form</p>
+                    <p class="mt-0.5 text-xs text-blue-600/70">Pembuat formulir</p>
                 </div>
 
                 <!-- Murid -->
@@ -552,7 +552,7 @@ async function executeImport(): Promise<void> {
                     :class="selectedRole === 'siswa' ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200/80'"
                 >
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Murid</span>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Siswa</span>
                         <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                             <School class="h-4 w-4" />
                         </div>
@@ -602,7 +602,7 @@ async function executeImport(): Promise<void> {
                                 :class="selectedRole === 'siswa' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
                             >
                                 <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-                                Murid ({{ stats.total_students }})
+                                Siswa ({{ stats.total_students }})
                             </button>
                         </div>
 
@@ -709,7 +709,7 @@ async function executeImport(): Promise<void> {
                                                         'bg-emerald-100 text-emerald-800': u.role === 'siswa',
                                                     }"
                                                 >
-                                                    {{ u.role === 'admin' ? 'Admin' : u.role === 'guru' ? 'Guru' : 'Murid' }}
+                                                    {{ u.role === 'admin' ? 'Admin' : u.role === 'guru' ? 'Guru' : 'Siswa' }}
                                                 </span>
                                                 <button
                                                     type="button"
@@ -740,7 +740,7 @@ async function executeImport(): Promise<void> {
                                             <GraduationCap v-else-if="u.role === 'guru'" class="h-3.5 w-3.5 text-blue-600" />
                                             <School v-else class="h-3.5 w-3.5 text-emerald-600" />
                                             <span>
-                                                {{ u.role === 'admin' ? 'Admin' : u.role === 'guru' ? 'Guru' : 'Murid' }}
+                                                {{ u.role === 'admin' ? 'Admin' : u.role === 'guru' ? 'Guru' : 'Siswa' }}
                                             </span>
                                         </span>
 
@@ -878,7 +878,7 @@ async function executeImport(): Promise<void> {
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
                         <h3 class="text-lg font-bold text-slate-900">Tambah Pengguna Baru</h3>
-                        <p class="text-xs text-slate-500">Tentukan peran: Administrator, Guru, atau Murid</p>
+                        <p class="text-xs text-slate-500">Tentukan peran: Administrator, Guru, atau Siswa</p>
                     </div>
                     <button
                         type="button"
@@ -921,7 +921,7 @@ async function executeImport(): Promise<void> {
                                 <input type="radio" v-model="addForm.role" value="guru" class="sr-only" />
                                 <GraduationCap class="mb-1 h-5 w-5" :class="addForm.role === 'guru' ? 'text-blue-600' : 'text-slate-400'" />
                                 <span class="text-xs font-bold">Guru</span>
-                                <span class="mt-0.5 text-[10px] text-slate-500">Buat Form</span>
+                                <span class="mt-0.5 text-[10px] text-slate-500">Buat Formulir</span>
                             </label>
 
                             <!-- Murid Option -->
@@ -935,7 +935,7 @@ async function executeImport(): Promise<void> {
                             >
                                 <input type="radio" v-model="addForm.role" value="siswa" class="sr-only" />
                                 <School class="mb-1 h-5 w-5" :class="addForm.role === 'siswa' ? 'text-emerald-600' : 'text-slate-400'" />
-                                <span class="text-xs font-bold">Murid</span>
+                                <span class="text-xs font-bold">Siswa</span>
                                 <span class="mt-0.5 text-[10px] text-slate-500">Akses via NIS</span>
                             </label>
                         </div>
@@ -1027,7 +1027,7 @@ async function executeImport(): Promise<void> {
                                 class="mt-2 flex items-center justify-between rounded-xl border border-emerald-200/60 bg-emerald-50 p-2.5 text-xs text-emerald-900"
                             >
                                 <div>
-                                    <span class="font-bold">Password Default Murid:</span>
+                                    <span class="font-bold">Password Bawaan Siswa:</span>
                                     <p class="text-[11px] text-emerald-700">Otomatis 6 digit NIS terakhir</p>
                                 </div>
                                 <div class="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 font-mono text-sm font-black text-emerald-800">
@@ -1049,11 +1049,11 @@ async function executeImport(): Promise<void> {
 
                         <!-- Email (Opsional for Murid) -->
                         <div>
-                            <label class="mb-1 block text-xs font-bold text-slate-700">Email Murid (Opsional)</label>
+                            <label class="mb-1 block text-xs font-bold text-slate-700">Email Siswa (Opsional)</label>
                             <input
                                 v-model="addForm.email"
                                 type="email"
-                                placeholder="murid@sekolah.sch.id (bisa dikosongkan)"
+                                placeholder="siswa@sekolah.sch.id (bisa dikosongkan)"
                                 class="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-800 transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             />
                         </div>
@@ -1110,8 +1110,8 @@ async function executeImport(): Promise<void> {
                             class="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-bold text-slate-800 transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         >
                             <option value="admin">Administrator (Akses Penuh)</option>
-                            <option value="guru">Guru (Pembuat Kuis/Form)</option>
-                            <option value="siswa">Murid (Login via NIS)</option>
+                            <option value="guru">Guru (pembuat formulir)</option>
+                            <option value="siswa">Siswa (masuk dengan NIS)</option>
                         </select>
                     </div>
 
@@ -1231,7 +1231,7 @@ async function executeImport(): Promise<void> {
                         <ShieldCheck class="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
                         <div>
                             <span class="block text-xs font-bold text-slate-900">Administrator</span>
-                            <span class="text-[11px] text-slate-500">Memiliki akses penuh mengelola user, form, donasi, dan pengaturan.</span>
+                            <span class="text-[11px] text-slate-500">Memiliki akses penuh mengelola user, formulir, donasi, dan pengaturan.</span>
                         </div>
                     </label>
 
@@ -1248,7 +1248,7 @@ async function executeImport(): Promise<void> {
                         <GraduationCap class="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
                         <div>
                             <span class="block text-xs font-bold text-slate-900">Guru</span>
-                            <span class="text-[11px] text-slate-500">Dapat membuat formulir kuis, mengoreksi jawaban, dan mengekspor nilai.</span>
+                            <span class="text-[11px] text-slate-500">Dapat membuat formulir dan ujian, mengoreksi jawaban, dan mengekspor nilai.</span>
                         </div>
                     </label>
 
@@ -1264,8 +1264,8 @@ async function executeImport(): Promise<void> {
                         <input type="radio" v-model="selectedNewRole" value="siswa" class="sr-only" />
                         <School class="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
                         <div>
-                            <span class="block text-xs font-bold text-slate-900">Murid</span>
-                            <span class="text-[11px] text-slate-500">Mengerjakan kuis yang dibagikan dan login dengan NIS.</span>
+                            <span class="block text-xs font-bold text-slate-900">Siswa</span>
+                            <span class="text-[11px] text-slate-500">Mengerjakan ujian yang dibagikan dan login dengan NIS.</span>
                         </div>
                     </label>
                 </div>
@@ -1460,7 +1460,7 @@ async function executeImport(): Promise<void> {
                             <UploadCloud class="h-5 w-5" />
                         </div>
                         <div>
-                            <h3 class="text-base font-bold text-slate-900">Impor Data Murid</h3>
+                            <h3 class="text-base font-bold text-slate-900">Impor Data Siswa</h3>
                             <p class="text-xs text-slate-500">Unggah CSV atau tempel teks: NIS, NAMA, KELAS</p>
                         </div>
                     </div>
@@ -1486,7 +1486,7 @@ async function executeImport(): Promise<void> {
                         class="shadow-2xs inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"
                     >
                         <Download class="h-3.5 w-3.5" />
-                        <span>Unduh Template CSV</span>
+                        <span>Unduh Templat CSV</span>
                     </a>
                 </div>
 
@@ -1515,7 +1515,7 @@ async function executeImport(): Promise<void> {
                 <!-- Body Tab: Paste -->
                 <div v-if="importTab === 'paste'" class="mt-4">
                     <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-bold text-slate-700">Data Murid (Salin langsung dari Excel / Word / Catatan):</span>
+                        <span class="font-bold text-slate-700">Data Siswa (Salin langsung dari Excel / Word / Catatan):</span>
                     </div>
                     <textarea
                         v-model="importText"
@@ -1633,7 +1633,7 @@ async function executeImport(): Promise<void> {
                     >
                         <Loader2 v-if="isSubmittingImport" class="h-4 w-4 animate-spin" />
                         <Check v-else class="h-4 w-4" />
-                        <span>Impor {{ previewRows.length }} Murid Sekarang</span>
+                        <span>Impor {{ previewRows.length }} Siswa Sekarang</span>
                     </button>
                 </div>
             </div>

@@ -23,7 +23,7 @@ class QuizResultsReport
 
     public function filename(QuizForm $quizForm): string
     {
-        $slug = Str::slug($quizForm->title) ?: 'kuis';
+        $slug = Str::slug($quizForm->title) ?: 'formulir';
 
         return "hasil_jawaban_{$slug}_".$this->now()->format('Ymd_His').'.xlsx';
     }

@@ -153,7 +153,7 @@ const gradeTone = (percentage: number) =>
 
 const COLUMNS: { key: SortKey; label: string; align?: 'center'; title?: string }[] = [
     { key: 'nis', label: 'NIS' },
-    { key: 'kelas', label: 'Kelas / Cohort' },
+    { key: 'kelas', label: 'Kelas / Kelompok' },
     { key: 'score', label: 'Poin Benar', align: 'center' },
     { key: 'percentage', label: 'Nilai (0-100)', align: 'center', title: 'Poin benar ÷ total poin soal berkunci × 100' },
     { key: 'status', label: 'Status' },
@@ -326,7 +326,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
             <li v-if="visibleRows.length === 0" class="px-4 py-8 text-center text-xs text-slate-400">
                 {{
                     rows.length === 0
-                        ? 'Belum ada tanggapan masuk untuk kuis ini.'
+                        ? 'Belum ada tanggapan masuk untuk formulir ini.'
                         : 'Tidak ada siswa yang cocok dengan pencarian atau huruf yang dipilih.'
                 }}
             </li>
@@ -445,7 +445,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         <td colspan="8" class="py-8 text-center text-slate-400">
                             {{
                                 rows.length === 0
-                                    ? 'Belum ada tanggapan masuk untuk kuis ini.'
+                                    ? 'Belum ada tanggapan masuk untuk formulir ini.'
                                     : 'Tidak ada siswa yang cocok dengan pencarian atau huruf yang dipilih.'
                             }}
                         </td>

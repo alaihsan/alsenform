@@ -6,7 +6,7 @@
 
         <title inertia>Falcon Forms</title>
         <link rel="icon" href="/favicon.ico" sizes="32x32">
-        <link rel="icon" href="/falcon-forms-icon.svg" type="image/svg+xml">
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         {{-- Web fonts are an optional enhancement, fetched only once the page has loaded: on an intranet

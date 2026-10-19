@@ -31,7 +31,7 @@ beforeEach(function () {
 
     Route::middleware('web')->group(function (): void {
         Route::get('_test/abort/{status}', fn (string $status) => abort((int) $status));
-        Route::get('_test/locked', fn () => abort(403, 'Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.'));
+        Route::get('_test/locked', fn () => abort(403, 'Ujian sedang terkunci. Silakan hubungi pengawas atau guru untuk membuka kunci.'));
         Route::post('_test/expired', fn () => throw new TokenMismatchException('CSRF token mismatch.'));
         Route::get('_test/throttled', fn () => throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => 42]));
         Route::post('_test/too-large', fn () => throw new PostTooLargeException('The POST data is too large.'));
@@ -120,7 +120,7 @@ test('pages for teachers show access denied to students without the english fram
 test('the reason given to abort is shown on the error page', function () {
     $this->get('/_test/locked')
         ->assertForbidden()
-        ->assertSee('Kuis sedang terkunci. Silakan hubungi pengawas / guru untuk membuka kunci.');
+        ->assertSee('Ujian sedang terkunci. Silakan hubungi pengawas atau guru untuk membuka kunci.');
 
     $teacher = User::factory()->create();
     $otherTeacher = User::factory()->create();
@@ -129,7 +129,7 @@ test('the reason given to abort is shown on the error page', function () {
         ->post(route('students.reset-password', $otherTeacher), [], errorPageInertiaHeaders())
         ->assertForbidden()
         ->assertJsonPath('component', 'Error')
-        ->assertJsonPath('props.detail', 'Aksi ini hanya dapat dilakukan pada akun murid.');
+        ->assertJsonPath('props.detail', 'Aksi ini hanya dapat dilakukan pada akun siswa.');
 });
 
 test('an expired page offers to reload the page the form was sent from', function () {

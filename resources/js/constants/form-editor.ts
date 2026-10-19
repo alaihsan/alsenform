@@ -56,7 +56,7 @@ export const templatePresets: Record<string, { title: string; description: strin
         options: ['Pedoman hidup dan sumber hukum tertinggi', 'Alat kekuasaan pemerintah', 'Hukum sementara', 'Peraturan daerah'],
     },
     'pai-arab': {
-        title: 'Kuis PAI & Bahasa Arab (Madinah)',
+        title: 'Ujian PAI & Bahasa Arab (Madinah)',
         description: 'Ujian pemahaman ayat Al-Qur\'an dan hukum tajwid standar Mushaf Madinah.',
         question: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ ﴿١﴾ - Hukum tajwid pada lafaz \'ٱلرَّحْمَـٰنِ\' adalah?',
         options: ['Alif Lam Syamsiyah', 'Alif Lam Qamariyah', 'Idgham Bighunnah', 'Ikhfa Haqiqi'],

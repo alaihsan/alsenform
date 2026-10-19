@@ -388,7 +388,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                             <p>
                                 {{
                                     pending.action.everyone
-                                        ? 'Semua guru di sekolah ini mendapat add-on ini, dan hanya admin yang dapat melepasnya.'
+                                        ? 'Semua guru di lembaga ini mendapat add-on ini, dan hanya admin yang dapat melepasnya.'
                                         : 'Add-on ini dipasang untuk ujian-ujian milik Anda.'
                                 }}
                                 {{

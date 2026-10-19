@@ -152,7 +152,7 @@ function confirmRemove(): void {
 </script>
 
 <template>
-    <Head :title="`Cohort ${cohort.name}`" />
+    <Head :title="`Kelompok ${cohort.name}`" />
 
     <SettingsLayout wide>
         <!-- Toast Notification -->
@@ -181,13 +181,13 @@ function confirmRemove(): void {
             <div class="min-w-0">
                 <Link :href="route('cohorts.index')" class="mb-1 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800">
                     <ArrowLeft class="h-3.5 w-3.5" />
-                    Semua Cohort
+                    Semua Kelompok
                 </Link>
                 <div class="flex flex-wrap items-center gap-2">
                     <h2 class="truncate text-xl font-black tracking-tight text-slate-900">{{ cohort.name }}</h2>
                     <span v-if="cohort.code" class="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700">{{ cohort.code }}</span>
                 </div>
-                <p class="mt-1 text-sm text-slate-500">{{ cohort.description || 'Kelola daftar murid anggota cohort ini' }}</p>
+                <p class="mt-1 text-sm text-slate-500">{{ cohort.description || 'Kelola daftar siswa anggota kelompok ini' }}</p>
             </div>
         <div class="flex flex-wrap items-center gap-2">
             <button
@@ -208,11 +208,11 @@ function confirmRemove(): void {
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div>
                         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Anggota</span>
-                        <div class="mt-1 text-2xl font-black text-slate-900">{{ cohort.users_count }} Murid</div>
+                        <div class="mt-1 text-2xl font-black text-slate-900">{{ cohort.users_count }} Siswa</div>
                     </div>
                     <div>
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kuis Tertaut</span>
-                        <div class="mt-1 text-2xl font-black text-indigo-600">{{ cohort.quiz_forms_count }} Kuis</div>
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Formulir Tertaut</span>
+                        <div class="mt-1 text-2xl font-black text-indigo-600">{{ cohort.quiz_forms_count }} Formulir</div>
                     </div>
                     <div>
                         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kelas Terwakili</span>
@@ -231,7 +231,7 @@ function confirmRemove(): void {
                 <div class="border-b border-slate-100 p-4 sm:p-5">
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <h2 class="text-sm font-bold text-slate-900">
-                            Daftar Anggota Murid ({{ members.total }})
+                            Daftar Anggota Siswa ({{ members.total }})
                         </h2>
 
                         <div class="flex flex-wrap items-center gap-2">
@@ -242,7 +242,7 @@ function confirmRemove(): void {
                                     v-model="searchInput"
                                     type="text"
                                     @input="handleSearch"
-                                    placeholder="Cari murid..."
+                                    placeholder="Cari siswa..."
                                     class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-xs font-medium text-slate-800 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                 />
                                 <button
@@ -288,7 +288,7 @@ function confirmRemove(): void {
                     <table class="w-full text-left text-xs text-slate-600">
                         <thead class="border-b border-slate-100 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                             <tr>
-                                <th scope="col" class="px-4 py-3.5 sm:px-5">Nama Murid</th>
+                                <th scope="col" class="px-4 py-3.5 sm:px-5">Nama Siswa</th>
                                 <th scope="col" class="hidden px-4 py-3.5 sm:table-cell">NIS</th>
                                 <th scope="col" class="hidden px-4 py-3.5 sm:table-cell">Kelas</th>
                                 <th scope="col" class="hidden px-4 py-3.5 md:table-cell">Email</th>
@@ -334,7 +334,7 @@ function confirmRemove(): void {
                                         type="button"
                                         @click="openRemoveModal(m)"
                                         class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 hover:border-red-200 transition"
-                                        title="Keluarkan murid dari cohort ini"
+                                        title="Keluarkan siswa dari kelompok ini"
                                     >
                                         <UserMinus class="h-3.5 w-3.5 text-red-500" />
                                         <span>Keluarkan</span>
@@ -345,9 +345,9 @@ function confirmRemove(): void {
                             <tr v-if="members.data.length === 0">
                                 <td colspan="5" class="py-12 text-center text-slate-500">
                                     <Users class="mx-auto h-10 w-10 text-slate-300 mb-2" />
-                                    <p class="font-bold text-slate-700">Belum ada anggota murid</p>
+                                    <p class="font-bold text-slate-700">Belum ada anggota siswa</p>
                                     <p class="text-xs text-slate-400 mt-1">
-                                        Tambahkan murid ke cohort ini dengan tombol "Tambah dari Kelas" di atas.
+                                        Tambahkan siswa ke kelompok ini dengan tombol "Tambah dari Kelas" di atas.
                                     </p>
                                 </td>
                             </tr>
@@ -361,7 +361,7 @@ function confirmRemove(): void {
                         <div>
                             Menampilkan <span class="font-bold text-slate-800">{{ members.from }}</span> -
                             <span class="font-bold text-slate-800">{{ members.to }}</span> dari
-                            <span class="font-bold text-slate-800">{{ members.total }}</span> murid
+                            <span class="font-bold text-slate-800">{{ members.total }}</span> siswa
                         </div>
                         <div class="flex items-center gap-1">
                             <Link
@@ -394,8 +394,8 @@ function confirmRemove(): void {
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Tambah Murid dari Kelas</h3>
-                        <p class="text-xs text-slate-500">Masukkan semua murid dari satu kelas ke cohort ini</p>
+                        <h3 class="text-base font-bold text-slate-900">Tambah Siswa dari Kelas</h3>
+                        <p class="text-xs text-slate-500">Masukkan semua siswa dari satu kelas ke kelompok ini</p>
                     </div>
                     <button
                         type="button"
@@ -435,7 +435,7 @@ function confirmRemove(): void {
                             class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition disabled:opacity-50"
                         >
                             <Loader2 v-if="addClassForm.processing" class="h-4 w-4 animate-spin" />
-                            <span>Tambahkan ke Cohort</span>
+                            <span>Tambahkan ke Kelompok</span>
                         </button>
                     </div>
                 </form>
@@ -455,13 +455,13 @@ function confirmRemove(): void {
                         <UserMinus class="h-5 w-5" />
                     </div>
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Keluarkan Murid</h3>
+                        <h3 class="text-base font-bold text-slate-900">Keluarkan Siswa</h3>
                         <p class="text-xs text-slate-500">Keluarkan dari kelompok ini</p>
                     </div>
                 </div>
 
                 <p class="text-xs text-slate-600 leading-relaxed">
-                    Apakah Anda yakin ingin mengeluarkan murid <strong>{{ memberToRemove?.name }}</strong> dari Cohort <strong>{{ cohort.name }}</strong>? Akun murid tidak dihapus dan murid tetap terdaftar di sistem.
+                    Apakah Anda yakin ingin mengeluarkan siswa <strong>{{ memberToRemove?.name }}</strong> dari Kelompok <strong>{{ cohort.name }}</strong>? Akun siswa tidak dihapus dan siswa tetap terdaftar di sistem.
                 </p>
 
                 <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 mt-6">

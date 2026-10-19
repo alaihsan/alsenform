@@ -34,6 +34,11 @@ Route::get('cek-koneksi', [ConnectionCheckController::class, 'page'])->name('con
 Route::get('cek-koneksi/ping', [ConnectionCheckController::class, 'ping'])->middleware('throttle:connection-check-ping')->name('connection-check.ping');
 Route::get('cek-koneksi/unduh', [ConnectionCheckController::class, 'download'])->middleware('throttle:connection-check-download')->name('connection-check.download');
 
+// Kebijakan Privasi: open to everyone, also before signing in.
+Route::get('privasi', fn () => Inertia::render('Privacy', [
+    'contact' => config('app.privacy_contact') ?: null,
+]))->name('privacy');
+
 Route::get('/', function () {
     if (auth()->check()) {
         return redirect()->route('dashboard');

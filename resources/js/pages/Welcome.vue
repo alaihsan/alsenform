@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import BrandFooter from '@/components/BrandFooter.vue';
 import BrandMark from '@/components/BrandMark.vue';
-import { BRAND_NAME, BRAND_PARENT } from '@/lib/brand';
+import { BRAND_NAME } from '@/lib/brand';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { Eye, EyeOff, KeyRound, Loader2, LogIn } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
@@ -44,7 +45,7 @@ const submit = () => {
                         :href="route('dashboard')"
                         class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
                     >
-                        Buka Dashboard
+                        Buka Beranda
                     </Link>
                 </div>
             </div>
@@ -62,13 +63,13 @@ const submit = () => {
                             </div>
                             <div>
                                 <h2 class="text-xl font-black text-slate-900">Masuk</h2>
-                                <p class="text-xs font-semibold text-slate-500">Admin: email · Guru: NIP · Murid: NIS</p>
+                                <p class="text-xs font-semibold text-slate-500">Masuk dengan email atau nomor induk dari lembaga Anda.</p>
                             </div>
                         </div>
 
                         <form @submit.prevent="submit" class="space-y-4">
                             <div>
-                                <label for="identifier" class="mb-1 block text-xs font-bold text-slate-700">Email / NIP / NIS</label>
+                                <label for="identifier" class="mb-1 block text-xs font-bold text-slate-700">Email atau nomor induk</label>
                                 <input
                                     id="identifier"
                                     v-model="form.identifier"
@@ -76,7 +77,7 @@ const submit = () => {
                                     required
                                     autofocus
                                     autocomplete="username"
-                                    placeholder="Masukkan email admin, NIP, atau NIS"
+                                    placeholder="Contoh: NIS, NIP, atau email"
                                     class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                 />
                                 <div v-if="form.errors.identifier" class="mt-1 text-[11px] font-semibold text-red-600">
@@ -143,7 +144,7 @@ const submit = () => {
 
                             <!-- Link to Register -->
                             <div class="pt-2 text-center text-xs font-semibold text-slate-400">
-                                Akun murid dan guru dikelola oleh Administrator Sekolah.
+                                Akun dibuat oleh admin lembaga Anda. Belum punya akun? Hubungi admin.
                             </div>
                         </form>
                     </div>
@@ -152,8 +153,6 @@ const submit = () => {
         </div>
 
         <!-- Footer -->
-        <footer class="py-4 text-center text-xs font-semibold text-slate-400">
-            &copy; {{ new Date().getFullYear() }} {{ BRAND_NAME }} · {{ BRAND_PARENT }} · Perangkat lunak sumber terbuka berlisensi MIT
-        </footer>
+        <BrandFooter />
     </main>
 </template>

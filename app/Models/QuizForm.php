@@ -345,8 +345,8 @@ class QuizForm extends Model
         $maxAttempts = $this->maxAttempts();
 
         return $maxAttempts === 1
-            ? 'Anda sudah pernah mengisi kuis ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.'
-            : "Anda sudah mengerjakan kuis ini {$maxAttempts} kali, sesuai batas kesempatan yang diberikan guru.";
+            ? 'Anda sudah pernah mengisi formulir ini. Setiap peserta hanya diperbolehkan mengirim 1 kali tanggapan.'
+            : "Anda sudah mengerjakan formulir ini {$maxAttempts} kali, sesuai batas kesempatan yang diberikan guru.";
     }
 
     /**

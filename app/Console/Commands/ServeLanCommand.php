@@ -553,7 +553,7 @@ class ServeLanCommand extends Command
         $this->output->writeln('<bg=green;fg=white;options=bold> ========================================================================= </>');
         $this->newLine();
         $this->info("✓ Server pada port {$serverPort} telah dihentikan.");
-        $this->info('✓ Proteksi Anti-Sleep dilepas. Pengaturan daya Mac Mini kembali ke mode normal.');
+        $this->info('✓ Proteksi Anti-Sleep dilepas. Pengaturan daya komputer server kembali ke mode normal.');
         $this->newLine();
 
         return self::SUCCESS;
@@ -605,7 +605,7 @@ class ServeLanCommand extends Command
         $this->output->writeln("   • Port Jaringan    : <fg=cyan;options=bold>{$port}</>");
         $this->output->writeln('   • Multi-Workers    : <fg=cyan>'.($data['workers'] ?? 24).' concurrent processes</>');
         $this->output->writeln("   • Uptime (Aktif)   : <fg=yellow;options=bold>{$uptimeFormatted}</>");
-        $this->output->writeln('   • Anti-Sleep (Mac) : <fg=green;options=bold>AKTIF (Caffeinate - Mac Mini M2 Tidak Akan Sleep/Tidur)</>');
+        $this->output->writeln('   • Anti-Sleep (Mac) : <fg=green;options=bold>AKTIF (Caffeinate - Komputer Server Tidak Akan Sleep/Tidur)</>');
         $this->output->writeln('   • Berkas Log       : <fg=gray>storage/logs/lan_server.log</>');
         $this->newLine();
 
@@ -1034,7 +1034,7 @@ class ServeLanCommand extends Command
         $this->output->writeln(" <fg=green;options=bold>✓ Status Server:</> <fg=green;options=bold>AKTIF</> (PID: <fg=cyan;options=bold>{$pid}</>)");
         $this->output->writeln(" <fg=green;options=bold>✓ Multi-Workers:</> <fg=cyan>{$workers} concurrent processes</> (mencegah antrean)");
         if ($useCaffeinate) {
-            $this->output->writeln(' <fg=green;options=bold>✓ Anti-Sleep Mac:</> <fg=cyan;options=bold>AKTIF (Caffeinate)</> - Mac Mini tidak akan tidur selama server aktif');
+            $this->output->writeln(' <fg=green;options=bold>✓ Anti-Sleep Mac:</> <fg=cyan;options=bold>AKTIF (Caffeinate)</> - komputer server tidak akan tidur selama server aktif');
         }
         $this->output->writeln(" <fg=green;options=bold>✓ Berkas Log:</> <fg=gray>{$logPath}</>");
         $this->newLine();
@@ -1084,7 +1084,7 @@ class ServeLanCommand extends Command
         $this->output->writeln('   ⚡ <options=bold>Cache Aset VITE</>: <fg=cyan>Aktif (Immutable)</> (0-byte reload di browser siswa)');
         $this->output->writeln('   ⚡ <options=bold>Kompresi Media</> : <fg=cyan>WebP Auto-Scale</> (gambar otomatis < 300KB)');
         if ($useCaffeinate) {
-            $this->output->writeln('   ⚡ <options=bold>Anti-Sleep (Mac)</>: <fg=cyan;options=bold>AKTIF (Caffeinate)</> (Mac Mini tidak akan tidur selama server aktif)');
+            $this->output->writeln('   ⚡ <options=bold>Anti-Sleep (Mac)</>: <fg=cyan;options=bold>AKTIF (Caffeinate)</> (komputer server tidak akan tidur selama server aktif)');
         }
         $this->newLine();
 

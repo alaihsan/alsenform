@@ -110,6 +110,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Privacy Contact
+    |--------------------------------------------------------------------------
+    |
+    | Where people ask the institution running this server about their data
+    | (an email or phone number), shown on the Kebijakan Privasi page. Left
+    | empty, the page tells them to contact the institution's admin.
+    |
+    */
+
+    'privacy_contact' => env('PRIVACY_CONTACT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

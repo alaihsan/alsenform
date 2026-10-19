@@ -22,7 +22,7 @@ enum Addon: string
             self::ExamToken => 'Token Ujian',
             self::Remedial => 'Remedial & Pengayaan',
             self::Misconception => 'Peta Miskonsepsi',
-            self::FormDesigner => 'Desainer Form',
+            self::FormDesigner => 'Desainer Formulir',
         };
     }
 
@@ -89,7 +89,7 @@ enum Addon: string
                 'Laporan Excel: lembar "Peta Miskonsepsi" per soal dan per siswa.',
             ],
             self::FormDesigner => [
-                'Editor: tombol palet membuka Desainer Form dengan pratinjau langsung (tema, warna, huruf, gambar, bentuk, CSS).',
+                'Editor: tombol palet membuka Desainer Formulir dengan pratinjau langsung (tema, warna, huruf, gambar, bentuk, CSS).',
                 'Halaman siswa: layar mulai, soal, layar selesai dan halaman hasil memakai desain ujian.',
                 'Beranda guru dan siswa: kartu ujian memakai warna dan gambar header desainnya.',
             ],

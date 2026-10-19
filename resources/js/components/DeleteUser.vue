@@ -60,15 +60,15 @@ const closeModal = () => {
             <div>
                 <p class="text-sm font-bold text-amber-900">Akun siswa dilindungi</p>
                 <p class="mt-1 text-sm leading-relaxed text-amber-800">
-                    Akun siswa dikelola oleh sekolah dan tidak dapat dihapus sendiri, agar riwayat nilai ujian tetap utuh. Hubungi administrator sekolah
-                    bila akun perlu diubah.
+                    Akun siswa dikelola oleh admin dan tidak dapat dihapus sendiri, agar riwayat nilai ujian tetap utuh. Hubungi admin bila akun
+                    perlu diubah.
                 </p>
             </div>
         </div>
 
         <div v-else class="mt-5 space-y-4 rounded-2xl border border-rose-200 bg-rose-50 p-4">
             <p class="text-sm leading-relaxed text-rose-800">
-                Menghapus akun akan menghapus seluruh kuis, rekap jawaban, dan pengaturan yang telah Anda buat secara permanen.
+                Menghapus akun akan menghapus seluruh formulir, rekap jawaban, dan pengaturan yang telah Anda buat secara permanen.
             </p>
             <Dialog>
                 <DialogTrigger as-child>
@@ -79,7 +79,7 @@ const closeModal = () => {
                         <DialogHeader class="space-y-2">
                             <DialogTitle class="text-lg font-bold text-slate-900">Yakin ingin menghapus akun?</DialogTitle>
                             <DialogDescription class="text-sm text-slate-500">
-                                Seluruh kuis, bank soal, dan riwayat Anda akan dihapus permanen. Masukkan password akun untuk konfirmasi.
+                                Seluruh formulir, bank soal, dan riwayat Anda akan dihapus permanen. Masukkan password akun untuk konfirmasi.
                             </DialogDescription>
                         </DialogHeader>
 

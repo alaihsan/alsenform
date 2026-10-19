@@ -187,7 +187,7 @@ class UnlockRequestController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Kode benar. Kuis terbuka.',
+                'message' => 'Kode benar. Ujian terbuka lagi.',
             ]);
         }
 

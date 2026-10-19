@@ -200,7 +200,7 @@ function confirmDelete(): void {
     });
 }
 
-// --- MODAL: Ganti / Reset Password Murid ---
+// --- MODAL: Ganti / Reset Password Siswa ---
 const isPasswordModalOpen = ref(false);
 const studentToManagePassword = ref<Student | null>(null);
 const newPasswordInput = ref('');
@@ -327,7 +327,7 @@ async function previewImport(): Promise<void> {
         } else if (importTab.value === 'paste' && importText.value.trim()) {
             formData.append('text', importText.value);
         } else {
-            showToast('Silakan pilih file atau tempel teks data murid terlebih dahulu.');
+            showToast('Silakan pilih file atau tempel teks data siswa terlebih dahulu.');
             isParsing.value = false;
             return;
         }
@@ -351,7 +351,7 @@ async function previewImport(): Promise<void> {
 
 async function executeImport(): Promise<void> {
     if (previewRows.value.length === 0) {
-        showToast('Tidak ada data murid valid untuk diimpor.');
+        showToast('Tidak ada data siswa valid untuk diimpor.');
         return;
     }
 
@@ -378,7 +378,7 @@ async function executeImport(): Promise<void> {
 
 <template>
     <SettingsLayout wide>
-        <Head title="Manajemen & Impor Murid" />
+        <Head title="Manajemen & Impor Siswa" />
 
         <!-- Toast Notification -->
         <Transition
@@ -405,19 +405,19 @@ async function executeImport(): Promise<void> {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Pengguna (Murid)</h2>
+                    <h2 class="truncate text-xl font-black tracking-tight text-slate-900">Pengguna (Siswa)</h2>
                 </div>
-                <p class="mt-1 text-sm text-slate-500">Kelola akun murid: tambah, ubah data, atur password, dan impor dari CSV.</p>
+                <p class="mt-1 text-sm text-slate-500">Kelola akun siswa: tambah, ubah data, atur password, dan impor dari CSV.</p>
             </div>
         <div class="flex flex-wrap items-center gap-2">
             <a
                 :href="route('students.template')"
                 download="template_impor_murid.csv"
                 class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                title="Unduh contoh template file CSV"
+                title="Unduh contoh templat file CSV"
             >
                 <Download class="h-3.5 w-3.5 text-slate-500" />
-                <span class="hidden sm:inline">Template CSV</span>
+                <span class="hidden sm:inline">Templat CSV</span>
             </a>
 
             <button
@@ -426,7 +426,7 @@ async function executeImport(): Promise<void> {
                 class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
                 <UserPlus class="h-3.5 w-3.5 text-indigo-600" />
-                <span>Tambah Murid</span>
+                <span>Tambah Siswa</span>
             </button>
 
             <button
@@ -435,7 +435,7 @@ async function executeImport(): Promise<void> {
                 class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
             >
                 <UploadCloud class="h-3.5 w-3.5" />
-                <span>Impor Murid</span>
+                <span>Impor Siswa</span>
             </button>
         </div>
         </div>
@@ -448,7 +448,7 @@ async function executeImport(): Promise<void> {
                 <div class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Murid Terdaftar</p>
+                            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Siswa Terdaftar</p>
                             <p class="mt-2 text-3xl font-extrabold text-slate-900">{{ stats.total_students }}</p>
                         </div>
                         <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
@@ -457,7 +457,7 @@ async function executeImport(): Promise<void> {
                     </div>
                     <div class="mt-4 flex items-center gap-2 text-xs font-medium text-slate-500">
                         <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-                        Status akun aktif & siap mengerjakan form
+                        Status akun aktif & siap mengerjakan formulir
                     </div>
                 </div>
 
@@ -491,7 +491,7 @@ async function executeImport(): Promise<void> {
                     </div>
                     <div class="mt-4 flex items-center gap-2 text-xs font-medium text-slate-500">
                         <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span>
-                        Murid dapat login langsung dengan NIS & password ini
+                        Siswa dapat login langsung dengan NIS & password ini
                     </div>
                 </div>
             </div>
@@ -537,7 +537,7 @@ async function executeImport(): Promise<void> {
                 </div>
 
                 <div class="text-xs font-medium text-slate-500">
-                    Menampilkan <span class="font-bold text-slate-800">{{ students.from || 0 }} - {{ students.to || 0 }}</span> dari <span class="font-bold text-slate-800">{{ students.total }}</span> murid
+                    Menampilkan <span class="font-bold text-slate-800">{{ students.from || 0 }} - {{ students.to || 0 }}</span> dari <span class="font-bold text-slate-800">{{ students.total }}</span> siswa
                 </div>
             </div>
 
@@ -548,7 +548,7 @@ async function executeImport(): Promise<void> {
                         <thead class="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500">
                             <tr>
                                 <th class="hidden py-3.5 pl-6 pr-3 sm:table-cell">NIS</th>
-                                <th class="py-3.5 pl-4 pr-3 sm:px-4">Nama Murid</th>
+                                <th class="py-3.5 pl-4 pr-3 sm:px-4">Nama Siswa</th>
                                 <th class="px-2 py-3.5 sm:px-4">Kelas</th>
                                 <th class="hidden px-4 py-3.5 md:table-cell">Password Default</th>
                                 <th class="hidden px-4 py-3.5 md:table-cell">Terdaftar</th>
@@ -614,7 +614,7 @@ async function executeImport(): Promise<void> {
                                             type="button"
                                             @click="openPasswordModal(student)"
                                             class="rounded-lg p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-700 transition"
-                                            title="Ganti / Reset Password Murid"
+                                            title="Ganti / Reset Password Siswa"
                                         >
                                             <Key class="h-3.5 w-3.5" />
                                         </button>
@@ -622,7 +622,7 @@ async function executeImport(): Promise<void> {
                                             type="button"
                                             @click="openEditModal(student)"
                                             class="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 transition"
-                                            title="Ubah Data Murid"
+                                            title="Ubah Data Siswa"
                                         >
                                             <Pencil class="h-3.5 w-3.5" />
                                         </button>
@@ -630,7 +630,7 @@ async function executeImport(): Promise<void> {
                                             type="button"
                                             @click="openDeleteModal(student)"
                                             class="rounded-lg p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-700 transition"
-                                            title="Hapus Murid"
+                                            title="Hapus Siswa"
                                         >
                                             <Trash2 class="h-3.5 w-3.5" />
                                         </button>
@@ -644,9 +644,9 @@ async function executeImport(): Promise<void> {
                                     <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
                                         <Users class="h-7 w-7" />
                                     </div>
-                                    <h3 class="mt-3 text-sm font-bold text-slate-800">Tidak ada data murid</h3>
+                                    <h3 class="mt-3 text-sm font-bold text-slate-800">Tidak ada data siswa</h3>
                                     <p class="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-                                        {{ searchInput || selectedClass ? 'Tidak ditemukan murid yang sesuai dengan filter pencarian.' : 'Belum ada data murid yang terdaftar. Mulai dengan mengimpor data atau menambah secara manual.' }}
+                                        {{ searchInput || selectedClass ? 'Tidak ditemukan siswa yang sesuai dengan filter pencarian.' : 'Belum ada data siswa yang terdaftar. Mulai dengan mengimpor data atau menambah secara manual.' }}
                                     </p>
                                     <div class="mt-4 flex items-center justify-center gap-2">
                                         <button
@@ -663,7 +663,7 @@ async function executeImport(): Promise<void> {
                                             @click="openImportModal"
                                             class="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                                         >
-                                            Impor Data Murid
+                                            Impor Data Siswa
                                         </button>
                                     </div>
                                 </td>
@@ -717,7 +717,7 @@ async function executeImport(): Promise<void> {
                             <UploadCloud class="h-5 w-5" />
                         </div>
                         <div>
-                            <h3 class="text-base font-bold text-slate-900">Impor User Murid</h3>
+                            <h3 class="text-base font-bold text-slate-900">Impor User Siswa</h3>
                             <p class="text-xs text-slate-500">Upload CSV atau paste langsung dari Excel / Google Sheets</p>
                         </div>
                     </div>
@@ -740,7 +740,7 @@ async function executeImport(): Promise<void> {
                                 Gunakan kolom: <code class="font-mono font-bold bg-white/80 px-1 py-0.5 rounded border border-emerald-200">NIS</code>, <code class="font-mono font-bold bg-white/80 px-1 py-0.5 rounded border border-emerald-200">NAMA</code>, <code class="font-mono font-bold bg-white/80 px-1 py-0.5 rounded border border-emerald-200">KELAS</code>.
                             </p>
                             <p class="text-emerald-700">
-                                💡 Password default akun murid otomatis disetel dari <strong>6 angka terakhir dari NIS</strong>. Murid dapat login langsung menggunakan NIS & password tersebut.
+                                💡 Password default akun siswa otomatis disetel dari <strong>6 angka terakhir dari NIS</strong>. Siswa dapat login langsung menggunakan NIS & password tersebut.
                             </p>
                         </div>
                     </div>
@@ -778,7 +778,7 @@ async function executeImport(): Promise<void> {
                     <!-- Tab 1: Paste Text -->
                     <div v-if="importTab === 'paste'" class="space-y-2">
                         <label class="block text-xs font-bold text-slate-700">
-                            Tempel Data Murid (baris baru per murid):
+                            Tempel Data Siswa (baris baru per siswa):
                         </label>
                         <textarea
                             v-model="importText"
@@ -868,7 +868,7 @@ async function executeImport(): Promise<void> {
                                     ✓
                                 </span>
                                 <span class="text-xs font-bold text-slate-800">
-                                    Hasil Pratinjau: {{ previewRows.length }} murid siap diimpor
+                                    Hasil Pratinjau: {{ previewRows.length }} siswa siap diimpor
                                 </span>
                             </div>
                             <span class="text-[11px] text-slate-500">
@@ -913,7 +913,7 @@ async function executeImport(): Promise<void> {
                                                 v-else
                                                 class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700"
                                             >
-                                                Murid Baru
+                                                Siswa Baru
                                             </span>
                                         </td>
                                     </tr>
@@ -940,7 +940,7 @@ async function executeImport(): Promise<void> {
                     >
                         <Loader2 v-if="isSubmittingImport" class="h-3.5 w-3.5 animate-spin" />
                         <Check v-else class="h-3.5 w-3.5" />
-                        <span>Simpan {{ previewRows.length }} Murid ke Database</span>
+                        <span>Simpan {{ previewRows.length }} Siswa ke Database</span>
                     </button>
                 </div>
             </div>
@@ -953,7 +953,7 @@ async function executeImport(): Promise<void> {
             <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <h3 class="text-base font-bold text-slate-900">
-                        {{ isEditing ? 'Ubah Data Murid' : 'Tambah Murid Baru' }}
+                        {{ isEditing ? 'Ubah Data Siswa' : 'Tambah Siswa Baru' }}
                     </h3>
                     <button
                         type="button"
@@ -998,7 +998,7 @@ async function executeImport(): Promise<void> {
                     <!-- Nama Lengkap -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">
-                            Nama Lengkap Murid <span class="text-red-500">*</span>
+                            Nama Lengkap Siswa <span class="text-red-500">*</span>
                         </label>
                         <input
                             v-model="studentForm.name"
@@ -1031,16 +1031,16 @@ async function executeImport(): Promise<void> {
                     <!-- Email (Opsional) -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">
-                            Email Murid (Opsional)
+                            Email Siswa (Opsional)
                         </label>
                         <input
                             v-model="studentForm.email"
                             type="email"
-                            placeholder="Biarkan kosong jika murid tidak memiliki email"
+                            placeholder="Biarkan kosong jika siswa tidak memiliki email"
                             class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                         />
                         <p class="mt-1 text-[10px] text-slate-400">
-                            Murid cukup menggunakan NIS dan password 6 angka NIS untuk masuk.
+                            Siswa cukup menggunakan NIS dan password 6 angka NIS untuk masuk.
                         </p>
                     </div>
 
@@ -1058,7 +1058,7 @@ async function executeImport(): Promise<void> {
                             class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                         >
                             <Loader2 v-if="studentForm.processing" class="h-3.5 w-3.5 animate-spin" />
-                            <span>{{ isEditing ? 'Simpan Perubahan' : 'Tambah Murid' }}</span>
+                            <span>{{ isEditing ? 'Simpan Perubahan' : 'Tambah Siswa' }}</span>
                         </button>
                     </div>
                 </form>
@@ -1077,7 +1077,7 @@ async function executeImport(): Promise<void> {
                             <Key class="h-5 w-5" />
                         </div>
                         <div>
-                            <h3 class="text-base font-bold text-slate-900">Ganti Password Murid</h3>
+                            <h3 class="text-base font-bold text-slate-900">Ganti Password Siswa</h3>
                             <p class="text-xs text-slate-500 truncate max-w-[240px]">
                                 {{ studentToManagePassword?.name }} • NIS: {{ studentToManagePassword?.nis }}
                             </p>
@@ -1096,7 +1096,7 @@ async function executeImport(): Promise<void> {
                     <!-- Password Input Form -->
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">
-                            Password Baru Murid
+                            Password Baru Siswa
                         </label>
                         <div class="relative">
                             <input
@@ -1116,7 +1116,7 @@ async function executeImport(): Promise<void> {
                             </button>
                         </div>
                         <p class="mt-1 text-[10px] text-slate-400">
-                            Minimal 6 karakter. Murid langsung dapat login menggunakan password ini.
+                            Minimal 6 karakter. Siswa langsung dapat login menggunakan password ini.
                         </p>
                     </div>
 
@@ -1188,9 +1188,9 @@ async function executeImport(): Promise<void> {
                 <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 mx-auto">
                     <Trash2 class="h-6 w-6" />
                 </div>
-                <h3 class="mt-4 text-center text-base font-bold text-slate-900">Hapus Data Murid?</h3>
+                <h3 class="mt-4 text-center text-base font-bold text-slate-900">Hapus Data Siswa?</h3>
                 <p class="mt-2 text-center text-xs text-slate-500">
-                    Apakah Anda yakin ingin menghapus murid <strong>{{ studentToDelete?.name }}</strong> (NIS: {{ studentToDelete?.nis }})? Tindakan ini tidak dapat dibatalkan.
+                    Apakah Anda yakin ingin menghapus siswa <strong>{{ studentToDelete?.name }}</strong> (NIS: {{ studentToDelete?.nis }})? Tindakan ini tidak dapat dibatalkan.
                 </p>
                 <div class="mt-5 flex items-center gap-2">
                     <button

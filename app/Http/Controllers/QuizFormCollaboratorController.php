@@ -18,7 +18,7 @@ class QuizFormCollaboratorController extends Controller
 
         // Only owner or admin can invite collaborators
         if ($quizForm->user_id !== $currentUser->id && ! $currentUser->isAdmin()) {
-            abort(403, 'Hanya pemilik kuis atau administrator yang dapat menambahkan kolaborator.');
+            abort(403, 'Hanya pemilik formulir atau admin yang dapat menambahkan kolaborator.');
         }
 
         $request->validate([
@@ -46,19 +46,19 @@ class QuizFormCollaboratorController extends Controller
 
         // Cannot add the form owner
         if ($targetUser->id === $quizForm->user_id) {
-            return back()->withErrors([$errorKey => 'Guru ini adalah pemilik formulir kuis ini.']);
+            return back()->withErrors([$errorKey => 'Guru ini adalah pemilik formulir ini.']);
         }
 
         // Check if already added
         if ($quizForm->hasCollaborator($targetUser)) {
-            return back()->withErrors([$errorKey => 'Guru ini sudah menjadi kolaborator kuis ini.']);
+            return back()->withErrors([$errorKey => 'Guru ini sudah menjadi kolaborator formulir ini.']);
         }
 
         $quizForm->collaborators()->attach($targetUser->id, [
             'role' => 'editor',
         ]);
 
-        return back()->with('success', "Guru '{$targetUser->name}' berhasil ditambahkan sebagai kolaborator kuis.");
+        return back()->with('success', "Guru '{$targetUser->name}' berhasil ditambahkan sebagai kolaborator formulir.");
     }
 
     /**
@@ -76,7 +76,7 @@ class QuizFormCollaboratorController extends Controller
         $quizForm->collaborators()->detach($user->id);
 
         $msg = $currentUser->id === $user->id
-            ? 'Anda telah keluar dari kolaborasi kuis ini.'
+            ? 'Anda telah keluar dari kolaborasi formulir ini.'
             : "Kolaborator '{$user->name}' berhasil dihapus.";
 
         return back()->with('success', $msg);

@@ -102,6 +102,8 @@ export type QuizFormPayload = {
         confirmationMessage?: string;
         showSubmitAnotherResponse?: boolean;
         showResultsSummary?: boolean;
+        /** The "Dibuat dengan Falcon Forms" line on the finish screen (absent: shown). */
+        showMadeWith?: boolean;
         resultsDetail?: 'score' | 'full';
         schedule?: { opensAt?: string | null; closesAt?: string | null };
         disableRespondentAutosave?: boolean;

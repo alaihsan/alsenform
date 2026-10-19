@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BRAND_ICON, BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand';
+import { BRAND_ICON, BRAND_NAME, BRAND_TAGLINE, BRAND_TAGLINE_SHORT } from '@/lib/brand';
 
 /*
  * The Falcon Forms icon (a white falcon on a purple tile), its name and tagline: one look on the
@@ -9,7 +9,7 @@ withDefaults(
     defineProps<{
         /** The element of the name: h1 on a page whose title it is. */
         nameAs?: string;
-        /** The tagline under the name; on small screens only when "always". */
+        /** The tagline under the name; on small screens only when "always", then the short one. */
         tagline?: 'hidden' | 'wide' | 'always';
         size?: 'md' | 'lg';
     }>(),
@@ -35,7 +35,11 @@ withDefaults(
                     tagline === 'wide' ? 'hidden truncate sm:block' : '',
                 ]"
             >
-                {{ BRAND_TAGLINE }}
+                <template v-if="tagline === 'always'">
+                    <span class="sm:hidden">{{ BRAND_TAGLINE_SHORT }}</span>
+                    <span class="hidden sm:inline">{{ BRAND_TAGLINE }}</span>
+                </template>
+                <template v-else>{{ BRAND_TAGLINE }}</template>
             </span>
         </span>
     </span>

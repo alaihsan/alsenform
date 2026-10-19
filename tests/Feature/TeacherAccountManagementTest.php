@@ -56,7 +56,7 @@ test('the result of an action is shown on the page as a message', function () {
         ->post(route('students.reset-password', $studentWithoutNis))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('errors.error', 'Murid tidak memiliki NIS untuk membuat password default.')
+            ->where('errors.error', 'Siswa tidak memiliki NIS untuk membuat password default.')
         );
 });
 

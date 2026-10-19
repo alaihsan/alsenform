@@ -219,7 +219,7 @@ class QuizFormController extends Controller
                 'options' => ['Pedoman hidup bangsa dan sumber dari segala sumber hukum', 'Alat kekuasaan pemerintah pusat', 'Hukum sementara peralihan', 'Peraturan teknis kementerian'],
             ],
             'pai-arab' => [
-                'title' => 'Kuis PAI & Bahasa Arab (Madinah)',
+                'title' => 'Ujian PAI & Bahasa Arab (Madinah)',
                 'description' => 'Ujian pemahaman ayat Al-Qur\'an dan kaidah tajwid standar Mushaf Madinah.',
                 'question' => "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ ﴿١﴾ - Hukum tajwid pada lafaz 'ٱلرَّحْمَـٰنِ' adalah?",
                 'options' => ['Alif Lam Syamsiyah', 'Alif Lam Qamariyah', 'Idgham Bighunnah', 'Ikhfa Haqiqi'],

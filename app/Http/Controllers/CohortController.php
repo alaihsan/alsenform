@@ -107,7 +107,7 @@ class CohortController extends Controller
             }
         }
 
-        return back()->with('success', "Cohort '{$cohort->name}' berhasil dibuat.");
+        return back()->with('success', "Kelompok '{$cohort->name}' berhasil dibuat.");
     }
 
     /**
@@ -188,7 +188,7 @@ class CohortController extends Controller
             'description' => ! empty($validated['description']) ? trim($validated['description']) : null,
         ]);
 
-        return back()->with('success', "Data Cohort '{$cohort->name}' berhasil diperbarui.");
+        return back()->with('success', "Data Kelompok '{$cohort->name}' berhasil diperbarui.");
     }
 
     /**
@@ -202,7 +202,7 @@ class CohortController extends Controller
         $name = $cohort->name;
         $cohort->delete();
 
-        return redirect()->route('cohorts.index')->with('success', "Cohort '{$name}' berhasil dihapus.");
+        return redirect()->route('cohorts.index')->with('success', "Kelompok '{$name}' berhasil dihapus.");
     }
 
     /**
@@ -236,14 +236,14 @@ class CohortController extends Controller
         $validStudentIds = User::query()->students()->whereIn('id', $idsToAdd)->pluck('id')->all();
 
         if (empty($validStudentIds)) {
-            return back()->withErrors(['error' => 'Tidak ada anggota murid yang valid untuk ditambahkan.']);
+            return back()->withErrors(['error' => 'Tidak ada anggota siswa yang valid untuk ditambahkan.']);
         }
 
         $cohort->users()->syncWithoutDetaching($validStudentIds);
 
         $count = count($validStudentIds);
 
-        return back()->with('success', "Berhasil menambahkan {$count} murid ke dalam Cohort '{$cohort->name}'.");
+        return back()->with('success', "Berhasil menambahkan {$count} siswa ke dalam Kelompok '{$cohort->name}'.");
     }
 
     /**
@@ -256,7 +256,7 @@ class CohortController extends Controller
 
         $cohort->users()->detach($user->id);
 
-        return back()->with('success', "Murid '{$user->name}' berhasil dikeluarkan dari Cohort '{$cohort->name}'.");
+        return back()->with('success', "Siswa '{$user->name}' berhasil dikeluarkan dari Kelompok '{$cohort->name}'.");
     }
 
     /**
@@ -268,7 +268,7 @@ class CohortController extends Controller
         abort_unless(
             $user && ($user->isAdmin() || $cohort->created_by === $user->id),
             403,
-            'Hanya pembuat cohort atau admin yang dapat mengelola cohort ini.'
+            'Hanya pembuat kelompok atau admin yang dapat mengelola kelompok ini.'
         );
     }
 
@@ -286,7 +286,7 @@ class CohortController extends Controller
             ->pluck('kelas');
 
         if ($classes->isEmpty()) {
-            return back()->withErrors(['error' => 'Belum ada data kelas pada data murid.']);
+            return back()->withErrors(['error' => 'Belum ada data kelas pada data siswa.']);
         }
 
         $createdCount = 0;
@@ -310,8 +310,8 @@ class CohortController extends Controller
             if (! $cohort) {
                 $cohort = Cohort::create([
                     'code' => $code,
-                    'name' => "Cohort {$className}",
-                    'description' => "Cohort otomatis untuk murid {$className}",
+                    'name' => "Kelompok {$className}",
+                    'description' => "Kelompok otomatis untuk siswa {$className}",
                     'created_by' => Auth::id(),
                 ]);
                 $createdCount++;
@@ -324,6 +324,6 @@ class CohortController extends Controller
             }
         }
 
-        return back()->with('success', "Sinkronisasi berhasil: {$createdCount} Cohort baru dibuat dan siswa dikelompokkan sesuai kelas.");
+        return back()->with('success', "Sinkronisasi berhasil: {$createdCount} Kelompok baru dibuat dan siswa dikelompokkan sesuai kelas.");
     }
 }

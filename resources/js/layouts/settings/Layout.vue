@@ -33,11 +33,11 @@ const sidebarNavItems = computed(() => [
         : [
               {
                   title: 'Pengguna',
-                  description: isAdmin.value ? 'Admin, guru & murid' : 'Akun murid',
+                  description: isAdmin.value ? 'Admin, guru & siswa' : 'Akun siswa',
                   href: isAdmin.value ? '/users' : '/students',
                   icon: Users,
               },
-              { title: 'Cohort & Kelas', description: 'Kelompok belajar', href: '/cohorts', icon: BookOpen },
+              { title: 'Kelompok & Kelas', description: 'Kelompok belajar', href: '/cohorts', icon: BookOpen },
           ]),
 ]);
 
@@ -62,7 +62,7 @@ const isActive = (href: string): boolean => currentPath === href || currentPath.
                     {{
                         isStudent
                             ? 'Kelola profil, password, dan tampilan akun Anda.'
-                            : 'Kelola akun Anda, pengguna, serta cohort dan kelas.'
+                            : 'Kelola akun Anda, pengguna, serta kelompok dan kelas.'
                     }}
                 </p>
             </div>

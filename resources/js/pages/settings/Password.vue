@@ -88,7 +88,7 @@ const updatePassword = () => {
 
                     <p class="mt-4 text-sm leading-relaxed text-slate-600">
                         Selamat datang<span v-if="user?.name">, <strong class="text-slate-900">{{ user.name }}</strong></span>! Sebelum mulai mengerjakan
-                        ujian, ganti dulu password sementara dari sekolah dengan password pribadi Anda.
+                        ujian, ganti dulu password sementara dari admin dengan password pribadi Anda.
                     </p>
 
                     <div class="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -98,7 +98,7 @@ const updatePassword = () => {
 
                     <form class="mt-6 space-y-5" @submit.prevent="updatePassword">
                         <div class="space-y-2">
-                            <label for="current_password" :class="alsenLabel">Password saat ini (dari sekolah)</label>
+                            <label for="current_password" :class="alsenLabel">Password saat ini (dari admin)</label>
                             <input
                                 id="current_password"
                                 ref="currentPasswordInput"

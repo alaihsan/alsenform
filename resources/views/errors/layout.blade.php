@@ -17,7 +17,7 @@
         <meta name="robots" content="noindex">
         <title>{{ $page['title'] }} - Falcon Forms</title>
         <link rel="icon" href="/favicon.ico" sizes="32x32">
-        <link rel="icon" href="/falcon-forms-icon.svg" type="image/svg+xml">
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         {{-- Optional web font, fetched once the page has loaded so a missing internet connection never delays it. --}}
         <script>
             window.addEventListener('load', function () {

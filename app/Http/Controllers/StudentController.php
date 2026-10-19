@@ -105,7 +105,7 @@ class StudentController extends Controller
             'must_change_password' => true,
         ]);
 
-        return back()->with('success', "Murid '{$validated['name']}' berhasil ditambahkan dengan password default 6 digit NIS: {$defaultPassword}.");
+        return back()->with('success', "Siswa '{$validated['name']}' berhasil ditambahkan dengan password default 6 digit NIS: {$defaultPassword}.");
     }
 
     /**
@@ -114,7 +114,7 @@ class StudentController extends Controller
     public function update(Request $request, User $student): RedirectResponse
     {
         Gate::authorize('teacher-or-admin');
-        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun siswa.');
 
         $validated = $request->validate([
             'nis' => ['required', 'string', 'max:50', Rule::unique('users', 'nis')->ignore($student->id)],
@@ -133,7 +133,7 @@ class StudentController extends Controller
             'email' => $email,
         ]);
 
-        return back()->with('success', "Data murid '{$student->name}' berhasil diperbarui.");
+        return back()->with('success', "Data siswa '{$student->name}' berhasil diperbarui.");
     }
 
     /**
@@ -142,12 +142,12 @@ class StudentController extends Controller
     public function destroy(User $student): RedirectResponse
     {
         Gate::authorize('teacher-or-admin');
-        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun siswa.');
 
         $name = $student->name;
         $student->delete();
 
-        return back()->with('success', "Murid '{$name}' berhasil dihapus.");
+        return back()->with('success', "Siswa '{$name}' berhasil dihapus.");
     }
 
     /**
@@ -156,10 +156,10 @@ class StudentController extends Controller
     public function resetPassword(User $student): RedirectResponse
     {
         Gate::authorize('teacher-or-admin');
-        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun siswa.');
 
         if (empty($student->nis)) {
-            return back()->withErrors(['error' => 'Murid tidak memiliki NIS untuk membuat password default.']);
+            return back()->withErrors(['error' => 'Siswa tidak memiliki NIS untuk membuat password default.']);
         }
 
         $defaultPassword = User::defaultPasswordForNis($student->nis);
@@ -168,7 +168,7 @@ class StudentController extends Controller
             'must_change_password' => true,
         ]);
 
-        return back()->with('success', "Password murid '{$student->name}' berhasil direset ke password default: {$defaultPassword}.");
+        return back()->with('success', "Password siswa '{$student->name}' berhasil direset ke password default: {$defaultPassword}.");
     }
 
     /**
@@ -177,7 +177,7 @@ class StudentController extends Controller
     public function changePassword(Request $request, User $student): RedirectResponse
     {
         Gate::authorize('teacher-or-admin');
-        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun murid.');
+        abort_unless($student->isStudent(), 403, 'Aksi ini hanya dapat dilakukan pada akun siswa.');
 
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:6'],
@@ -188,7 +188,7 @@ class StudentController extends Controller
             'must_change_password' => false,
         ]);
 
-        return back()->with('success', "Password murid '{$student->name}' berhasil diubah.");
+        return back()->with('success', "Password siswa '{$student->name}' berhasil diubah.");
     }
 
     /**
@@ -206,12 +206,12 @@ class StudentController extends Controller
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.",
+                    'message' => "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.",
                     'data' => $result,
                 ]);
             }
 
-            return back()->with('success', "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.");
+            return back()->with('success', "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.");
         }
 
         // Otherwise parse file or text
@@ -229,7 +229,7 @@ class StudentController extends Controller
             $parsed = $service->parseContent($request->input('text'));
         } else {
             return response()->json([
-                'message' => 'Silakan unggah file CSV atau tempel (paste) data murid.',
+                'message' => 'Silakan unggah file CSV atau tempel (paste) data siswa.',
             ], 422);
         }
 
@@ -247,12 +247,12 @@ class StudentController extends Controller
 
         // Direct execution
         if (empty($parsed['valid'])) {
-            return back()->withErrors(['error' => 'Tidak ada baris data murid yang valid untuk diimpor.']);
+            return back()->withErrors(['error' => 'Tidak ada baris data siswa yang valid untuk diimpor.']);
         }
 
         $result = $service->import($parsed['valid']);
 
-        return back()->with('success', "Berhasil mengimpor {$result['created']} murid baru dan memperbarui {$result['updated']} murid.");
+        return back()->with('success', "Berhasil mengimpor {$result['created']} siswa baru dan memperbarui {$result['updated']} siswa.");
     }
 
     /**

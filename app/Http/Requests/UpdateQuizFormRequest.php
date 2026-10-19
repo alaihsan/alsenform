@@ -87,6 +87,7 @@ class UpdateQuizFormRequest extends FormRequest
             'settings.confirmationMessage' => ['nullable', 'string', 'max:500'],
             'settings.showSubmitAnotherResponse' => ['nullable', 'boolean'],
             'settings.showResultsSummary' => ['nullable', 'boolean'],
+            'settings.showMadeWith' => ['nullable', 'boolean'],
             'settings.disableRespondentAutosave' => ['nullable', 'boolean'],
             'settings.defaultCollectEmailMode' => ['nullable', 'string', Rule::in(['none', 'verified', 'responder'])],
             'settings.defaultQuestionRequired' => ['nullable', 'boolean'],
@@ -128,8 +129,8 @@ class UpdateQuizFormRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'slug.unique' => 'Link sudah digunakan',
-            'slug.alpha_dash' => 'Link hanya boleh berisi huruf, angka, tanda hubung, dan garis bawah.',
+            'slug.unique' => 'Tautan sudah digunakan',
+            'slug.alpha_dash' => 'Tautan hanya boleh berisi huruf, angka, tanda hubung, dan garis bawah.',
         ];
     }
 }

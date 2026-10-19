@@ -66,7 +66,7 @@ test('a student takes the exam as often as allowed, and every attempt keeps its 
     $this->actingAs($student)->get(route('forms.public', $quizForm->slug))
         ->assertInertia(fn (Assert $page) => $page
             ->where('accessRestricted', true)
-            ->where('restrictionReason', 'Anda sudah mengerjakan kuis ini 2 kali, sesuai batas kesempatan yang diberikan guru.'));
+            ->where('restrictionReason', 'Anda sudah mengerjakan formulir ini 2 kali, sesuai batas kesempatan yang diberikan guru.'));
     $this->actingAs($student)->postJson(route('forms.responses.store', $quizForm->slug), [
         'session_token' => startedAttempt($quizForm, $student)->session_token,
         'answers' => [1 => 'Jakarta'],

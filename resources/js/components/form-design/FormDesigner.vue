@@ -125,7 +125,7 @@ const backgroundFits: Choice<FormDesign['backgroundFit']>[] = [
 type ImageKey = 'headerImage' | 'logo' | 'backgroundImage';
 const imageFields: { key: ImageKey; label: string; hint: string }[] = [
     { key: 'headerImage', label: 'Gambar header', hint: 'Tampil di atas judul. Ukuran ideal 1600 × 400 piksel.' },
-    { key: 'logo', label: 'Logo sekolah', hint: 'Tampil di atas judul ujian. PNG transparan paling bagus.' },
+    { key: 'logo', label: 'Logo lembaga', hint: 'Tampil di atas judul ujian. PNG transparan paling bagus.' },
     { key: 'backgroundImage', label: 'Foto latar', hint: 'Menggantikan warna latar halaman.' },
 ];
 const uploading = ref<ImageKey | null>(null);
@@ -170,7 +170,7 @@ const insertHook = (selector: string) => {
         class="fixed inset-0 z-[70] flex bg-slate-900/40 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
-        aria-label="Desainer Form"
+        aria-label="Desainer Formulir"
         @keydown.esc="emit('close')"
     >
         <div class="ml-auto flex h-full w-full max-w-6xl flex-col bg-white shadow-2xl lg:flex-row">
@@ -184,7 +184,7 @@ const insertHook = (selector: string) => {
                         ><Paintbrush class="h-5 w-5"
                     /></span>
                     <div class="min-w-0 flex-1">
-                        <h2 class="text-base font-black text-slate-900">Desainer Form</h2>
+                        <h2 class="text-base font-black text-slate-900">Desainer Formulir</h2>
                         <p class="text-xs text-slate-500">Tampil di editor dan semua halaman siswa.</p>
                     </div>
                     <button
@@ -501,7 +501,7 @@ const insertHook = (selector: string) => {
                         </div>
                         <p v-if="uploadError" class="text-xs font-semibold text-rose-600" role="alert">{{ uploadError }}</p>
                         <p class="text-[11px] leading-relaxed text-slate-500">
-                            Gambar disimpan di server sekolah dan diperkecil otomatis agar ringan dibuka dari HP siswa.
+                            Gambar disimpan di server lembaga dan diperkecil otomatis agar ringan dibuka dari HP siswa.
                         </p>
                     </template>
 
@@ -564,7 +564,7 @@ const insertHook = (selector: string) => {
                                 @input="update({ customCss: ($event.target as HTMLTextAreaElement).value }, true)"
                             ></textarea>
                             <p class="mt-1 text-[11px] leading-relaxed text-slate-500">
-                                Hanya berlaku di halaman ujian ini. Gambar dari luar server sekolah, <code>@import</code> dan
+                                Hanya berlaku di halaman ujian ini. Gambar dari luar server lembaga, <code>@import</code> dan
                                 <code>expression()</code> dibuang saat disimpan.
                             </p>
                         </div>

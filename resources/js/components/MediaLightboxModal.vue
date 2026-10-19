@@ -213,7 +213,7 @@ onUnmounted(() => {
                     >
                         <img
                             :src="media.url"
-                            :alt="media.caption ?? 'Media kuis'"
+                            :alt="media.caption ?? 'Media soal'"
                             class="max-h-[82vh] max-w-[92vw] rounded-xl object-contain shadow-2xl pointer-events-none select-none"
                             draggable="false"
                         />

@@ -78,7 +78,7 @@ class DocxImportTemplate
             [
                 'title' => 'Pilihan Ganda Kompleks (Kotak Centang)',
                 'type' => 'Checkboxes',
-                'summary' => 'Pilihan A sampai E, jawaban benar boleh lebih dari satu. Murid harus mencentang semua jawaban benar.',
+                'summary' => 'Pilihan A sampai E, jawaban benar boleh lebih dari satu. Siswa harus mencentang semua jawaban benar.',
                 'key' => 'Semua huruf yang benar, dipisah koma atau "dan".',
                 'lines' => [
                     '2. Manakah yang termasuk bilangan prima? (jawaban boleh lebih dari satu)',
@@ -104,7 +104,7 @@ class DocxImportTemplate
             [
                 'title' => 'Benar / Salah',
                 'type' => 'true-false',
-                'summary' => 'Satu pernyataan tanpa pilihan. Murid memilih Benar atau Salah.',
+                'summary' => 'Satu pernyataan tanpa pilihan. Siswa memilih Benar atau Salah.',
                 'key' => '"Benar" atau "Salah" (boleh juga B / S).',
                 'lines' => [
                     '4. Matahari terbit dari arah barat.',
@@ -116,7 +116,7 @@ class DocxImportTemplate
             [
                 'title' => 'Isian Singkat',
                 'type' => 'Short answer',
-                'summary' => 'Tanpa pilihan; murid mengetik jawaban singkat. Baris "Tipe:" boleh tidak ditulis: soal tanpa pilihan otomatis menjadi Isian Singkat.',
+                'summary' => 'Tanpa pilihan; siswa mengetik jawaban singkat. Baris "Tipe:" boleh tidak ditulis: soal tanpa pilihan otomatis menjadi Isian Singkat.',
                 'key' => 'Jawaban benar. Beberapa jawaban yang diterima dipisah tanda |. Huruf besar/kecil tidak dibedakan.',
                 'lines' => [
                     '5. Sebutkan ibu kota Provinsi Jawa Barat!',
@@ -228,7 +228,7 @@ class DocxImportTemplate
             [
                 'title' => 'Skala Linear',
                 'type' => 'Linear scale',
-                'summary' => 'Murid memilih angka pada skala, cocok untuk survei. Rentang diatur dengan "Skala:", dari 0 atau 1 sampai paling besar 10 (bawaan 1-5).',
+                'summary' => 'Siswa memilih angka pada skala, cocok untuk survei. Rentang diatur dengan "Skala:", dari 0 atau 1 sampai paling besar 10 (bawaan 1-5).',
                 'key' => '"-" untuk survei (tanpa kunci, tidak dihitung dalam nilai), atau angka yang dianggap benar.',
                 'lines' => [
                     '12. Seberapa paham kamu dengan materi hari ini?',
@@ -241,7 +241,7 @@ class DocxImportTemplate
             [
                 'title' => 'Rating (bintang)',
                 'type' => 'Rating',
-                'summary' => 'Murid memberi bintang. Jumlah bintang diatur dengan "Skala:" (bawaan 1-5).',
+                'summary' => 'Siswa memberi bintang. Jumlah bintang diatur dengan "Skala:" (bawaan 1-5).',
                 'key' => '"-" untuk survei, atau jumlah bintang yang dianggap benar.',
                 'lines' => [
                     '13. Beri nilai untuk cara guru menjelaskan materi.',
@@ -254,7 +254,7 @@ class DocxImportTemplate
             [
                 'title' => 'Tanggal',
                 'type' => 'Date',
-                'summary' => 'Murid memilih tanggal dari kalender.',
+                'summary' => 'Siswa memilih tanggal dari kalender.',
                 'key' => 'Tanggal hari-bulan-tahun, misalnya 17-08-1945 (atau 1945-08-17).',
                 'lines' => [
                     '14. Kapan Proklamasi Kemerdekaan Indonesia dibacakan?',
@@ -266,7 +266,7 @@ class DocxImportTemplate
             [
                 'title' => 'Waktu',
                 'type' => 'Time',
-                'summary' => 'Murid memilih jam dan menit.',
+                'summary' => 'Siswa memilih jam dan menit.',
                 'key' => 'Jam:menit dalam format 24 jam, misalnya 07:00 atau 13:30.',
                 'lines' => [
                     '15. Pukul berapa upacara bendera hari Senin dimulai?',

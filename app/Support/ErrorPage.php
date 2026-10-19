@@ -248,7 +248,7 @@ class ErrorPage
     }
 
     /**
-     * The message given to abort() by the application, such as "Kuis sedang terkunci...".
+     * The message given to abort() by the application, such as "Ujian sedang terkunci...".
      * Framework messages (English, sometimes naming a model or a route) and the message of an
      * exception that wraps another one are never shown.
      */

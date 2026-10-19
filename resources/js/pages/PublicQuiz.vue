@@ -35,6 +35,7 @@ import {
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import RichContent from '@/components/RichContent.vue';
+import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { deviceHintsHeader } from '@/lib/deviceHints';
 import { CONTENT_ITEM_TYPES, type SectionTarget } from '@/types/quiz';
 import { flowSections, sectionPath } from '@/utils/section-flow';
@@ -82,6 +83,7 @@ const props = defineProps<{
             confirmationMessage?: string;
             showSubmitAnotherResponse?: boolean;
             showResultsSummary?: boolean;
+            showMadeWith?: boolean;
             questionFont?: string;
             answerFont?: string;
             themeColorClass?: string;
@@ -1978,7 +1980,7 @@ const sendAnswers = async (isTimeout: boolean) => {
                     pendingSubmission.value = { isTimeout, autoRetry: false };
                     submissionError.value =
                         (error.response.data?.message || 'Jawaban tidak dapat dikirim.') +
-                        ' Jawaban Anda tetap tersimpan. Hubungi pengawas, atau masuk ulang lalu buka kembali kuis ini.';
+                        ' Jawaban Anda tetap tersimpan. Hubungi pengawas, atau masuk ulang lalu buka kembali ujian ini.';
                     return;
                 }
 
@@ -2247,9 +2249,9 @@ const submitAnotherResponse = () => {
                 <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50 text-amber-600 mb-4 ring-8 ring-amber-50">
                     <ShieldAlert class="h-8 w-8" />
                 </div>
-                <h1 class="text-2xl font-black text-slate-900">{{ restrictionTitle || 'Akses Kuis Dibatasi' }}</h1>
+                <h1 class="text-2xl font-black text-slate-900">{{ restrictionTitle || 'Akses Formulir Dibatasi' }}</h1>
                 <p class="mt-2 text-sm text-slate-600 leading-relaxed">
-                    {{ restrictionReason || 'Kuis ini hanya dapat diakses oleh murid yang terdaftar dalam kelompok (Cohort) tertentu.' }}
+                    {{ restrictionReason || 'Formulir ini hanya dapat diakses oleh siswa yang terdaftar dalam kelompok tertentu.' }}
                 </p>
                 <p v-if="opensIn !== null" class="mt-4 font-mono text-3xl font-black tabular-nums text-slate-900" aria-live="polite" data-testid="opens-in">
                     {{ opensInLabel }}
@@ -2286,7 +2288,7 @@ const submitAnotherResponse = () => {
                         class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-slate-800 transition"
                     >
                         <ArrowLeft class="h-4 w-4" />
-                        <span>Kembali ke Dashboard</span>
+                        <span>Kembali ke Beranda</span>
                     </Link>
                 </div>
             </div>
@@ -2324,6 +2326,10 @@ const submitAnotherResponse = () => {
                 </p>
             </div>
         </section>
+        <p v-if="quizForm.settings.showMadeWith ?? true" class="af-made-with mx-auto mt-5 flex max-w-3xl items-center justify-center gap-2 text-xs font-semibold text-slate-500" data-testid="made-with">
+            <img :src="BRAND_ICON" alt="" width="20" height="20" class="h-5 w-5" />
+            <span>Dibuat dengan {{ BRAND_NAME }}</span>
+        </p>
         </template>
 
         <template v-else>
@@ -2355,11 +2361,11 @@ const submitAnotherResponse = () => {
                         >
                             <span v-if="autoSaveStatus === 'saving'" class="inline-flex items-center gap-1.5 text-amber-600 font-medium">
                                 <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
-                                Menyimpan draft...
+                                Menyimpan draf...
                             </span>
                             <span v-else-if="autoSaveStatus === 'saved'" class="inline-flex items-center gap-1 text-emerald-600 font-medium">
                                 <CheckCircle2 class="h-3.5 w-3.5 text-emerald-500" />
-                                Draft tersimpan otomatis
+                                Draf tersimpan otomatis
                             </span>
                         </div>
                     </div>

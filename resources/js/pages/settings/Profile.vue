@@ -289,7 +289,7 @@ const isStudent = computed(() => {
                         <div class="space-y-2">
                             <div class="flex items-center justify-between">
                                 <label for="nis" :class="alsenLabel">NIS / NISN</label>
-                                <span class="flex items-center gap-1 text-[11px] font-semibold text-slate-400"><Lock class="h-3 w-3" /> Data sekolah</span>
+                                <span class="flex items-center gap-1 text-[11px] font-semibold text-slate-400"><Lock class="h-3 w-3" /> Diatur admin</span>
                             </div>
                             <input id="nis" :value="user.nis || '-'" disabled :class="[alsenInput, 'font-mono']" />
                         </div>
@@ -297,7 +297,7 @@ const isStudent = computed(() => {
                         <div class="space-y-2">
                             <div class="flex items-center justify-between">
                                 <label for="kelas" :class="alsenLabel">Kelas / Rombel</label>
-                                <span class="flex items-center gap-1 text-[11px] font-semibold text-slate-400"><Lock class="h-3 w-3" /> Data sekolah</span>
+                                <span class="flex items-center gap-1 text-[11px] font-semibold text-slate-400"><Lock class="h-3 w-3" /> Diatur admin</span>
                             </div>
                             <input id="kelas" :value="user.kelas || '-'" disabled :class="alsenInput" />
                         </div>
@@ -349,7 +349,7 @@ const isStudent = computed(() => {
                 <p v-if="mustVerifyEmail && !user.email_verified_at" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     Alamat email Anda belum diverifikasi.
                     <Link :href="route('verification.send')" method="post" as="button" class="font-bold underline hover:text-amber-900">
-                        Kirim ulang link verifikasi email.
+                        Kirim ulang tautan verifikasi email.
                     </Link>
                 </p>
 
@@ -372,8 +372,8 @@ const isStudent = computed(() => {
 
         <!-- 2. Preferensi default kuis (guru & admin) -->
         <div v-if="isTeacherOrAdmin" :class="alsenCard">
-            <h2 :class="alsenCardTitle">Preferensi Pembuatan Kuis</h2>
-            <p :class="alsenCardDescription">Pengaturan standar yang otomatis dipakai saat Anda membuat kuis baru.</p>
+            <h2 :class="alsenCardTitle">Preferensi Ujian</h2>
+            <p :class="alsenCardDescription">Pengaturan standar yang otomatis dipakai saat Anda membuat ujian baru.</p>
 
             <form class="mt-6 space-y-6" @submit.prevent="submitPreferences">
                 <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -409,14 +409,14 @@ const isStudent = computed(() => {
                     </div>
 
                     <div class="space-y-2">
-                        <label for="default_school_name" :class="alsenLabel">Nama sekolah untuk kop kuis</label>
+                        <label for="default_school_name" :class="alsenLabel">Nama lembaga untuk kop ujian</label>
                         <input
                             id="default_school_name"
                             v-model="prefForm.default_school_name"
                             :class="alsenInput"
                             placeholder="Contoh: SMA Al-Ihsan Boarding School"
                         />
-                        <p :class="alsenHint">Otomatis tampil di header kuis dan laporan rekap nilai.</p>
+                        <p :class="alsenHint">Otomatis tampil di header ujian dan laporan rekap nilai.</p>
                     </div>
                 </div>
 
@@ -453,7 +453,7 @@ const isStudent = computed(() => {
                         leave="transition ease-in-out duration-300"
                         leave-to="opacity-0"
                     >
-                        <span :class="alsenSuccessText"><CheckCircle2 class="h-4 w-4" /> Preferensi kuis disimpan.</span>
+                        <span :class="alsenSuccessText"><CheckCircle2 class="h-4 w-4" /> Preferensi ujian disimpan.</span>
                     </TransitionRoot>
                 </div>
             </form>
@@ -463,7 +463,7 @@ const isStudent = computed(() => {
         <div v-if="isTeacherOrAdmin" :class="alsenCard">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h2 :class="alsenCardTitle">PIN Pengawas (Proctor PIN)</h2>
+                    <h2 :class="alsenCardTitle">PIN Pengawas</h2>
                     <p :class="alsenCardDescription">PIN 6 angka untuk membuka kunci ujian siswa di lab tanpa mengetik password utama.</p>
                 </div>
                 <span
@@ -595,7 +595,7 @@ const isStudent = computed(() => {
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 :class="alsenCardTitle">Cadangan Bank Soal</h2>
-                    <p :class="alsenCardDescription">Unduh salinan seluruh kuis, soal, kunci jawaban, dan pengaturannya dalam format JSON.</p>
+                    <p :class="alsenCardDescription">Unduh salinan seluruh formulir, soal, kunci jawaban, dan pengaturannya dalam format JSON.</p>
                 </div>
                 <a :href="route('profile.quizzes.export')" download :class="[alsenSecondaryButton, 'shrink-0']">
                     <Download class="h-4 w-4" /> Unduh Cadangan (.json)

@@ -496,7 +496,7 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
             </section>
 
             <p class="mt-3 text-[11px] leading-relaxed text-slate-400">
-                Jam ditampilkan dalam zona waktu sekolah. Arahkan kursor ke nama browser untuk melihat data lengkap dari browser (User-Agent). Chrome
+                Jam ditampilkan dalam zona waktu lembaga. Arahkan kursor ke nama browser untuk melihat data lengkap dari browser (User-Agent). Chrome
                 di HP Android tidak menyebutkan merek dan tipe HP, sehingga tercatat sebagai "HP Android".
             </p>
         </main>

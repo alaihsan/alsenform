@@ -158,7 +158,7 @@ const statusFilterLabel = computed(() => {
             return 'Sudah Dikerjakan';
         }
 
-        return 'Semua Kuis';
+        return 'Semua Formulir';
     }
 
     if (statusFilter.value === 'published') {
@@ -187,7 +187,7 @@ function copyPublicUrl(form: RecentForm): void {
 
     navigator.clipboard
         .writeText(form.publicUrl)
-        .then(() => showToast('Link publik disalin'))
+        .then(() => showToast('Tautan publik disalin'))
         .catch(() => showToast('Browser tidak mengizinkan copy otomatis'));
     activeMenuId.value = null;
 }
@@ -301,7 +301,7 @@ function moveToFolder(form: RecentForm): void {
         { folder },
         {
             preserveScroll: true,
-            onSuccess: () => showToast(folder.trim() ? 'Form dipindahkan ke folder' : 'Form dikeluarkan dari folder'),
+            onSuccess: () => showToast(folder.trim() ? 'Formulir dipindahkan ke folder' : 'Formulir dikeluarkan dari folder'),
         },
     );
 }
@@ -318,7 +318,7 @@ function removeFromFolder(form: RecentForm): void {
         { folder_id: null },
         {
             preserveScroll: true,
-            onSuccess: () => showToast('Form dikeluarkan dari folder'),
+            onSuccess: () => showToast('Formulir dikeluarkan dari folder'),
         },
     );
 }
@@ -381,7 +381,7 @@ function dropFormOutOfFolder(): void {
         { folder_id: null },
         {
             preserveScroll: true,
-            onSuccess: () => showToast('Form dikeluarkan dari folder'),
+            onSuccess: () => showToast('Formulir dikeluarkan dari folder'),
         },
     );
 }
@@ -407,7 +407,7 @@ function restoreForm(form: RecentForm): void {
         {},
         {
             preserveScroll: true,
-            onSuccess: () => showToast('Form dipulihkan'),
+            onSuccess: () => showToast('Formulir dipulihkan'),
         },
     );
 }
@@ -437,7 +437,7 @@ function submitFormDeleteModal(): void {
         preserveScroll: true,
         onSuccess: () => {
             closeFormDeleteModal();
-            showToast(isForceDelete ? 'Form dihapus permanen' : 'Form dipindahkan ke Sampah');
+            showToast(isForceDelete ? 'Formulir dihapus permanen' : 'Formulir dipindahkan ke Sampah');
         },
     });
 }
@@ -452,7 +452,7 @@ function leaveCollaboration(form: RecentForm): void {
         return;
     }
 
-    if (!window.confirm(`Yakin ingin keluar dari kolaborasi kuis "${form.title}"?`)) {
+    if (!window.confirm(`Yakin ingin keluar dari kolaborasi formulir "${form.title}"?`)) {
         return;
     }
 
@@ -463,8 +463,8 @@ function leaveCollaboration(form: RecentForm): void {
         }),
         {
             preserveScroll: true,
-            onSuccess: () => showToast('Anda telah keluar dari kolaborasi form'),
-            onError: () => showToast('Gagal keluar dari kolaborasi form'),
+            onSuccess: () => showToast('Anda telah keluar dari kolaborasi formulir'),
+            onError: () => showToast('Gagal keluar dari kolaborasi formulir'),
         },
     );
 }
@@ -828,7 +828,7 @@ function closeDonationModal(): void {
                                             <LayoutDashboard class="h-5 w-5" />
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
-                                            >Dashboard</span
+                                            >Beranda</span
                                         >
                                     </Link>
                                 </DropdownMenuItem>
@@ -849,7 +849,7 @@ function closeDonationModal(): void {
                                             <PlusCircle class="h-5 w-5" />
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
-                                            >Buat Kuis</span
+                                            >Buat Formulir</span
                                         >
                                     </Link>
                                 </DropdownMenuItem>
@@ -866,7 +866,7 @@ function closeDonationModal(): void {
                                             <ClipboardList class="h-5 w-5" />
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
-                                            >Template</span
+                                            >Templat</span
                                         >
                                     </button>
                                 </DropdownMenuItem>
@@ -887,7 +887,7 @@ function closeDonationModal(): void {
                                             <BookOpen class="h-5 w-5" />
                                         </div>
                                         <span class="mt-1.5 text-[11px] font-semibold leading-tight text-slate-700 group-hover:text-slate-900"
-                                            >Cohort</span
+                                            >Kelompok</span
                                         >
                                     </Link>
                                 </DropdownMenuItem>
@@ -1061,7 +1061,7 @@ function closeDonationModal(): void {
                             type="button"
                             aria-label="Opsi templat"
                             class="rounded-full p-1 hover:bg-white"
-                            @click="showToast('Pilih template untuk membuat form baru')"
+                            @click="showToast('Pilih templat untuk membuat formulir baru')"
                         >
                             <MoreVertical class="h-6 w-6" />
                         </button>
@@ -1128,7 +1128,7 @@ function closeDonationModal(): void {
                         <ClipboardList class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="truncate text-xs font-medium text-slate-500">Total Soal & Kuis</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Total Ujian</p>
                         <p class="text-lg font-bold leading-tight text-slate-800">{{ studentStats?.totalAssigned ?? recentForms.length }}</p>
                     </div>
                 </div>
@@ -1250,13 +1250,13 @@ function closeDonationModal(): void {
             <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 class="text-base font-semibold">
-                        {{ isStudent ? 'Daftar Soal & Kuis' : 'Formulir terbaru' }}
+                        {{ isStudent ? 'Daftar Ujian' : 'Formulir terbaru' }}
                         <span v-if="filteredRecentForms.length" class="text-xs font-normal text-slate-500">({{ filteredRecentForms.length }})</span>
                     </h2>
                     <p v-if="searchQuery.trim()" class="mt-1 text-sm font-medium text-slate-500">
                         Menampilkan hasil pencarian: <span class="text-slate-800">"{{ searchQuery.trim() }}"</span>
                     </p>
-                    <p v-else-if="isStudent" class="mt-0.5 text-xs text-slate-500">Pilih kuis di bawah ini untuk mulai mengerjakan soal ujian</p>
+                    <p v-else-if="isStudent" class="mt-0.5 text-xs text-slate-500">Pilih ujian di bawah ini untuk mulai mengerjakan</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-3 text-slate-600">
                     <button
@@ -1274,9 +1274,9 @@ function closeDonationModal(): void {
                             v-if="isStudent"
                             v-model="statusFilter"
                             class="h-9 rounded-full border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                            aria-label="Filter kuis"
+                            aria-label="Filter formulir"
                         >
-                            <option value="all">Semua Kuis</option>
+                            <option value="all">Semua Formulir</option>
                             <option value="pending">Belum Dikerjakan</option>
                             <option value="completed">Sudah Dikerjakan</option>
                         </select>
@@ -1371,7 +1371,7 @@ function closeDonationModal(): void {
             >
                 <div class="min-w-0">
                     <p class="text-sm font-bold">Semua formulir / Beranda</p>
-                    <p class="mt-1 text-xs font-semibold text-slate-500">Drop form di sini untuk mengeluarkannya dari folder.</p>
+                    <p class="mt-1 text-xs font-semibold text-slate-500">Lepas formulir di sini untuk mengeluarkannya dari folder.</p>
                 </div>
                 <button
                     type="button"
@@ -1439,7 +1439,7 @@ function closeDonationModal(): void {
                     <span class="min-w-0">
                         <span class="block truncate text-sm font-semibold text-slate-800">{{ folder.name }}</span>
                         <span class="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                            {{ folder.formsCount }} form
+                            {{ folder.formsCount }} formulir
                         </span>
                     </span>
                 </article>
@@ -1519,7 +1519,7 @@ function closeDonationModal(): void {
                                         <span
                                             v-if="form.isCollaborator"
                                             class="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700"
-                                            title="Anda berkolaborasi pada kuis ini"
+                                            title="Anda berkolaborasi pada formulir ini"
                                         >
                                             Kolaborasi
                                         </span>
@@ -1701,11 +1701,11 @@ function closeDonationModal(): void {
                     {{
                         searchQuery.trim()
                             ? isStudent
-                                ? `Kuis "${searchQuery.trim()}" tidak ditemukan`
-                                : `Quiz "${searchQuery.trim()}" tidak tersedia`
+                                ? `Formulir "${searchQuery.trim()}" tidak ditemukan`
+                                : `Formulir "${searchQuery.trim()}" tidak tersedia`
                             : isStudent
-                              ? 'Belum ada kuis yang ditugaskan'
-                              : 'Belum ada recent form'
+                              ? 'Belum ada ujian yang ditugaskan'
+                              : 'Belum ada formulir'
                     }}
                 </h3>
                 <p class="mt-2 text-sm text-slate-500">
@@ -1713,12 +1713,12 @@ function closeDonationModal(): void {
                         searchQuery.trim()
                             ? isStudent
                                 ? 'Coba gunakan kata kunci pencarian lain.'
-                                : 'Coba kata kunci lain atau buat quiz baru dari template.'
+                                : 'Coba kata kunci lain atau buat formulir baru dari templat.'
                             : isStudent
-                              ? 'Saat guru menugaskan atau mempublikasikan kuis untuk kelas Anda, kuis akan muncul di sini untuk dikerjakan.'
+                              ? 'Saat guru menugaskan atau menerbitkan ujian untuk kelas Anda, ujian akan muncul di sini untuk dikerjakan.'
                               : statusFilter === 'all'
-                                ? 'Buat form dari blank form atau template, lalu form akan muncul di sini.'
-                                : `Tidak ada form dengan status ${statusFilterLabel}.`
+                                ? 'Buat formulir kosong atau mulai dari templat. Formulir Anda akan muncul di sini.'
+                                : `Tidak ada formulir dengan status ${statusFilterLabel}.`
                     }}
                 </p>
             </div>
@@ -1738,8 +1738,8 @@ function closeDonationModal(): void {
                         <p class="mt-1 text-sm text-slate-500">
                             {{
                                 folderModalMode === 'delete'
-                                    ? 'Form di dalam folder tidak dihapus, hanya dikeluarkan dari folder.'
-                                    : 'Folder membantu mengelompokkan form di dashboard.'
+                                    ? 'Formulir di dalam folder tidak dihapus, hanya dikeluarkan dari folder.'
+                                    : 'Folder membantu mengelompokkan formulir di beranda.'
                             }}
                         </p>
                     </div>
@@ -1799,13 +1799,13 @@ function closeDonationModal(): void {
                 <div class="mb-4 flex items-start justify-between gap-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-900">
-                            {{ formDeleteMode === 'force' ? 'Hapus permanen form' : 'Pindahkan form ke Sampah' }}
+                            {{ formDeleteMode === 'force' ? 'Hapus permanen formulir' : 'Pindahkan formulir ke Sampah' }}
                         </h2>
                         <p class="mt-1 text-sm text-slate-500">
                             {{
                                 formDeleteMode === 'force'
-                                    ? 'Aksi ini menghapus form dari database dan tidak bisa dipulihkan.'
-                                    : 'Form masih bisa dipulihkan dari filter Sampah.'
+                                    ? 'Aksi ini menghapus formulir dari database dan tidak bisa dipulihkan.'
+                                    : 'Formulir masih bisa dipulihkan dari filter Sampah.'
                             }}
                         </p>
                     </div>
@@ -1816,13 +1816,13 @@ function closeDonationModal(): void {
 
                 <form class="space-y-4" @submit.prevent="submitFormDeleteModal">
                     <label class="block">
-                        <span class="text-sm font-semibold text-slate-700">Ketik nama form untuk konfirmasi</span>
+                        <span class="text-sm font-semibold text-slate-700">Ketik nama formulir untuk konfirmasi</span>
                         <span class="mt-1 block rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ selectedForm.title }}</span>
                         <input
                             v-model="formDeleteConfirmation"
                             type="text"
                             class="mt-2 h-11 w-full rounded-xl border border-red-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                            placeholder="Ketik persis nama form"
+                            placeholder="Ketik persis nama formulir"
                         />
                     </label>
 
@@ -1859,7 +1859,7 @@ function closeDonationModal(): void {
                 <div class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                     <Sparkles class="h-3.5 w-3.5" />
                 </div>
-                <span>Template formulir akan dibuka pada tab peramban baru</span>
+                <span>Templat formulir akan dibuka pada tab peramban baru</span>
                 <button
                     type="button"
                     @click="showTemplateHint = false"
@@ -2414,7 +2414,7 @@ function closeDonationModal(): void {
                         <section class="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/30 p-4">
                             <h3 class="flex items-center gap-1.5 text-xs font-extrabold text-slate-800">
                                 <Coins class="h-4 w-4 text-indigo-500" />
-                                Form Pencairan Saldo
+                                Formulir Pencairan Saldo
                             </h3>
 
                             <form class="space-y-3" @submit.prevent="submitWithdrawal">

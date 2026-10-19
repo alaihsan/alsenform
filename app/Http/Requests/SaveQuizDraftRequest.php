@@ -84,7 +84,7 @@ class SaveQuizDraftRequest extends FormRequest
 
         foreach (array_keys($answers) as $questionId) {
             if (! in_array((string) $questionId, $questionIds, true)) {
-                return 'Draf berisi pertanyaan yang tidak ada di kuis ini.';
+                return 'Draf berisi pertanyaan yang tidak ada di formulir ini.';
             }
         }
 

@@ -23,7 +23,7 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Buat akun baru" description="Daftar untuk mulai membuat dan membagikan form">
+    <AuthBase title="Buat akun baru" description="Daftar untuk mulai membuat dan membagikan formulir">
         <Head title="Daftar" />
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandFooter from '@/components/BrandFooter.vue';
 import DocxImportGuide, { type DocxGuideSample } from '@/components/help/DocxImportGuide.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
@@ -56,14 +57,14 @@ const studentArticles: HelpArticle[] = [
         badge: 'Akun',
         badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
         summary: 'Masuk dengan NIS dan membuat password pribadi saat pertama kali login.',
-        intro: 'Akun Anda dibuat oleh sekolah. Gunakan NIS/NISN sebagai nama pengguna.',
+        intro: 'Akun Anda dibuat oleh admin. Gunakan NIS/NISN sebagai nama pengguna.',
         points: [
-            { title: 'Masuk', text: 'Ketik NIS/NISN dan password sementara yang diberikan sekolah, lalu tekan Masuk.' },
+            { title: 'Masuk', text: 'Ketik NIS/NISN dan password sementara yang diberikan admin, lalu tekan Masuk.' },
             {
                 title: 'Buat password baru',
-                text: 'Saat pertama kali masuk, Anda wajib mengganti password sementara dengan password pribadi (minimal 8 karakter). Setelah disimpan, Anda langsung masuk ke halaman Home.',
+                text: 'Saat pertama kali masuk, Anda wajib mengganti password sementara dengan password pribadi (minimal 8 karakter). Setelah disimpan, Anda langsung masuk ke Beranda.',
             },
-            { title: 'Lupa password', text: 'Minta guru atau admin sekolah untuk mereset password. Setelah direset, Anda akan diminta membuat password baru lagi.' },
+            { title: 'Lupa password', text: 'Minta guru atau admin untuk mereset password. Setelah direset, Anda akan diminta membuat password baru lagi.' },
         ],
         tip: 'Jangan beri tahu password Anda kepada teman, dan selalu Logout setelah memakai komputer lab bersama.',
     },
@@ -73,10 +74,10 @@ const studentArticles: HelpArticle[] = [
         icon: Play,
         badge: 'Ujian',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        summary: 'Membuka kuis dari halaman Home dan membaca aturan sebelum mulai.',
-        intro: 'Semua kuis untuk kelas Anda tampil di halaman Home pada bagian Daftar Soal & Kuis.',
+        summary: 'Membuka ujian dari Beranda dan membaca aturan sebelum mulai.',
+        intro: 'Semua ujian untuk kelas Anda tampil di Beranda pada bagian Daftar Ujian.',
         points: [
-            { title: 'Pilih kuis', text: 'Tekan tombol Kerjakan pada kartu kuis yang berstatus Belum Dikerjakan.' },
+            { title: 'Pilih ujian', text: 'Tekan tombol Kerjakan pada kartu ujian yang berstatus Belum Dikerjakan.' },
             {
                 title: 'Baca konfirmasi ujian',
                 text: 'Sebelum mulai, muncul jendela berisi nama ujian, jumlah soal, durasi, dan aturan mengerjakan. Baca dengan teliti.',
@@ -86,7 +87,7 @@ const studentArticles: HelpArticle[] = [
                 text: 'Soal baru tampil dan waktu baru mulai berjalan setelah tombol ini ditekan. Tekan Kembali bila belum siap.',
             },
         ],
-        tip: 'Jika halaman tidak sengaja tertutup, buka kuis yang sama lagi: ujian berlanjut dan jawaban Anda tetap ada.',
+        tip: 'Jika halaman tidak sengaja tertutup, buka ujian yang sama lagi: ujian berlanjut dan jawaban Anda tetap ada.',
     },
     {
         id: 'student-answering',
@@ -115,7 +116,7 @@ const studentArticles: HelpArticle[] = [
         icon: Wifi,
         badge: 'Jaringan',
         badgeColor: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-        summary: 'Jawaban tersimpan otomatis walau Wi-Fi sekolah lemah atau terputus.',
+        summary: 'Jawaban tersimpan otomatis walau Wi-Fi lemah atau terputus.',
         intro: 'Setiap jawaban otomatis disimpan di perangkat Anda dan di server ujian.',
         points: [
             {
@@ -128,7 +129,7 @@ const studentArticles: HelpArticle[] = [
             },
             {
                 title: 'Perangkat mati atau rusak',
-                text: 'Masuk lagi dengan akun Anda di komputer lain dan buka kuis yang sama. Jawaban yang sudah tersimpan di server akan dipulihkan.',
+                text: 'Masuk lagi dengan akun Anda di komputer lain dan buka ujian yang sama. Jawaban yang sudah tersimpan di server akan dipulihkan.',
             },
             { title: 'Jangan menutup paksa', text: 'Jangan menghapus data browser selama ujian berlangsung.' },
         ],
@@ -152,7 +153,7 @@ const studentArticles: HelpArticle[] = [
             },
             { title: 'Waktu habis', text: 'Jawaban yang sudah diisi terkirim otomatis, Anda tidak perlu menekan apa pun.' },
         ],
-        tip: 'Pada sebagian kuis jawaban hanya bisa dikirim satu kali, jadi periksa kembali sebelum mengirim.',
+        tip: 'Pada sebagian ujian jawaban hanya bisa dikirim satu kali, jadi periksa kembali sebelum mengirim.',
     },
     {
         id: 'student-locked',
@@ -179,7 +180,7 @@ const studentArticles: HelpArticle[] = [
         points: [
             { title: 'Foto profil', text: 'Tekan Pilih Foto Baru (JPG, PNG, atau WebP, maksimal 2 MB), lalu Simpan Profil.' },
             { title: 'Ganti password', text: 'Pilih menu Password pada halaman Pengaturan Akun.' },
-            { title: 'Data sekolah', text: 'NIS dan kelas dikelola sekolah. Hubungi wali kelas atau admin bila ada data yang salah.' },
+            { title: 'Data dari admin', text: 'NIS dan kelas diatur oleh admin. Hubungi wali kelas atau admin bila ada data yang salah.' },
         ],
     },
 ];
@@ -187,11 +188,11 @@ const studentArticles: HelpArticle[] = [
 const teacherTopics: HelpTopic[] = [
     {
         id: 'getting-started',
-        title: '1. Memulai & Alur Kerja Kuis',
+        title: '1. Memulai & Alur Kerja Formulir',
         icon: Sparkles,
         badge: 'Dasar',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        summary: 'Panduan awal membuat kuis, memilih template ujian, mengorganisir folder, dan kolaborasi guru.',
+        summary: 'Panduan awal membuat formulir, memilih templat ujian, mengorganisir folder, dan kolaborasi guru.',
     },
     {
         id: 'question-editor',
@@ -236,15 +237,15 @@ const teacherTopics: HelpTopic[] = [
     },
     {
         id: 'proctoring-anti-cheat',
-        title: '7. Pengawasan CBT & Fitur Anti-Curang',
+        title: '7. Pengawasan Ujian & Fitur Anti-Curang',
         icon: Shield,
         badge: 'Keamanan',
         badgeColor: 'bg-red-50 text-red-700 border-red-200',
-        summary: 'Deteksi Lock on Blur (pindah tab), toleransi pelanggaran, permintaan buka blokir, dan PIN Pengawas.',
+        summary: 'Kunci saat pindah tab, toleransi pelanggaran, permintaan buka blokir, dan PIN Pengawas.',
     },
     {
         id: 'students-cohort',
-        title: '8. Manajemen Siswa & Kelas (Cohort)',
+        title: '8. Manajemen Siswa, Kelas & Kelompok',
         icon: Users,
         badge: 'Akademik',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -264,7 +265,7 @@ const teacherTopics: HelpTopic[] = [
         icon: KeyRound,
         badge: 'Akun',
         badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
-        summary: 'Upload foto profil avatar, manajemen sesi perangkat aktif, preferensi default kuis, dan backup arsip JSON.',
+        summary: 'Upload foto profil avatar, manajemen sesi perangkat aktif, preferensi bawaan ujian, dan backup arsip JSON.',
     },
 ];
 
@@ -324,7 +325,7 @@ const selectTopic = (id: string) => {
                         {{
                             isStudent
                                 ? 'Panduan singkat masuk, mengerjakan ujian, dan mengirim jawaban di Falcon Forms.'
-                                : 'Panduan membuat ujian, menulis soal Arab & rumus, pengawasan CBT, hingga rekap nilai siswa.'
+                                : 'Panduan membuat ujian, menulis soal Arab & rumus, pengawasan ujian, hingga rekap nilai siswa.'
                         }}
                     </p>
                 </div>
@@ -447,14 +448,14 @@ const selectTopic = (id: string) => {
                                     <Sparkles class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">1. Memulai & Alur Kerja Kuis</h2>
-                                    <p class="text-xs text-slate-500">Langkah mudah menyusun dan mendistribusikan kuis di Falcon Forms</p>
+                                    <h2 class="text-xl font-bold text-slate-900">1. Memulai & Alur Kerja Formulir</h2>
+                                    <p class="text-xs text-slate-500">Langkah mudah menyusun dan membagikan formulir di Falcon Forms</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Falcon Forms dirancang dengan alur kerja formulir yang mudah dikenali, dan disiapkan khusus untuk ujian sekolah berbasis komputer (CBT).
+                                    Falcon Forms membantu Anda menyusun formulir dan ujian, membagikannya ke peserta, dan melihat hasilnya langsung, di kelas, di lab komputer, atau di ruang pelatihan.
                                 </p>
 
                                 <h3 class="font-bold text-slate-900 text-base">Alur 4 Langkah Pelaksanaan Ujian:</h3>
@@ -462,10 +463,10 @@ const selectTopic = (id: string) => {
                                     <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                                         <div class="flex items-center gap-2 font-bold text-indigo-700 text-xs uppercase tracking-wider mb-1">
                                             <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 text-[10px]">1</span>
-                                            Buat / Pilih Template
+                                            Buat / Pilih Templat
                                         </div>
                                         <p class="text-xs text-slate-600">
-                                            Mulai dari <em>Formulir kosong</em> atau gunakan template siap pakai (PTS/PAS, PAI Arab, Matematika) dari baris template atas.
+                                            Mulai dari <em>Formulir kosong</em> atau gunakan templat siap pakai (PTS/PAS, PAI Arab, Matematika) dari baris templat atas.
                                         </p>
                                     </div>
                                     <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -480,10 +481,10 @@ const selectTopic = (id: string) => {
                                     <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                                         <div class="flex items-center gap-2 font-bold text-indigo-700 text-xs uppercase tracking-wider mb-1">
                                             <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 text-[10px]">3</span>
-                                            Konfigurasi Ujian (CBT)
+                                            Pengaturan Ujian
                                         </div>
                                         <p class="text-xs text-slate-600">
-                                            Tentukan durasi pengerjaan, KKM, acak urutan soal, dan aktifkan proteksi anti-curang (*Lock on Blur*).
+                                            Tentukan durasi pengerjaan, KKM, acak urutan soal, dan aktifkan proteksi anti-curang.
                                         </p>
                                     </div>
                                     <div class="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -492,13 +493,13 @@ const selectTopic = (id: string) => {
                                             Publikasi & Bagikan Tautan
                                         </div>
                                         <p class="text-xs text-slate-600">
-                                            Klik tombol <strong>Publikasikan</strong> lalu salin tautan publik kuis untuk dibagikan ke siswa atau kelas.
+                                            Klik tombol <strong>Terbit</strong> lalu salin tautan publik formulir untuk dibagikan ke siswa atau kelas.
                                         </p>
                                     </div>
                                 </div>
 
                                 <div class="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-800">
-                                    <strong>💡 Tips Kolaborasi Guru:</strong> Anda dapat mengundang rekan guru mata pelajaran serumpun untuk bersama-sama mengedit form soal melalui menu opsi titik tiga &gt; <em>Kolaborasi Form</em>.
+                                    <strong>💡 Tips Kolaborasi Guru:</strong> Anda dapat mengundang rekan guru mata pelajaran serumpun untuk bersama-sama mengedit formulir soal melalui menu opsi titik tiga &gt; <em>Kolaborasi Formulir</em>.
                                 </div>
                             </div>
                         </section>
@@ -553,16 +554,16 @@ const selectTopic = (id: string) => {
                                     <h4 class="mb-2 text-xs font-bold uppercase tracking-wider text-slate-800">Penetapan Skor & Poin</h4>
                                     <p class="text-xs leading-relaxed text-slate-600">
                                         Setiap soal bernilai <strong>1 poin</strong> secara bawaan dan dapat diganti angka lain per soal (atau lewat
-                                        Pengaturan › Bawaan › Poin bawaan soal). Nilai akhir murid selalu berada pada rentang <strong>0–100</strong>:
+                                        Pengaturan › Bawaan › Poin bawaan soal). Nilai akhir siswa selalu berada pada rentang <strong>0–100</strong>:
                                     </p>
                                     <p class="mt-2 rounded-xl bg-white px-3 py-2 text-center font-mono text-xs font-bold text-indigo-700">
                                         Nilai = poin yang diperoleh ÷ total poin soal yang dinilai × 100
                                     </p>
                                     <p class="mt-2 text-xs leading-relaxed text-slate-600">
                                         Contoh: 20 soal masing-masing 1 poin, 15 benar → nilai 75. Soal esai dan unggah berkas dinilai guru lewat tab
-                                        Jawaban › "Nilai esai & isian"; sebelum dinilai, soal itu belum dihitung dan nilai murid ditandai "sementara".
+                                        Jawaban › "Nilai esai & isian"; sebelum dinilai, soal itu belum dihitung dan nilai siswa ditandai "sementara".
                                         Soal tanpa kunci jawaban (misalnya survei) tidak ikut dihitung. Nilai dihitung ulang dari kunci terbaru, jadi
-                                        kunci yang diperbaiki langsung memperbarui nilai murid.
+                                        kunci yang diperbaiki langsung memperbarui nilai siswa.
                                     </p>
                                 </div>
                             </div>
@@ -748,7 +749,7 @@ const selectTopic = (id: string) => {
                                     <li>Klik menu <strong>File &gt; Export &gt; Blackboard 6.0-7.0 (atau Blackboard 7.1-9.0)</strong>.</li>
                                     <li>Beri nama berkas dan simpan sebagai file arsip berformat <code>.zip</code>.</li>
                                     <li>Buka editor Falcon Forms, klik tombol <strong>Import Soal &gt; Upload ExamView ZIP</strong>.</li>
-                                    <li>Falcon Forms akan mengekstrak butir soal, kunci jawaban, dan seluruh gambar diagram soal secara otomatis ke dalam kuis!</li>
+                                    <li>Falcon Forms akan mengekstrak butir soal, kunci jawaban, dan seluruh gambar diagram soal secara otomatis ke dalam formulir!</li>
                                 </ol>
                             </div>
                         </section>
@@ -773,21 +774,21 @@ const selectTopic = (id: string) => {
                                     <Shield class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">7. Pengawasan CBT & Fitur Anti-Curang</h2>
-                                    <p class="text-xs text-slate-500">Mekanisme menjaga integritas dan kejujuran ujian online sekolah</p>
+                                    <h2 class="text-xl font-bold text-slate-900">7. Pengawasan Ujian & Fitur Anti-Curang</h2>
+                                    <p class="text-xs text-slate-500">Mekanisme menjaga integritas dan kejujuran ujian online</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-4 text-sm text-slate-700 leading-relaxed">
                                 <div class="space-y-3">
                                     <div class="rounded-xl border border-slate-100 p-3.5">
-                                        <h4 class="font-bold text-slate-900">🔒 Deteksi Pindah Tab (Lock on Blur)</h4>
+                                        <h4 class="font-bold text-slate-900">🔒 Deteksi Pindah Tab</h4>
                                         <p class="text-xs text-slate-600 mt-1">
                                             Bila siswa berganti tab browser, membuka jendela lain, atau me-minimize layar, sistem akan mencatat log peringatan. Jika melebihi batas toleransi, lembar ujian siswa akan otomatis terkunci (*suspended*).
                                         </p>
                                     </div>
                                     <div class="rounded-xl border border-slate-100 p-3.5">
-                                        <h4 class="font-bold text-slate-900">🔑 PIN Cepat Pengawas (Proctor PIN)</h4>
+                                        <h4 class="font-bold text-slate-900">🔑 PIN Cepat Pengawas</h4>
                                         <p class="text-xs text-slate-600 mt-1">
                                             Pengawas ruangan ujian dapat membuka kunci siswa langsung di tempat dengan memasukkan PIN 6 digit tanpa perlu mengetik kata sandi akun guru di hadapan siswa.
                                         </p>
@@ -807,19 +808,19 @@ const selectTopic = (id: string) => {
                                     <Users class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">8. Manajemen Siswa & Kelas (Cohort)</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">8. Manajemen Siswa, Kelas & Kelompok</h2>
                                     <p class="text-xs text-slate-500">Pengelolaan data peserta ujian, kelas, dan kredensial akun siswa</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-4 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Admin dan guru dapat mengunggah daftar peserta ujian secara massal melalui berkas template Excel/CSV.
+                                    Admin dan guru dapat mengunggah daftar peserta ujian secara massal melalui berkas templat Excel/CSV.
                                 </p>
                                 <ul class="list-disc pl-5 space-y-1.5 text-xs text-slate-600">
                                     <li><strong>Password Default:</strong> Password akun siswa secara otomatis disetel menggunakan 6 digit terakhir dari NIS/NISN siswa.</li>
                                     <li><strong>Proteksi Akun Siswa:</strong> Siswa tidak diizinkan menghapus akun secara mandiri untuk menjaga integritas data presensi dan riwayat nilai ujian.</li>
-                                    <li><strong>Cohort:</strong> Pengelompokan siswa ke dalam rombel/angkatan kelas agar pembagian kuis dapat ditargetkan dengan presisi.</li>
+                                    <li><strong>Kelompok:</strong> Pengelompokan siswa ke dalam rombel/angkatan kelas agar pembagian formulir dapat ditargetkan dengan presisi.</li>
                                 </ul>
                             </div>
                         </section>
@@ -842,12 +843,12 @@ const selectTopic = (id: string) => {
 
                             <div class="mt-6 space-y-4 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Pada tab <strong>Respon</strong> di editor kuis, guru dapat memantau lembar jawaban yang masuk secara langsung (*real-time*):
+                                    Pada tab <strong>Jawaban</strong> di editor formulir, guru dapat memantau lembar jawaban yang masuk secara langsung (*real-time*):
                                 </p>
                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
                                     <div class="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                                         <p class="font-bold text-slate-800">📊 Statistik Kelulusan KKM</p>
-                                        <p class="text-slate-500 mt-0.5">Melihat persentase siswa tuntas vs belum tuntas berdasarkan standar KKM kuis.</p>
+                                        <p class="text-slate-500 mt-0.5">Melihat persentase siswa tuntas vs belum tuntas berdasarkan standar KKM ujian.</p>
                                     </div>
                                     <div class="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                                         <p class="font-bold text-slate-800">📥 Download Rekap Excel / CSV</p>
@@ -879,8 +880,8 @@ const selectTopic = (id: string) => {
                                 </p>
                                 <ul class="list-disc pl-5 space-y-1.5 text-xs text-slate-600">
                                     <li><strong>Upload Foto Profil:</strong> Mengganti inisial dengan foto Anda (format JPG/PNG/WebP).</li>
-                                    <li><strong>Data Akademik Guru:</strong> Melengkapi NIP, Mata Pelajaran, dan Asal Sekolah.</li>
-                                    <li><strong>Preferensi Kuis Default:</strong> Mengatur KKM default, durasi default, dan font Arab pilihan agar otomatis terisi saat membuat form baru.</li>
+                                    <li><strong>Data Akademik Guru:</strong> Melengkapi NIP, Mata Pelajaran, dan Asal Sekolah/Lembaga.</li>
+                                    <li><strong>Preferensi Ujian Bawaan:</strong> Mengatur KKM default, durasi default, dan font Arab pilihan agar otomatis terisi saat membuat formulir baru.</li>
                                     <li><strong>Manajemen Sesi Login:</strong> Memantau perangkat yang sedang login dan opsi keluar dari seluruh komputer lain.</li>
                                     <li><strong>Ekspor Bank Soal Mandiri:</strong> Mengunduh cadangan seluruh soal Anda dalam format berkas <code>.json</code>.</li>
                                 </ul>
@@ -890,5 +891,6 @@ const selectTopic = (id: string) => {
                 </section>
             </div>
         </main>
+        <BrandFooter />
     </AlsenformLayout>
 </template>
