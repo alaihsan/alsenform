@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\Addons;
 use App\Support\Addon;
+use App\Support\DisplayTime;
 use App\Support\FormDesign;
 use App\Support\SectionFlow;
 use Carbon\CarbonImmutable;
@@ -144,7 +145,7 @@ class QuizForm extends Model
      */
     public function scheduleLabel(CarbonInterface $time): string
     {
-        return $time->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('l, j F Y \p\u\k\u\l H.i');
+        return DisplayTime::format($time, 'l, j F Y \p\u\k\u\l H.i');
     }
 
     /**

@@ -15,6 +15,25 @@ class QuizItems
 
     public const CONTENT_TYPES = [self::SECTION, self::TITLE_AND_DESCRIPTION];
 
+    /** The title of a new question until the teacher writes one. */
+    public const UNTITLED_QUESTION = 'Pertanyaan tanpa judul';
+
+    /**
+     * Titles that only hold the place of a question's text; older forms still have the English
+     * ones. The editor keeps the same list (PLACEHOLDER_QUESTION_TITLES in constants/form-editor.ts).
+     */
+    public const PLACEHOLDER_TITLES = [self::UNTITLED_QUESTION, 'Untitled Question', 'Short answer question', 'Paragraph question'];
+
+    /**
+     * Whether a title is only a placeholder, whatever its case.
+     */
+    public static function isPlaceholderTitle(string $title): bool
+    {
+        $title = mb_strtolower(trim($title));
+
+        return in_array($title, array_map('mb_strtolower', self::PLACEHOLDER_TITLES), true);
+    }
+
     public static function isContent(mixed $item): bool
     {
         return is_array($item) && in_array($item['type'] ?? '', self::CONTENT_TYPES, true);

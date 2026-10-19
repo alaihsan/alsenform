@@ -13,8 +13,9 @@ defineProps<{
         <div class="w-full max-w-md rounded-[2rem] border-2 border-indigo-100 bg-white p-6 shadow-[0_14px_0_#e0e7ff]">
             <div class="flex flex-col gap-8">
                 <div class="flex flex-col items-center gap-4">
-                    <Link :href="route('home')" class="font-medium" aria-label="Ke halaman awal">
+                    <Link :href="route('home')" class="max-w-full font-medium">
                         <BrandMark size="lg" tagline="always" />
+                        <span class="sr-only">, ke halaman awal</span>
                     </Link>
                     <div class="space-y-2 text-center">
                         <h1 class="text-2xl font-black">{{ title }}</h1>

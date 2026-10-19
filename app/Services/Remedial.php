@@ -6,6 +6,7 @@ use App\Models\QuestionBankItem;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Support\DisplayTime;
 use App\Support\HtmlToPlainText;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
@@ -71,7 +72,7 @@ class Remedial
                     'questionCount' => count(QuizItems::questions($followUp->questions)),
                     'participants' => $followUp->participants_count,
                     'submitted' => $followUp->submittedStudentCount(),
-                    'createdAt' => $followUp->created_at?->diffForHumans(),
+                    'createdAt' => DisplayTime::ago($followUp->created_at),
                 ])
                 ->all(),
             // For counting, as students are chosen, the new bank questions a remedial exam can get.

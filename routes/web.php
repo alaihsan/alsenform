@@ -35,6 +35,11 @@ Route::get('cek-koneksi', [ConnectionCheckController::class, 'page'])->name('con
 Route::get('cek-koneksi/ping', [ConnectionCheckController::class, 'ping'])->middleware('throttle:connection-check-ping')->name('connection-check.ping');
 Route::get('cek-koneksi/unduh', [ConnectionCheckController::class, 'download'])->middleware('throttle:connection-check-download')->name('connection-check.download');
 
+// Lisensi: the licence as the LICENSE file says it, open to everyone.
+Route::get('lisensi', fn () => Inertia::render('License', [
+    'licenseText' => (string) file_get_contents(base_path('LICENSE')),
+]))->name('license');
+
 // Kebijakan Privasi: open to everyone, also before signing in.
 Route::get('privasi', fn () => Inertia::render('Privacy', [
     'contact' => config('app.privacy_contact') ?: null,

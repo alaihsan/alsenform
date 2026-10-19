@@ -158,3 +158,15 @@ test('the proctor sees the current token in the editor, students do not', functi
     app()->forgetScopedInstances();
     $this->actingAs($this->teacher)->getJson(route('forms.exam-token', $this->exam))->assertForbidden();
 });
+
+test('the gallery says how long a leaked token works, as long as it really does', function () {
+    $tokens = app(ExamToken::class);
+    $token = $tokens->current($this->exam, Carbon::parse('2026-10-13 08:00:00'));
+
+    // Shown at 08:00, it still works at 08:19 and no longer at 08:21: at most 20 minutes.
+    expect($tokens->accepts($this->exam, $token, Carbon::parse('2026-10-13 08:19:00')))->toBeTrue()
+        ->and($tokens->accepts($this->exam, $token, Carbon::parse('2026-10-13 08:21:00')))->toBeFalse()
+        ->and((ExamToken::ROTATE_SECONDS + ExamToken::GRACE_SECONDS) / 60)->toBe(20)
+        ->and(Addon::ExamToken->tagline())->toContain('paling lama 20 menit')
+        ->not->toContain('tidak berguna');
+});

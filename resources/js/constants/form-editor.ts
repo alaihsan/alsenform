@@ -16,10 +16,17 @@ import type { QuestionType, QuestionTypeOption } from '@/types/quiz';
 /** The title of a new question until the teacher writes one. */
 export const UNTITLED_QUESTION = 'Pertanyaan tanpa judul';
 
-/** Titles that only hold the place of a question's text (older forms still have the English ones). */
+/**
+ * Titles that only hold the place of a question's text (older forms still have the English ones).
+ * The server keeps the same list in App\Support\QuizItems::PLACEHOLDER_TITLES.
+ */
 export const PLACEHOLDER_QUESTION_TITLES = [UNTITLED_QUESTION, 'Untitled Question', 'Short answer question', 'Paragraph question'];
 
-/** The "Lainnya" option of a choice question (older forms have "Other"). */
+/** Whether a title is only a placeholder, whatever its case. */
+export const isPlaceholderTitle = (title: string): boolean =>
+    PLACEHOLDER_QUESTION_TITLES.some((placeholder) => placeholder.toLowerCase() === title.trim().toLowerCase());
+
+/** The "Lainnya" option the editor adds to a choice question (older forms have "Other"); a normal option otherwise. */
 export const OTHER_OPTIONS = ['Lainnya', 'Other'];
 
 /** The names of the question types as teachers know them (the stored type stays in English). */
@@ -88,7 +95,7 @@ export const templatePresets: Record<string, { title: string; description: strin
     'party-invite': {
         title: 'Party Invite',
         description: 'Konfirmasi undangan acara.',
-        question: 'Apakah kamu akan hadir?',
+        question: 'Apakah Anda akan hadir?',
         options: ['Ya, hadir', 'Belum pasti', 'Tidak bisa hadir'],
     },
     'work-request': {
@@ -100,7 +107,7 @@ export const templatePresets: Record<string, { title: string; description: strin
     rsvp: {
         title: 'RSVP',
         description: 'Konfirmasi kehadiran peserta.',
-        question: 'Status kehadiran kamu?',
+        question: 'Status kehadiran Anda?',
         options: ['Hadir', 'Tidak hadir', 'Mungkin hadir'],
     },
     't-shirt-sign-up': {

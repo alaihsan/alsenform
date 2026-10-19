@@ -84,6 +84,8 @@ export const DESIGN_PRESETS: DesignPreset[] = [
             shadow: 'none',
             buttonShape: 'square',
             titleSize: 'lg',
+            titleAlign: 'center',
+            width: 'narrow',
         },
     },
     {

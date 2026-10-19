@@ -342,7 +342,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                         </p>
                         <p v-else class="text-xs leading-relaxed text-slate-500">
                             Setelah dipasang, add-on {{ detail.onByDefault ? 'langsung aktif di semua ujian Anda' : 'perlu diaktifkan per ujian' }}.
-                            Matikan untuk ujian tertentu lewat tombol Add-ons di editor. Melepas add-on mematikannya di semua ujian Anda tanpa
+                            Matikan untuk ujian tertentu lewat tombol Add-on di editor. Melepas add-on mematikannya di semua ujian Anda tanpa
                             menghapus data.
                         </p>
                     </div>
@@ -411,7 +411,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                                     !pending.addon.perExam
                                         ? 'Add-on langsung muncul di menu Aplikasi di Beranda.'
                                         : pending.addon.onByDefault
-                                          ? 'Add-on langsung aktif di ujian; matikan per ujian lewat tombol Add-ons di editor.'
+                                          ? 'Add-on langsung aktif di ujian; matikan per ujian lewat tombol Add-on di editor.'
                                           : 'Add-on belum aktif sampai dinyalakan di ujian tertentu.'
                                 }}
                             </p>

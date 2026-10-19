@@ -1,4 +1,4 @@
-MIT License
+MIT License with Attribution
 
 Copyright (c) 2026 Falcon Education Partner
 
@@ -9,8 +9,20 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. Attribution. Every copy, modified version or deployment of the Software
+   that people use must keep a visible notice naming Falcon Education Partner
+   as the developer of the Software, for example "Dikembangkan oleh Falcon
+   Education Partner" or "Berbasis Falcon Forms, dikembangkan oleh Falcon
+   Education Partner", in the footer of its pages or on an about page. The
+   notice may not be removed, hidden or reworded to name another developer.
+
+3. Trademarks. This license does not grant the right to use the names
+   "Falcon Forms" and "Falcon Education Partner" or the falcon logo, except to
+   refer to the unmodified Software and in the notice required by condition 2.
+   A modified version distributed by others must use its own name and logo.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

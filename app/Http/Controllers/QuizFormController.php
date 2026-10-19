@@ -14,6 +14,7 @@ use App\Services\QuestionBank;
 use App\Support\FormDesign;
 use App\Support\MediaUrl;
 use App\Support\QuizFormPayloads;
+use App\Support\QuizItems;
 use App\Support\SectionFlow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -251,7 +252,7 @@ class QuizFormController extends Controller
             'party-invite' => [
                 'title' => 'Party Invite',
                 'description' => 'Konfirmasi undangan acara.',
-                'question' => 'Apakah kamu akan hadir?',
+                'question' => 'Apakah Anda akan hadir?',
                 'options' => ['Ya, hadir', 'Belum pasti', 'Tidak bisa hadir'],
             ],
             'work-request' => [
@@ -263,7 +264,7 @@ class QuizFormController extends Controller
             'rsvp' => [
                 'title' => 'RSVP',
                 'description' => 'Konfirmasi kehadiran peserta.',
-                'question' => 'Status kehadiran kamu?',
+                'question' => 'Status kehadiran Anda?',
                 'options' => ['Hadir', 'Tidak hadir', 'Mungkin hadir'],
             ],
             't-shirt-sign-up' => [
@@ -275,7 +276,7 @@ class QuizFormController extends Controller
             default => [
                 'title' => 'Formulir tanpa judul',
                 'description' => '',
-                'question' => 'Pertanyaan tanpa judul',
+                'question' => QuizItems::UNTITLED_QUESTION,
                 'options' => ['Opsi 1'],
             ],
         };

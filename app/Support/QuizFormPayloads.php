@@ -165,7 +165,7 @@ class QuizFormPayloads
             'deleteUrl' => route('forms.destroy', $quizForm),
             'restoreUrl' => route('forms.restore', $quizForm),
             'forceDeleteUrl' => route('forms.force-delete', $quizForm),
-            'updatedLabel' => $quizForm->updated_at->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('j M Y'),
+            'updatedLabel' => DisplayTime::format($quizForm->updated_at, 'j M Y'),
             'updatedAt' => $quizForm->updated_at->toISOString(),
             'isPublished' => ! is_null($quizForm->published_at),
             'isTrashed' => ! is_null($quizForm->deleted_at),
@@ -255,7 +255,7 @@ class QuizFormPayloads
                 'is_timeout' => (bool) $response->is_timeout,
                 // Handed in by the server: the time ran out while the exam page was closed or offline.
                 'is_auto_submitted' => (bool) $response->is_auto_submitted,
-                'submittedAt' => $response->created_at->diffForHumans(),
+                'submittedAt' => DisplayTime::ago($response->created_at),
                 'formattedDate' => $response->created_at->format('d/m/Y H:i'),
                 // For sorting by the moment of handing in.
                 'submittedAtTimestamp' => $response->created_at->getTimestamp(),
@@ -272,7 +272,7 @@ class QuizFormPayloads
                 'id' => $response->id,
                 'name' => $response->user?->name ?? $response->respondent_name,
                 'email' => $response->email ?? $response->user?->email,
-                'submittedAt' => $response->created_at->diffForHumans(),
+                'submittedAt' => DisplayTime::ago($response->created_at),
             ])->values()->all(),
             'gradebook' => $gradebook,
             'questions' => $questions,
@@ -354,7 +354,7 @@ class QuizFormPayloads
 
             return [
                 'id' => $question['id'] ?? null,
-                'title' => $question['title'] ?? 'Pertanyaan tanpa judul',
+                'title' => $question['title'] ?? QuizItems::UNTITLED_QUESTION,
                 'type' => $question['type'] ?? 'Short answer',
                 'total' => array_sum($counts),
                 'options' => collect($counts)->map(fn (int $count, string $label): array => [

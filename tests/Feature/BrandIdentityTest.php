@@ -46,10 +46,21 @@ test('the icon files are in public', function () {
         ->and(getimagesize(public_path('apple-touch-icon.png')))->toMatchArray([0 => 180, 1 => 180, 'mime' => 'image/png']);
 });
 
-test('the code is MIT licensed by Falcon Education Partner', function () {
+test('the code is MIT licensed by Falcon Education Partner, who must stay credited as its developer', function () {
     expect(file_get_contents(base_path('LICENSE')))
-        ->toStartWith('MIT License')
-        ->toContain('Copyright (c) 2026 Falcon Education Partner');
+        ->toStartWith('MIT License with Attribution')
+        ->toContain('Copyright (c) 2026 Falcon Education Partner')
+        ->toContain('to use, copy, modify, merge, publish, distribute, sublicense, and/or sell')
+        ->toContain('must keep a visible notice naming Falcon Education Partner')
+        ->toContain('THE SOFTWARE IS PROVIDED "AS IS"');
+});
+
+test('everyone can read the licence, as the LICENSE file says it', function () {
+    $this->get(route('license'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('License')
+            ->where('licenseText', file_get_contents(base_path('LICENSE'))));
 });
 
 test('everyone can read the privacy policy, with the contact of the institution', function () {

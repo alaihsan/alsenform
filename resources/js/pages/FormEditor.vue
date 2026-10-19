@@ -29,7 +29,7 @@ import {
     optionQuestionTypes,
     OTHER_OPTIONS,
     pieColors,
-    PLACEHOLDER_QUESTION_TITLES,
+    isPlaceholderTitle,
     questionTypeLabel,
     questionTypes,
     scaleQuestionTypes,
@@ -1033,7 +1033,7 @@ const setOptionGoTo = (question: Question, optionIndex: number, target: SectionT
 };
 
 const insertTextIntoQuestion = (question: any, snippet: string) => {
-    if (!question.title || PLACEHOLDER_QUESTION_TITLES.includes(question.title)) {
+    if (!question.title || isPlaceholderTitle(question.title)) {
         question.title = snippet;
     } else {
         question.title += ` ${snippet}`;
@@ -3216,7 +3216,6 @@ watch(
                                             <div
                                                 v-for="(option, optionIndex) in question.options"
                                                 :key="`${question.id}-${optionIndex}`"
-                                                v-show="!OTHER_OPTIONS.includes(option) || !isQuestionAnswered(question)"
                                                 class="flex items-start gap-3 pt-1 text-base transition hover:translate-x-1 sm:text-lg"
                                             >
                                                 <!-- Visual icon only for checkboxes/radio in edit mode -->
@@ -3261,7 +3260,7 @@ watch(
                                                     </div>
                                                     <!-- "Buka bagian berdasarkan jawaban": where this option sends the student -->
                                                     <div
-                                                        v-if="question.branching && canSendByAnswer(question) && !OTHER_OPTIONS.includes(option)"
+                                                        v-if="question.branching && canSendByAnswer(question)"
                                                         class="flex min-w-0 items-center gap-1.5"
                                                         data-testid="option-go-to"
                                                     >
@@ -3732,7 +3731,7 @@ watch(
                             <div class="flex flex-wrap items-start justify-between gap-4">
                                 <div class="min-w-0">
                                     <RichContent :content="question.title" as="h3" class="break-words text-base font-bold text-slate-900 sm:truncate sm:text-lg" />
-                                    <p class="mt-1 text-sm font-semibold text-slate-500">{{ question.total }} answer</p>
+                                    <p class="mt-1 text-sm font-semibold text-slate-500">{{ question.total }} jawaban</p>
                                 </div>
                                 <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ questionTypeLabel(question.type) }}</span>
                             </div>

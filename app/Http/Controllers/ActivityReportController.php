@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\SubmitExpiredAttempts;
 use App\Models\ActivityLog;
 use App\Services\ActivityReport;
+use App\Support\DisplayTime;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,7 +48,7 @@ class ActivityReportController extends Controller
             'roleOptions' => $viewer->isAdmin()
                 ? collect(ActivityReport::ROLE_LABELS)->map(fn (string $label, string $value): array => ['value' => $value, 'label' => $label])->values()->all()
                 : null,
-            'today' => now()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->toDateString(),
+            'today' => DisplayTime::now()->toDateString(),
             'exportUrl' => route('reports.export', array_filter($filters, fn ($value) => $value !== null && $value !== '')),
         ]);
     }

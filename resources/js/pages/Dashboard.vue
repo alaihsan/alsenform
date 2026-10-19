@@ -799,14 +799,14 @@ function closeDonationModal(): void {
                             <button
                                 type="button"
                                 aria-label="Menu aplikasi"
-                                class="hidden h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 sm:flex"
+                                class="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
                             >
                                 <Grid3X3 class="h-5 w-5" />
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                             align="end"
-                            class="backdrop-blur-xs z-50 mt-1.5 w-80 rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 shadow-xl"
+                            class="backdrop-blur-xs z-50 mt-1.5 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 shadow-xl"
                         >
                             <!-- Header Mini Title -->
                             <div class="mb-1.5 flex items-center justify-between border-b border-slate-100 px-2 pb-2.5">
@@ -1222,7 +1222,7 @@ function closeDonationModal(): void {
                     </div>
                 </div>
 
-                <!-- Stat 3: Respon Siswa -->
+                <!-- Stat 3: Jawaban Siswa -->
                 <div
                     class="shadow-xs flex items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-3.5 transition hover:border-slate-300"
                 >
@@ -1230,7 +1230,7 @@ function closeDonationModal(): void {
                         <Users class="h-5 w-5" />
                     </div>
                     <div class="min-w-0">
-                        <p class="truncate text-xs font-medium text-slate-500">Respon Siswa</p>
+                        <p class="truncate text-xs font-medium text-slate-500">Jawaban Siswa</p>
                         <p class="text-lg font-bold leading-tight text-slate-800">{{ dashboardStats.totalResponses }}</p>
                     </div>
                 </div>
@@ -1363,7 +1363,7 @@ function closeDonationModal(): void {
                         aria-label="Kembali ke beranda"
                         @click="goHome"
                     >
-                        Home
+                        Beranda
                     </button>
                     <span>/</span>
                     <span class="min-w-0 truncate text-slate-900">
@@ -1504,20 +1504,20 @@ function closeDonationModal(): void {
                         :class="['border-t border-slate-200 p-3', viewMode === 'list' ? 'flex min-w-0 flex-1 items-center border-l border-t-0' : '']"
                     >
                         <div class="min-w-0 flex-1">
-                            <div class="mb-2 flex items-center justify-between gap-2">
+                            <div class="mb-2 flex items-start justify-between gap-2">
                                 <!-- Title for Student -->
                                 <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" class="min-w-0">
-                                    <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-indigo-600" :title="form.title" dir="auto">
+                                    <h3 class="line-clamp-2 break-words text-sm font-semibold text-slate-800 hover:text-indigo-600" :title="form.title" dir="auto">
                                         {{ form.title }}
                                     </h3>
                                 </a>
                                 <!-- Title for Teacher -->
                                 <Link v-else-if="!form.isTrashed" :href="form.editUrl" class="min-w-0">
-                                    <h3 class="truncate text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title" dir="auto">
+                                    <h3 class="line-clamp-2 break-words text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title" dir="auto">
                                         {{ form.title }}
                                     </h3>
                                 </Link>
-                                <h3 v-else class="min-w-0 truncate text-sm font-semibold text-slate-500" :title="form.title" dir="auto">
+                                <h3 v-else class="line-clamp-2 min-w-0 break-words text-sm font-semibold text-slate-500" :title="form.title" dir="auto">
                                     {{ form.title }}
                                 </h3>
                                 <div class="flex shrink-0 items-center gap-1.5">
@@ -1578,7 +1578,7 @@ function closeDonationModal(): void {
                                         Guru: {{ form.ownerName }}
                                     </span>
                                     <span v-else class="truncate text-[11px]">
-                                        {{ form.updatedLabel ? form.updatedLabel.replace(/^Opened\s+/i, '') : '' }}
+                                        {{ form.updatedLabel ?? '' }}
                                     </span>
                                 </div>
 

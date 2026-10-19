@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Models\QuizForm;
+use App\Support\DisplayTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -40,7 +41,7 @@ class ProfileController extends Controller
                     'id' => $session->id,
                     'ip_address' => $session->ip_address,
                     'is_current_device' => $session->id === $request->session()->getId(),
-                    'last_active' => Carbon::createFromTimestamp($session->last_activity)->diffForHumans(),
+                    'last_active' => DisplayTime::ago(Carbon::createFromTimestamp($session->last_activity)),
                     'agent' => $this->parseAgent($session->user_agent),
                 ];
             })->all();

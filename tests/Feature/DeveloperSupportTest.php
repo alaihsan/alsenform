@@ -10,7 +10,17 @@ beforeEach(function () {
 });
 
 test('the donation endpoints are off by default: the payment is only simulated', function () {
-    config(['app.donations' => false]);
+    // The default as config/app.php gives it without DONATIONS_ENABLED, not as beforeEach set it.
+    $environment = getenv('DONATIONS_ENABLED');
+    putenv('DONATIONS_ENABLED');
+    unset($_ENV['DONATIONS_ENABLED'], $_SERVER['DONATIONS_ENABLED']);
+    $default = (require config_path('app.php'))['donations'];
+    if ($environment !== false) {
+        putenv("DONATIONS_ENABLED={$environment}");
+    }
+
+    expect($default)->toBeFalse();
+    config(['app.donations' => $default]);
     $user = User::factory()->create(['is_admin' => true]);
     $donation = Donation::query()->create([
         'user_id' => $user->id, 'donor_name' => 'Supporter', 'amount' => 50000, 'payment_reference' => 'DON-OFF', 'status' => 'pending',

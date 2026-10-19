@@ -6,7 +6,7 @@ export const BRAND_TAGLINE = 'Formulir dan ujian tetap jalan, walau internet put
 /** The tagline where there is no room for the whole one (the header on a phone). */
 export const BRAND_TAGLINE_SHORT = 'Tetap jalan walau internet putus.';
 
-/** The company behind the product, named as "oleh Falcon Education Partner" where there is room. */
+/** The developer of the product; the licence requires the credit "Dikembangkan oleh Falcon Education Partner". */
 export const BRAND_PARENT = 'Falcon Education Partner';
 
 /** The app icon: a white falcon on a purple tile. */

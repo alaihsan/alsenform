@@ -5,10 +5,11 @@ namespace App\Services;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Support\Addon;
+use App\Support\DisplayTime;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
-use Illuminate\Support\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -421,7 +422,7 @@ class QuizResultsReport
      */
     protected function students(QuizForm $quizForm, array $questions, int $maxScore): Collection
     {
-        $timezone = (string) config('app.display_timezone', config('app.timezone'));
+        $timezone = DisplayTime::timezone();
 
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
@@ -573,8 +574,8 @@ class QuizResultsReport
         return rtrim(rtrim(number_format($value, 2, ',', '.'), '0'), ',');
     }
 
-    protected function now(): Carbon
+    protected function now(): CarbonInterface
     {
-        return now()->setTimezone((string) config('app.display_timezone', config('app.timezone')));
+        return DisplayTime::now();
     }
 }

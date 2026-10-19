@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\User;
+use App\Support\DisplayTime;
 use App\Support\HtmlToPlainText;
 use App\Support\XlsxWriter;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -173,7 +175,7 @@ class ActivityReport
      */
     public function row(ActivityLog $log, User $viewer): array
     {
-        $time = $log->created_at->copy()->setTimezone($this->timezone())->locale('id');
+        $time = DisplayTime::of($log->created_at);
         $user = $log->user;
         $form = $log->quizForm;
 
@@ -407,16 +409,16 @@ class ActivityReport
 
     protected function dateLabel(string $date): string
     {
-        return Carbon::parse($date, $this->timezone())->locale('id')->translatedFormat('d M Y');
+        return DisplayTime::day($date)->translatedFormat('d M Y');
     }
 
     protected function timezone(): string
     {
-        return (string) config('app.display_timezone', config('app.timezone'));
+        return DisplayTime::timezone();
     }
 
-    protected function now(): Carbon
+    protected function now(): CarbonInterface
     {
-        return now()->setTimezone($this->timezone());
+        return DisplayTime::now();
     }
 }

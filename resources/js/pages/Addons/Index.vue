@@ -27,7 +27,7 @@ const addons = ref<AddonEntry[]>(props.addons);
                 </p>
                 <h1 class="mt-1 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Tambah kemampuan ke ujian Anda</h1>
                 <p class="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-                    Pasang add-on sekali, lalu nyalakan atau matikan untuk tiap ujian lewat tombol Add-ons di editor. Add-on hanya berlaku untuk ujian
+                    Pasang add-on sekali, lalu nyalakan atau matikan untuk tiap ujian lewat tombol Add-on di editor. Add-on hanya berlaku untuk ujian
                     milik Anda{{ canInstallForEveryone ? '; sebagai admin, Anda juga dapat memasangnya untuk semua guru' : '' }}.
                 </p>
             </div>

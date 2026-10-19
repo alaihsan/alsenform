@@ -8,6 +8,7 @@ use App\Models\QuizResponse;
 use App\Models\UnlockRequest;
 use App\Services\Addons;
 use App\Support\Addon;
+use App\Support\DisplayTime;
 use App\Support\QuizFormPayloads;
 use App\Support\QuizItems;
 use Illuminate\Http\Request;
@@ -73,7 +74,7 @@ class DashboardController extends Controller
                     'design' => $quizForm->cardDesign(),
                     'ownerName' => $quizForm->user?->name ?? 'Guru',
                     'questionsCount' => count(QuizItems::questions($quizForm->questions)),
-                    'updatedLabel' => $quizForm->published_at?->copy()->locale('id')->diffForHumans() ?? '',
+                    'updatedLabel' => DisplayTime::ago($quizForm->published_at) ?? '',
                     'updatedAt' => (string) $quizForm->published_at,
                     'hasSubmitted' => $hasSubmitted,
                     // The student's results, once the teacher shows them.
@@ -153,7 +154,7 @@ class DashboardController extends Controller
      */
     protected function scheduleLabel(QuizForm $quizForm): ?string
     {
-        $format = fn ($time): string => $time->copy()->setTimezone((string) config('app.display_timezone', config('app.timezone')))->locale('id')->translatedFormat('D, j M H.i');
+        $format = fn ($time): ?string => DisplayTime::format($time, 'D, j M H.i');
 
         return match ($quizForm->scheduleState()) {
             'not_yet' => 'Dibuka '.$format($quizForm->opensAt()),

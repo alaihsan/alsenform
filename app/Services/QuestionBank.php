@@ -20,11 +20,6 @@ use Illuminate\Support\Str;
  */
 class QuestionBank
 {
-    /**
-     * Titles the editor gives a new question before anything is written.
-     */
-    public const PLACEHOLDER_TITLES = ['pertanyaan tanpa judul', 'untitled question', 'paragraph question', 'short answer question'];
-
     public const PER_PAGE = 20;
 
     /**
@@ -461,9 +456,9 @@ class QuestionBank
             return false;
         }
 
-        $title = mb_strtolower($this->plain($question['title'] ?? ''));
+        $title = trim($this->plain($question['title'] ?? ''));
 
-        return $title !== '' && ! in_array($title, self::PLACEHOLDER_TITLES, true);
+        return $title !== '' && ! QuizItems::isPlaceholderTitle($title);
     }
 
     /**

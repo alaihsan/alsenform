@@ -2,7 +2,7 @@
 
 **Formulir dan ujian tetap jalan, walau internet putus.**
 
-Falcon Forms · oleh Falcon Education Partner
+Falcon Forms · dikembangkan oleh Falcon Education Partner
 
 Falcon Forms adalah aplikasi formulir dan ujian dari Falcon Education Partner untuk sekolah, madrasah, bimbel, dan lembaga pelatihan. Pasang di satu komputer di jaringan lokal Anda: peserta tersambung lewat Wi-Fi atau kabel LAN, tetap bisa mengerjakan, dan jawabannya tetap tersimpan saat internet putus. Tanpa sewa server. Janji "tetap jalan walau internet putus" berlaku untuk pemasangan di jaringan lokal seperti ini; bila dipasang di hosting online, peserta tetap membutuhkan internet.
 
@@ -388,8 +388,16 @@ Kalau lembaga Anda memakai Falcon Forms, kabari kami lewat issue. Masukan dari r
 
 ## Lisensi
 
-Kode Falcon Forms dirilis dengan lisensi [MIT](LICENSE), hak cipta © 2026 Falcon Education Partner. Bebas dipakai, diubah, dan dibagikan, termasuk untuk lembaga lain.
+Falcon Forms dikembangkan oleh Falcon Education Partner dan dirilis dengan [Lisensi MIT dengan atribusi](LICENSE), hak cipta © 2026 Falcon Education Partner. Teks lengkapnya, dalam bahasa Indonesia dan Inggris, juga ada di halaman **Lisensi** aplikasi (`/lisensi`, ditautkan dari footer).
 
-## Merek
+- **Boleh**: dipakai gratis oleh lembaga mana pun, disalin, dipasang sendiri, diubah, digabung, dibagikan, dan dijual, baik asli maupun versi ubahan.
+- **Wajib**: menyertakan pemberitahuan hak cipta dan teks lisensi di setiap salinan, dan tetap menampilkan Falcon Education Partner sebagai pengembang (misalnya "Dikembangkan oleh Falcon Education Partner" di footer atau halaman Tentang). Keterangan itu tidak boleh dihapus atau diganti dengan pengembang lain.
+- **Tanpa jaminan**: perangkat lunak disediakan apa adanya.
 
-Nama Falcon Forms, nama Falcon Education Partner, dan logo elang adalah merek milik Falcon Education Partner. Lisensi MIT berlaku untuk kode, bukan untuk merek. Anda boleh menyebut bahwa aplikasi Anda memakai atau berasal dari Falcon Forms, tetapi versi yang Anda ubah dan bagikan sendiri harus memakai nama dan logo lain, agar pengguna tidak mengira versi itu dirilis oleh Falcon Education Partner.
+### Merek
+
+Nama Falcon Forms, nama Falcon Education Partner, dan logo elang adalah merek milik Falcon Education Partner. Lisensi berlaku untuk kode, bukan untuk merek. Versi yang Anda ubah dan bagikan sendiri memakai nama dan logo lain, dengan keterangan "Berbasis Falcon Forms, dikembangkan oleh Falcon Education Partner".
+
+### Layanan
+
+Memasang dan memakai Falcon Forms sendiri tetap gratis. Pelatihan guru dan admin, instalasi dan pengaturan server, serta pendampingan saat ujian oleh Falcon Education Partner berbayar; biayanya menjadi kontribusi untuk pengembangan Falcon Forms selanjutnya. Layanan ini terpisah dari lisensi.

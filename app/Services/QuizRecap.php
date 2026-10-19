@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
+use App\Support\DisplayTime;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
@@ -87,7 +88,7 @@ class QuizRecap
         $recap = $this->build($teacher, $kelas);
         $headers = ['No', 'Nama', 'Kelas', ...array_column($recap['quizzes'], 'title')];
         $lastColumn = XlsxWriter::columnLetter(count($headers));
-        $now = now()->setTimezone((string) config('app.display_timezone', config('app.timezone')));
+        $now = DisplayTime::now();
 
         $rows = [
             [XlsxWriter::cell('Rekap Kuis', 'title')],
