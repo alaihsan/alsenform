@@ -2718,7 +2718,6 @@ watch(
                                             :palettes="formulaPalettes"
                                             @insert="(snip) => insertTextIntoQuestion(question, snip)"
                                             @toggle-rtl="question.isRtl = !question.isRtl"
-                                            @browse-addons="isAddonGalleryOpen = true"
                                         />
 
                                         <RichTextInput

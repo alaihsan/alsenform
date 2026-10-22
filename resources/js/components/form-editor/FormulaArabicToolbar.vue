@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import FormulaPalette from '@/components/form-editor/FormulaPalette.vue';
 import type { FormulaPalette as Palette } from '@/lib/formulas';
-import { AlignRight, Puzzle } from 'lucide-vue-next';
+import { AlignRight } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 /*
  * The toolbar above a question: a button per formula add-on the teacher has installed (Rumus
  * Matematika, Rumus IPA), each opening its catalogue, and the right-to-left switch for Arabic.
+ * Without the add-ons there is no formula button at all.
  */
 const props = defineProps<{
     palettes: Palette[];
@@ -15,7 +16,6 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'insert', snippet: string): void;
     (e: 'toggle-rtl'): void;
-    (e: 'browse-addons'): void;
 }>();
 
 const openKey = ref<string | null>(null);
@@ -48,17 +48,6 @@ const toggle = (palette: Palette) => {
             >
                 <component :is="palette.icon" class="h-3.5 w-3.5" />
                 <span>{{ palette.buttonLabel }}</span>
-            </button>
-            <button
-                v-if="!palettes.length"
-                type="button"
-                class="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-white hover:text-indigo-700"
-                title="Katalog rumus Matematika dan IPA dipasang lewat galeri add-on"
-                data-formula-addons-hint
-                @click="emit('browse-addons')"
-            >
-                <Puzzle class="h-3.5 w-3.5" />
-                <span>Rumus Matematika &amp; IPA: pasang add-on</span>
             </button>
         </div>
 
