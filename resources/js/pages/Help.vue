@@ -211,11 +211,11 @@ const teacherTopics: HelpTopic[] = [
     },
     {
         id: 'math-katex',
-        title: '4. Rumus Matematika & Sains (KaTeX)',
+        title: '4. Rumus Matematika & IPA (KaTeX)',
         icon: Layers,
         badge: 'Fitur Utama',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-        summary: 'Penulisan rumus matematika otomatis, tombol f(x), sintaks pecahan, akar kuadrat, pangkat, dan simbol.',
+        summary: 'Rumus di antara tanda $...$, rumus kimia dengan \\ce{...}, serta add-on katalog Rumus Matematika dan Rumus IPA.',
     },
     {
         id: 'examview-import',
@@ -669,14 +669,21 @@ const selectTopic = (id: string) => {
                                     <Layers class="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <h2 class="text-xl font-bold text-slate-900">4. Panduan Menulis Rumus Matematika (KaTeX)</h2>
+                                    <h2 class="text-xl font-bold text-slate-900">4. Panduan Menulis Rumus Matematika & IPA (KaTeX)</h2>
                                     <p class="text-xs text-slate-500">Tulis formula matematika, fisika, dan kimia dengan format LaTeX standar</p>
                                 </div>
                             </div>
 
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
-                                    Cukup apit formula matematika menggunakan tanda dollar tunggal <code>$rumus$</code> untuk format sebaris (*inline*), atau klik tombol <strong>f(x) Rumus Matematika</strong> pada toolbar editor.
+                                    Cukup apit formula matematika menggunakan tanda dollar tunggal <code>$rumus$</code> untuk format sebaris (*inline*). Rumus
+                                    kimia dan persamaan reaksi ditulis dengan <code>\ce{...}</code> di dalam tanda dolar, misalnya <code>$\ce{H2SO4}$</code>.
+                                </p>
+                                <p>
+                                    Katalog rumus siap klik tersedia sebagai dua add-on yang dapat dipasang dan dilepas di galeri add-on:
+                                    <strong>Rumus Matematika</strong> (bilangan, aljabar, fungsi, trigonometri, geometri, barisan, kalkulus, matriks, statistika,
+                                    logika, notasi) dan <strong>Rumus IPA</strong> (Fisika, Kimia, Biologi, lengkap dengan keterangan simbol dan satuan). Setelah
+                                    dipasang, tombolnya muncul di bilah alat setiap soal. Rumus yang sudah ada di soal tetap tampil walaupun add-on dilepas.
                                 </p>
 
                                 <div class="overflow-x-auto rounded-2xl border border-slate-200">
@@ -716,8 +723,18 @@ const selectTopic = (id: string) => {
                                             </tr>
                                             <tr>
                                                 <td class="p-3 font-semibold">Persamaan Kimia / Reaksi</td>
-                                                <td class="p-3 font-mono text-indigo-600">$2H_2 + O_2 \rightarrow 2H_2O$</td>
+                                                <td class="p-3 font-mono text-indigo-600">$\ce{2H2 + O2 -&gt; 2H2O}$</td>
                                                 <td class="p-3 font-serif">2H₂ + O₂ → 2H₂O</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="p-3 font-semibold">Kesetimbangan & Ion</td>
+                                                <td class="p-3 font-mono text-indigo-600">$\ce{NH3 + H2O &lt;=&gt; NH4+ + OH-}$</td>
+                                                <td class="p-3 font-serif">NH₃ + H₂O ⇌ NH₄⁺ + OH⁻</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="p-3 font-semibold">Besaran dengan Satuan</td>
+                                                <td class="p-3 font-mono text-indigo-600">$g = 9{,}8\ \mathrm{m/s^{2}}$</td>
+                                                <td class="p-3 font-serif">g = 9,8 m/s²</td>
                                             </tr>
                                         </tbody>
                                     </table>

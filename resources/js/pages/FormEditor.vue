@@ -9,7 +9,7 @@ import RemedialPanel, { type RemedialOverview } from '@/components/addons/Remedi
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import GradebookTable from '@/components/form-editor/GradebookTable.vue';
 import IdentityFieldsChecklist, { type IdentityChoice } from '@/components/form-editor/IdentityFieldsChecklist.vue';
-import MathArabicToolbar from '@/components/form-editor/MathArabicToolbar.vue';
+import FormulaArabicToolbar from '@/components/form-editor/FormulaArabicToolbar.vue';
 import QuestionBankPicker from '@/components/form-editor/QuestionBankPicker.vue';
 import QuestionDrawSettings, { type QuestionDraw } from '@/components/form-editor/QuestionDrawSettings.vue';
 import ClassMapPanel, { type ClassMapStudent } from '@/components/form-editor/ClassMapPanel.vue';
@@ -39,6 +39,7 @@ import {
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
+import { FORMULA_PALETTES } from '@/lib/formulas';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
 import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
 import { BRANCHING_TYPES, FIRST_SECTION, NEXT_SECTION, SUBMIT_FORM, flowSections } from '@/utils/section-flow';
@@ -490,6 +491,8 @@ const examTokenAddon = computed(() => addonCatalog.value.find((addon) => addon.k
 const remedialAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'remedial') ?? null);
 const misconceptionAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'misconception') ?? null);
 const formDesignerAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'form-designer') ?? null);
+// Rumus Matematika and Rumus IPA: a palette in each question's toolbar while the teacher editing has its add-on installed.
+const formulaPalettes = computed(() => FORMULA_PALETTES.filter((palette) => addonCatalog.value.some((addon) => addon.key === palette.key && addon.installed)));
 
 // Desainer Form: the exam's design, drawn in the editor while the add-on is on for the exam.
 const isDesignerOn = computed(() => Boolean(formDesignerAddon.value && isAddonOnForExam(formDesignerAddon.value)));
@@ -2710,10 +2713,12 @@ watch(
                                             <span class="h-1 w-1 rounded-full bg-current"></span>
                                         </div>
 
-                                        <!-- Math & Arabic Toolbar -->
-                                        <MathArabicToolbar
+                                        <!-- Formula add-ons & Arabic toolbar -->
+                                        <FormulaArabicToolbar
+                                            :palettes="formulaPalettes"
                                             @insert="(snip) => insertTextIntoQuestion(question, snip)"
                                             @toggle-rtl="question.isRtl = !question.isRtl"
+                                            @browse-addons="isAddonGalleryOpen = true"
                                         />
 
                                         <RichTextInput

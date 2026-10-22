@@ -2,6 +2,7 @@
 import axios from 'axios';
 import {
     AlertTriangle,
+    Atom,
     Brain,
     Building2,
     Check,
@@ -15,6 +16,7 @@ import {
     Puzzle,
     RefreshCw,
     Sheet,
+    Sigma,
     Sparkles,
     Trash2,
     X,
@@ -30,8 +32,10 @@ export type AddonEntry = {
     adds: string[];
     reads: string[];
     onByDefault: boolean;
-    /** Switched on or off per exam; one that is not (Rekap Kuis) works while installed. */
+    /** Switched on or off per exam; one that is not (Rekap Kuis, the formula palettes) works while installed. */
     perExam: boolean;
+    /** Where an add-on that is not per exam shows once installed, e.g. "menu Aplikasi di Beranda". */
+    shownIn: string | null;
     installed: boolean;
     installedForEveryone: boolean;
     canUninstall: boolean;
@@ -59,6 +63,8 @@ const ICONS: Record<string, unknown> = {
     brain: Brain,
     paintbrush: Paintbrush,
     sheet: Sheet,
+    sigma: Sigma,
+    atom: Atom,
 };
 
 /** A colour per add-on, so the cards are told apart at a glance. */
@@ -69,6 +75,8 @@ const TONES: Record<string, string> = {
     misconception: 'bg-rose-50 text-rose-600 ring-rose-100',
     'form-designer': 'bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-100',
     'quiz-recap': 'bg-violet-50 text-violet-600 ring-violet-100',
+    'math-formulas': 'bg-sky-50 text-sky-600 ring-sky-100',
+    'science-formulas': 'bg-teal-50 text-teal-600 ring-teal-100',
 };
 const toneOf = (addon: AddonEntry) => TONES[addon.key] ?? 'bg-slate-100 text-slate-600 ring-slate-200';
 
@@ -234,7 +242,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                 <p class="mt-3 text-[11px] font-semibold text-slate-400">
                     {{
                         !addon.perExam
-                            ? 'Muncul di menu Aplikasi setelah dipasang'
+                            ? `Muncul di ${addon.shownIn} setelah dipasang`
                             : addon.onByDefault
                               ? 'Langsung aktif di ujian setelah dipasang'
                               : 'Dinyalakan per ujian setelah dipasang'
@@ -338,7 +346,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                             </div>
                         </div>
                         <p v-if="!detail.perExam" class="text-xs leading-relaxed text-slate-500">
-                            Setelah dipasang, add-on ini muncul di menu Aplikasi di Beranda. Melepasnya menyembunyikan menu itu tanpa menghapus data.
+                            Setelah dipasang, add-on ini muncul di {{ detail.shownIn }}. Melepasnya menyembunyikannya lagi tanpa menghapus data.
                         </p>
                         <p v-else class="text-xs leading-relaxed text-slate-500">
                             Setelah dipasang, add-on {{ detail.onByDefault ? 'langsung aktif di semua ujian Anda' : 'perlu diaktifkan per ujian' }}.
@@ -409,7 +417,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                                 }}
                                 {{
                                     !pending.addon.perExam
-                                        ? 'Add-on langsung muncul di menu Aplikasi di Beranda.'
+                                        ? `Add-on langsung muncul di ${pending.addon.shownIn}.`
                                         : pending.addon.onByDefault
                                           ? 'Add-on langsung aktif di ujian; matikan per ujian lewat tombol Add-on di editor.'
                                           : 'Add-on belum aktif sampai dinyalakan di ujian tertentu.'
@@ -425,13 +433,19 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
                         <template v-else>
                             <p>
                                 {{
-                                    pending.action.everyone
-                                        ? 'Add-on ini mati di ujian semua guru yang tidak memasangnya sendiri.'
-                                        : 'Add-on ini mati di semua ujian Anda: panel, lembar Excel dan tombolnya hilang.'
+                                    !pending.addon.perExam
+                                        ? `Add-on ini hilang dari ${pending.addon.shownIn}${pending.action.everyone ? ' semua guru yang tidak memasangnya sendiri' : ''}.`
+                                        : pending.action.everyone
+                                          ? 'Add-on ini mati di ujian semua guru yang tidak memasangnya sendiri.'
+                                          : 'Add-on ini mati di semua ujian Anda: panel, lembar Excel dan tombolnya hilang.'
                                 }}
                             </p>
                             <p class="rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                                Data tidak dihapus. Bila dipasang lagi, pilihan tiap ujian kembali seperti semula.
+                                {{
+                                    pending.addon.perExam
+                                        ? 'Data tidak dihapus. Bila dipasang lagi, pilihan tiap ujian kembali seperti semula.'
+                                        : 'Tidak ada data yang dihapus, dan add-on dapat dipasang lagi kapan saja.'
+                                }}
                             </p>
                         </template>
                     </div>

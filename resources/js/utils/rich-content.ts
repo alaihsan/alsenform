@@ -1,4 +1,6 @@
 import katex from 'katex';
+// \ce{...} and \pu{...} for chemical formulas and units, e.g. from the Rumus IPA add-on.
+import 'katex/contrib/mhchem';
 
 // Unicode range for Arabic characters, Quranic diacritics, recitation marks, and ligatures
 export const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
