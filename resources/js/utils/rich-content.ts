@@ -227,22 +227,22 @@ export function formatRichContent(rawContent?: string | null): string {
 
         // Display math: $$...$$
         if (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) {
-            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math.slice(2, -2), true)}</div>`;
+            return `${DISPLAY_MATH_OPEN}${renderLatex(math.slice(2, -2), true)}</div>`;
         }
 
         // Display math: \\[...\\]
         if (part.startsWith('\\[') && part.endsWith('\\]') && part.length >= 4) {
-            return `<div class="my-2.5 overflow-x-auto text-center">${renderLatex(math.slice(2, -2), true)}</div>`;
+            return `${DISPLAY_MATH_OPEN}${renderLatex(math.slice(2, -2), true)}</div>`;
         }
 
         // Inline math: $...$
         if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
-            return `<span class="inline-math px-0.5">${renderLatex(math.slice(1, -1), false)}</span>`;
+            return `${INLINE_MATH_OPEN}${renderLatex(math.slice(1, -1), false)}</span>`;
         }
 
         // Inline math: \\(...\\)
         if (part.startsWith('\\(') && part.endsWith('\\)') && part.length >= 4) {
-            return `<span class="inline-math px-0.5">${renderLatex(math.slice(2, -2), false)}</span>`;
+            return `${INLINE_MATH_OPEN}${renderLatex(math.slice(2, -2), false)}</span>`;
         }
 
         // User-provided text must never become HTML. Only KaTeX, the controlled Arabic wrappers
@@ -252,6 +252,13 @@ export function formatRichContent(rawContent?: string | null): string {
 
     return formattedParts.join('');
 }
+
+/**
+ * The boxes of a formula: always left to right. Inside right-to-left Arabic text KaTeX would
+ * otherwise be laid out mirrored, a² + b² = c² showing as ²c = ²b + ²a.
+ */
+const DISPLAY_MATH_OPEN = '<div class="my-2.5 overflow-x-auto text-center" dir="ltr">';
+const INLINE_MATH_OPEN = '<span class="inline-math px-0.5" dir="ltr">';
 
 /** The box of an Arabic phrase: the Quran Madinah font, right to left. */
 const ARABIC_OPEN = '<span class="font-quran text-[1.25em] leading-[2.2] tracking-wide inline-block px-1 align-baseline select-text" dir="rtl">';

@@ -42,6 +42,8 @@ export type Question = {
     branching?: boolean;
     /** With branching: where each option sends the student, in the order of the options. */
     optionGoTo?: SectionTarget[];
+    /** Editor only, not saved: the question's field written right to left (the RTL button of Teks Arab (RTL)). */
+    isRtl?: boolean;
 };
 
 /** Where a section leads: the next section, the end of the form, or the key of another section. */

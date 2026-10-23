@@ -11,6 +11,7 @@ import {
     GraduationCap,
     Info,
     KeyRound,
+    Languages,
     Paintbrush,
     Plus,
     Puzzle,
@@ -32,7 +33,7 @@ export type AddonEntry = {
     adds: string[];
     reads: string[];
     onByDefault: boolean;
-    /** Switched on or off per exam; one that is not (Rekap Kuis, the formula palettes) works while installed. */
+    /** Switched on or off per exam; one that is not (Rekap Kuis, the formula palettes, the RTL button) works while installed. */
     perExam: boolean;
     /** Where an add-on that is not per exam shows once installed, e.g. "menu Aplikasi di Beranda". */
     shownIn: string | null;
@@ -65,6 +66,7 @@ const ICONS: Record<string, unknown> = {
     sheet: Sheet,
     sigma: Sigma,
     atom: Atom,
+    languages: Languages,
 };
 
 /** A colour per add-on, so the cards are told apart at a glance. */
@@ -77,6 +79,7 @@ const TONES: Record<string, string> = {
     'quiz-recap': 'bg-violet-50 text-violet-600 ring-violet-100',
     'math-formulas': 'bg-sky-50 text-sky-600 ring-sky-100',
     'science-formulas': 'bg-teal-50 text-teal-600 ring-teal-100',
+    'arabic-rtl': 'bg-emerald-50 text-emerald-600 ring-emerald-100',
 };
 const toneOf = (addon: AddonEntry) => TONES[addon.key] ?? 'bg-slate-100 text-slate-600 ring-slate-200';
 

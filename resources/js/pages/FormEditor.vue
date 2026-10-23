@@ -493,6 +493,8 @@ const misconceptionAddon = computed(() => addonCatalog.value.find((addon) => add
 const formDesignerAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'form-designer') ?? null);
 // Rumus Matematika and Rumus IPA: a palette in each question's toolbar while the teacher editing has its add-on installed.
 const formulaPalettes = computed(() => FORMULA_PALETTES.filter((palette) => addonCatalog.value.some((addon) => addon.key === palette.key && addon.installed)));
+// Teks Arab (RTL): the RTL button in each question's toolbar while the teacher editing has the add-on installed.
+const hasRtlButton = computed(() => addonCatalog.value.some((addon) => addon.key === 'arabic-rtl' && addon.installed));
 
 // Desainer Form: the exam's design, drawn in the editor while the add-on is on for the exam.
 const isDesignerOn = computed(() => Boolean(formDesignerAddon.value && isAddonOnForExam(formDesignerAddon.value)));
@@ -2713,16 +2715,19 @@ watch(
                                             <span class="h-1 w-1 rounded-full bg-current"></span>
                                         </div>
 
-                                        <!-- Formula add-ons & Arabic toolbar -->
+                                        <!-- Toolbar of the formula and Teks Arab (RTL) add-ons, only with one of them installed -->
                                         <FormulaArabicToolbar
+                                            v-if="formulaPalettes.length || hasRtlButton"
                                             :palettes="formulaPalettes"
+                                            :show-rtl="hasRtlButton"
+                                            :rtl="Boolean(question.isRtl)"
                                             @insert="(snip) => insertTextIntoQuestion(question, snip)"
                                             @toggle-rtl="question.isRtl = !question.isRtl"
                                         />
 
                                         <RichTextInput
                                             v-model="question.title"
-                                            :dir="question.isRtl ? 'rtl' : isPredominantlyArabic(question.title) ? 'rtl' : 'auto'"
+                                            :dir="hasRtlButton && question.isRtl ? 'rtl' : isPredominantlyArabic(question.title) ? 'rtl' : 'auto'"
                                             label="Pertanyaan"
                                             class="mb-3 w-full rounded-xl border-0 border-b border-slate-400 bg-slate-50 px-4 py-3 text-lg font-medium transition focus:border-indigo-600 sm:text-xl"
                                             :style="{ fontFamily: form.settings.questionFont ?? 'inherit' }"

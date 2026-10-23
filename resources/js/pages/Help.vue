@@ -207,7 +207,7 @@ const teacherTopics: HelpTopic[] = [
         icon: BookOpen,
         badge: 'Fitur Utama',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        summary: 'Font Amiri Quran Madinah, Scheherazade New, tabel shortcut keyboard Windows tanda harakat dan waqf.',
+        summary: 'Font Amiri Quran Madinah, Scheherazade New, add-on Teks Arab (RTL), tabel shortcut keyboard Windows tanda harakat dan waqf.',
     },
     {
         id: 'math-katex',
@@ -587,6 +587,11 @@ const selectTopic = (id: string) => {
                             <div class="mt-6 space-y-5 text-sm text-slate-700 leading-relaxed">
                                 <p>
                                     Falcon Forms memiliki integrasi font khusus untuk pembelajaran Pendidikan Agama Islam (PAI), Tahfidz, dan Bahasa Arab dengan font bawaan: <strong>Amiri Quran</strong> (khas Mushaf Standar Madinah) dan <strong>Scheherazade New</strong>.
+                                </p>
+                                <p>
+                                    Kolom soal yang isinya sebagian besar huruf Arab otomatis ditulis dari kanan ke kiri. Untuk mengatur arahnya sendiri, pasang
+                                    add-on <strong>Teks Arab (RTL)</strong> di galeri add-on: tombol <strong>RTL</strong> lalu muncul di bilah alat setiap soal
+                                    dan berwarna hijau saat aktif. Teks Arab tetap tampil dengan font Mushaf Madinah untuk siswa walaupun add-on dilepas.
                                 </p>
 
                                 <div class="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
