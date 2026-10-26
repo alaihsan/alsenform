@@ -691,8 +691,14 @@ class ServeLanCommand extends Command
                 $this->checkLine($isServing ? $status === 200 : null, $isServing && $status === 200
                     ? $this->urlFor($lanHost, $port).' terbuka dari komputer server ini.'
                     : "Komputer server mengenal {$lanHost} → {$ownAddress}, tetapi halamannya belum terbuka.");
+            } elseif (! $routerKnows) {
+                $this->checkLine(null, "Komputer server juga belum mengenal {$lanHost}, karena router belum mengenalnya. Sampai router diatur, di komputer ini pakai http://localhost:{$port}.");
+            } elseif (in_array($this->defaultGateway(), $this->dnsServers(), true)) {
+                $this->checkLine(null, "Router sudah mengenal {$lanHost}, tetapi komputer server masih mengingat jawaban lama.", [PHP_OS_FAMILY === 'Darwin'
+                    ? 'Kosongkan cache DNS: sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder'
+                    : 'Kosongkan cache DNS: sudo resolvectl flush-caches']);
             } else {
-                $this->checkLine(null, "Komputer server sendiri belum mengenal {$lanHost} (DNS-nya bukan router). Siswa tidak terpengaruh; di komputer ini pakai http://localhost:{$port}.");
+                $this->checkLine(null, "Komputer server memakai DNS lain, bukan router, jadi belum mengenal {$lanHost}. Siswa tidak terpengaruh; di komputer ini pakai http://localhost:{$port}.");
             }
         }
 
@@ -756,19 +762,106 @@ class ServeLanCommand extends Command
         }
 
         $answer = $this->lookupAt($gateway, $lanHost);
-        $addHint = "Tambahkan DNS statis di router: {$lanHost} → {$serverIp}. MikroTik: IP → DNS → Static; OpenWrt: Network → DHCP and DNS → Hostnames; pfSense/OPNsense: DNS Resolver → Host Overrides; router lain: menu Static DNS / Local DNS.";
+        if ($answer['status'] === DnsLookup::FOUND && array_intersect($answer['addresses'], $interfaces) !== []) {
+            $this->checkLine(true, "Router {$gateway} mengenal {$lanHost} → ".implode(', ', $answer['addresses']));
 
-        $knows = $answer['status'] === DnsLookup::FOUND && array_intersect($answer['addresses'], $interfaces) !== [];
+            return true;
+        }
 
-        match (true) {
-            $knows => $this->checkLine(true, "Router {$gateway} mengenal {$lanHost} → ".implode(', ', $answer['addresses'])),
-            $answer['status'] === DnsLookup::FOUND => $this->checkLine(false, "Router {$gateway} mengarahkan {$lanHost} ke ".implode(', ', $answer['addresses']).", bukan ke server ini ({$serverIp}).", ["Ubah DNS statis di router: {$lanHost} → {$serverIp}", 'Atur juga DHCP Reservation (IP tetap) untuk server ini agar tidak berubah lagi.']),
-            $answer['status'] === DnsLookup::UNKNOWN => $this->checkLine(false, "Router {$gateway} belum mengenal {$lanHost}: perangkat siswa tidak bisa membuka alamat ini.", [$addHint, 'Atur juga DHCP Reservation (IP tetap) untuk server ini.', 'Modem bawaan penyedia internet sering tidak punya menu DNS statis: pakai router sendiri (misalnya MikroTik) di belakangnya, atau bagikan alamat IP ke siswa.']),
-            $answer['status'] === DnsLookup::REFUSED => $this->checkLine(false, "Router {$gateway} menolak menjawab DNS untuk perangkat lain.", ['MikroTik: IP → DNS → centang "Allow Remote Requests" (tutup port 53 dari internet di firewall).', $addHint]),
-            default => $this->checkLine(null, "Router {$gateway} tidak menjawab DNS: DNS jaringan ini dijalankan perangkat lain.", ["Pasang DNS statis {$lanHost} → {$serverIp} di server DNS yang dibagikan DHCP (lihat baris berikut)."]),
+        $brand = $this->routerBrand($gateway);
+        $router = $brand !== null ? "Router {$gateway} ({$brand})" : "Router {$gateway}";
+        $steps = $this->routerSteps($brand, $lanHost, $serverIp);
+
+        match ($answer['status']) {
+            DnsLookup::FOUND => $this->checkLine(false, "{$router} mengarahkan {$lanHost} ke ".implode(', ', $answer['addresses']).", bukan ke server ini ({$serverIp}).", ["Ubah DNS statis di router: {$lanHost} → {$serverIp}", 'Atur juga DHCP Reservation (IP tetap) untuk server ini agar tidak berubah lagi.']),
+            DnsLookup::UNKNOWN => $this->checkLine(false, "{$router} belum mengenal {$lanHost}: perangkat siswa tidak bisa membuka alamat ini.", $steps),
+            DnsLookup::REFUSED => $this->checkLine(false, "{$router} menolak menjawab DNS untuk perangkat lain.", ['MikroTik: IP → DNS → centang "Allow Remote Requests" (tutup port 53 dari internet di firewall).', ...$steps]),
+            default => $this->checkLine(null, "{$router} tidak menjawab DNS: DNS jaringan ini dijalankan perangkat lain.", ["Pasang DNS statis {$lanHost} → {$serverIp} di server DNS yang dibagikan DHCP (lihat baris berikut)."]),
         };
 
-        return $knows;
+        return false;
+    }
+
+    /**
+     * The make of the router, recognised from its settings page, when it is one with known menus.
+     */
+    protected function routerBrand(string $gateway): ?string
+    {
+        $page = $this->routerPage($gateway);
+        if ($page === null) {
+            return null;
+        }
+
+        $brands = [
+            'MikroTik' => '/RouterOS|MikroTik|webfig/i',
+            'OpenWrt' => '/OpenWrt|LuCI/i',
+            'OPNsense' => '/OPNsense/i',
+            'pfSense' => '/pfSense/i',
+            'ZTE' => '/\bZTE\b|ZXHN|\bF6(09|60|70)\b/i',
+            'Huawei' => '/Huawei|EchoLife|\bHG8\d{3}/i',
+            'Fiberhome' => '/FiberHome|\bHG6\d{3}/i',
+            'TP-Link' => '/TP-?Link|Omada/i',
+            'Ruijie' => '/Ruijie|Reyee/i',
+            'Ubiquiti' => '/UniFi|Ubiquiti|EdgeOS/i',
+        ];
+
+        foreach ($brands as $brand => $pattern) {
+            if (preg_match($pattern, $page)) {
+                return $brand;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The first part of the router's settings page, or null when it has none on port 80.
+     */
+    protected function routerPage(string $gateway): ?string
+    {
+        $context = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true, 'header' => "Connection: close\r\n"]]);
+        $page = @file_get_contents("http://{$gateway}/", false, $context, 0, 65536);
+
+        return is_string($page) && $page !== '' ? $page : null;
+    }
+
+    /**
+     * Where to add the intranet name and fix the server's address, in the menus of the router.
+     *
+     * @return list<string>
+     */
+    protected function routerSteps(?string $brand, string $lanHost, string $serverIp): array
+    {
+        [$host, $domain] = array_pad(explode('.', $lanHost, 2), 2, '');
+
+        return match ($brand) {
+            'MikroTik' => [
+                "DNS statis (Winbox/WebFig): IP → DNS → Static → tombol + → Name: {$lanHost}, Address: {$serverIp} → OK.",
+                "Atau di New Terminal: /ip dns static add name={$lanHost} address={$serverIp}",
+                "IP tetap untuk server: IP → DHCP Server → Leases → pilih {$serverIp} → Make Static (Terminal: /ip dhcp-server lease make-static [find address={$serverIp}]).",
+            ],
+            'OpenWrt' => [
+                "DNS statis: Network → DHCP and DNS → Hostnames → Add: Hostname {$lanHost}, IP {$serverIp} → Save & Apply.",
+                "IP tetap untuk server: Network → DHCP and DNS → Static Leases → Add (MAC server, IP {$serverIp}).",
+            ],
+            'pfSense' => [
+                "DNS statis: Services → DNS Resolver → Host Overrides → Add: Host {$host}, Domain {$domain}, IP {$serverIp} → Save → Apply Changes.",
+                "IP tetap untuk server: Status → DHCP Leases → tombol + (Add static mapping) di baris {$serverIp}.",
+            ],
+            'OPNsense' => [
+                "DNS statis: Services → Unbound DNS → Overrides → Add: Host {$host}, Domain {$domain}, IP {$serverIp} → Save → Apply.",
+                "IP tetap untuk server: Services → DHCPv4 → LAN → DHCP Static Mappings → Add (MAC server, IP {$serverIp}).",
+            ],
+            'ZTE', 'Huawei', 'Fiberhome' => [
+                "Router ini modem penyedia internet ({$brand}); kebanyakan tidak punya menu DNS statis. Cari menu DNS / Domain Name untuk {$lanHost} → {$serverIp}; bila tidak ada, pasang router sendiri (misalnya MikroTik) di belakangnya atau bagikan alamat IP ke siswa.",
+                "IP tetap untuk server: menu LAN → DHCP → Static IP / Reservation (MAC server, IP {$serverIp}).",
+            ],
+            default => [
+                "Tambahkan DNS statis di router: {$lanHost} → {$serverIp}. Biasanya di menu DNS → Static DNS / Local DNS / Hosts (MikroTik: IP → DNS → Static; OpenWrt: Network → DHCP and DNS → Hostnames; pfSense/OPNsense: DNS Resolver → Host Overrides).",
+                'Atur juga DHCP Reservation (IP tetap) untuk server ini.',
+                'Modem bawaan penyedia internet sering tidak punya menu DNS statis: pakai router sendiri (misalnya MikroTik) di belakangnya, atau bagikan alamat IP ke siswa.',
+            ],
+        };
     }
 
     /**
@@ -781,6 +874,14 @@ class ServeLanCommand extends Command
     {
         $servers = array_slice($this->dnsServers(), 0, 3);
         if ($servers === []) {
+            return;
+        }
+
+        // The network hands out the router as DNS: the router line above says everything.
+        $gateway = $this->defaultGateway();
+        if ($gateway !== null && in_array($gateway, $servers, true)) {
+            $this->checkLine(true, "Perangkat mendapat DNS dari router ({$gateway})".($routerKnows ? '.' : ": begitu router mengenal {$lanHost}, perangkat siswa ikut mengenalnya."));
+
             return;
         }
 
@@ -798,7 +899,7 @@ class ServeLanCommand extends Command
 
         $this->checkLine(false, 'DNS yang dipakai komputer ini ('.implode(', ', $servers).") tidak mengenal {$lanHost}. Perangkat siswa yang mendapat DNS yang sama dari DHCP juga tidak bisa membukanya.", [
             $routerKnows
-                ? 'Di pengaturan DHCP router, isi DNS server dengan '.$this->defaultGateway().', bukan 8.8.8.8 atau DNS penyedia internet.'
+                ? 'Di pengaturan DHCP router, isi DNS server dengan '.$gateway.', bukan 8.8.8.8 atau DNS penyedia internet.'
                 : "Pasang DNS statis {$lanHost} → {$serverIp} di router, lalu di pengaturan DHCP router isi DNS server dengan IP router itu.",
             'Bila DNS komputer server ini diatur manual, abaikan baris ini untuk server; pastikan saja DHCP membagikan DNS router ke perangkat siswa.',
         ]);

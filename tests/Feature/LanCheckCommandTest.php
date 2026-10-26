@@ -103,6 +103,11 @@ function runLanCheck(array $probes = []): array
             return ['status' => $status, 'addresses' => $addresses];
         }
 
+        protected function routerPage(string $gateway): ?string
+        {
+            return $this->probes['routerPage'] ?? null;
+        }
+
         protected function resolveHost(string $host): ?string
         {
             return array_key_exists('serverDns', $this->probes) ? $this->probes['serverDns'] : '192.168.1.20';
@@ -218,8 +223,49 @@ test('lan:check names everything left from the old address and how to fix it', f
         ->toContain('✗ DNS yang dipakai komputer ini (8.8.8.8) tidak mengenal falcon.lan')
         ->toContain('Modem bawaan penyedia internet')
         ->toContain('Pasang DNS statis falcon.lan → 192.168.1.20 di router, lalu di pengaturan DHCP router isi DNS server dengan IP router itu.')
-        ->toContain('⚠ Komputer server sendiri belum mengenal falcon.lan')
+        ->toContain('⚠ Komputer server juga belum mengenal falcon.lan, karena router belum mengenalnya.')
         ->toContain('7 masalah perlu diperbaiki');
+});
+
+test('lan:check counts a router that does not know the name once, and gives the menus of that router', function () {
+    // The situation of a school on MikroTik: the old server still on 8000, the router answering DNS
+    // for the whole network but not knowing falcon.lan yet.
+    [$exitCode, $output] = runLanCheck([
+        'listening' => [8000],
+        'gateway' => '172.16.0.1',
+        'interfaces' => ['Wi-Fi (en1)' => '172.16.2.49'],
+        'dnsServers' => ['172.16.0.1'],
+        'dns' => ['172.16.0.1' => [DnsLookup::UNKNOWN, []]],
+        'serverDns' => null,
+        'routerPage' => '<html><head><title>RouterOS router configuration page</title></head></html>',
+    ]);
+
+    expect($exitCode)->toBe(1)
+        ->and($output)
+        ->toContain('✗ Router 172.16.0.1 (MikroTik) belum mengenal falcon.lan')
+        ->toContain('IP → DNS → Static → tombol + → Name: falcon.lan, Address: 172.16.2.49')
+        ->toContain('/ip dns static add name=falcon.lan address=172.16.2.49')
+        ->toContain('/ip dhcp-server lease make-static [find address=172.16.2.49]')
+        ->toContain('✓ Perangkat mendapat DNS dari router (172.16.0.1): begitu router mengenal falcon.lan, perangkat siswa ikut mengenalnya.')
+        ->toContain('⚠ Komputer server juga belum mengenal falcon.lan, karena router belum mengenalnya.')
+        ->not->toContain('DNS-nya bukan router')
+        ->not->toContain('DNS yang dipakai komputer ini')
+        ->toContain('3 masalah perlu diperbaiki');
+
+    $routerWith = fn (string $page): string => runLanCheck(['dns' => ['192.168.1.1' => [DnsLookup::UNKNOWN, []]], 'routerPage' => $page])[1];
+
+    expect($routerWith('<title>OpenWrt - LuCI</title>'))->toContain('Router 192.168.1.1 (OpenWrt)')->toContain('Network → DHCP and DNS → Hostnames → Add: Hostname falcon.lan, IP 192.168.1.20')
+        ->and($routerWith('<title>pfSense - Login</title>'))->toContain('Host Overrides → Add: Host falcon, Domain lan, IP 192.168.1.20')
+        ->and($routerWith('<title>F670L</title><script>ZTE</script>'))->toContain('Router 192.168.1.1 (ZTE)')->toContain('modem penyedia internet (ZTE)')
+        ->and($routerWith('<title>Router</title>'))->toContain('Router 192.168.1.1 belum mengenal')->toContain('Tambahkan DNS statis di router: falcon.lan → 192.168.1.20');
+});
+
+test('lan:check tells the server to forget an old DNS answer once the router knows the name', function () {
+    [, $output] = runLanCheck(['serverDns' => null]);
+
+    expect($output)->toContain('✓ Router 192.168.1.1 mengenal falcon.lan')
+        ->toContain('⚠ Router sudah mengenal falcon.lan, tetapi komputer server masih mengingat jawaban lama.')
+        ->toContain('Kosongkan cache DNS');
 });
 
 test('lan:check explains a router that refuses, points elsewhere, or does not answer DNS', function () {
