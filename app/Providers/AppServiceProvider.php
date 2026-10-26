@@ -97,6 +97,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('connection-check-ping', fn (Request $request): Limit => Limit::perMinute(240)->by('connection-check-ping:'.$request->ip()));
         RateLimiter::for('connection-check-download', fn (Request $request): Limit => Limit::perMinute(30)->by('connection-check-download:'.$request->ip()));
 
+        // Pages that stayed blank: a few per device and minute are plenty for the report.
+        RateLimiter::for('page-failures', fn (Request $request): Limit => Limit::perMinute(10)->by('page-failures:'.$request->ip()));
+
         RateLimiter::for('quiz-unlock', fn (Request $request): array => [
             Limit::perMinute(5)->by($respondentKey($request)),
             Limit::perMinute(300)->by('ip:'.$request->ip()),

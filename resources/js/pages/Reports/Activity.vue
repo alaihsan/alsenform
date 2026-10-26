@@ -17,13 +17,14 @@ import {
     SendHorizontal,
     Smartphone,
     Tablet,
+    TriangleAlert,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 
 interface Activity {
     id: number;
-    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted';
+    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted' | 'page_failed';
     eventLabel: string;
     date: string;
     time: string;
@@ -38,6 +39,8 @@ interface Activity {
     ip: string | null;
     userAgent: string | null;
     note: string | null;
+    /** A page that failed to load: the page, and the browser's error or the file it could not get. */
+    detail: string | null;
 }
 
 interface Option {
@@ -153,6 +156,7 @@ const eventStyles: Record<Activity['event'], { icon: Component; badge: string }>
     logout: { icon: LogOut, badge: 'bg-slate-100 text-slate-600 ring-slate-200' },
     exam_started: { icon: CirclePlay, badge: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
     exam_submitted: { icon: SendHorizontal, badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
+    page_failed: { icon: TriangleAlert, badge: 'bg-rose-50 text-rose-700 ring-rose-200' },
 };
 
 const deviceIcons: Record<Activity['deviceType'], Component> = {
@@ -369,16 +373,19 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                 <p class="truncate text-sm font-bold text-slate-900">{{ activity.person.name }}</p>
                                 <p class="truncate text-xs text-slate-500">{{ personDetail(activity) }}</p>
                             </div>
-                            <p v-if="activity.form" class="text-xs text-slate-600">
-                                Ujian:
-                                <Link v-if="activity.form.url" :href="activity.form.url" class="font-semibold text-indigo-700 hover:underline">{{
-                                    activity.form.title
-                                }}</Link>
-                                <span v-else class="font-semibold">{{ activity.form.title }}</span>
+                            <p v-if="activity.form || activity.note" class="text-xs text-slate-600">
+                                <template v-if="activity.form">
+                                    Ujian:
+                                    <Link v-if="activity.form.url" :href="activity.form.url" class="font-semibold text-indigo-700 hover:underline">{{
+                                        activity.form.title
+                                    }}</Link>
+                                    <span v-else class="font-semibold">{{ activity.form.title }}</span>
+                                </template>
                                 <span v-if="activity.note" class="ml-1 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">{{
                                     activity.note
                                 }}</span>
                             </p>
+                            <p v-if="activity.detail" class="break-words font-mono text-[11px] text-slate-500">{{ activity.detail }}</p>
                             <div class="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 text-xs" :title="activity.userAgent ?? undefined">
                                 <component :is="deviceIcons[activity.deviceType]" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
                                 <div class="min-w-0 flex-1">
@@ -438,6 +445,9 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                             class="mt-1 inline-block rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600"
                                             >{{ activity.note }}</span
                                         >
+                                        <span v-if="activity.detail" class="mt-1 block break-words font-mono text-[11px] text-slate-500">{{
+                                            activity.detail
+                                        }}</span>
                                     </td>
                                     <td class="px-4 py-3">
                                         <span class="flex items-start gap-2">

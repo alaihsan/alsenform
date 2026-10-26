@@ -54,6 +54,34 @@ function precompressAssets(): Plugin {
     };
 }
 
+/**
+ * The oldest browsers the pages must open on: school tablets and phones that no longer update,
+ * like iPads on iOS 12 and Android tablets with Chrome 73. Newer syntax is rewritten for them;
+ * the few newer functions they lack are filled in by resources/views/app.blade.php.
+ */
+const BROWSER_TARGETS = ['chrome73', 'edge79', 'firefox68', 'safari12.1', 'ios12.2'];
+
+/**
+ * Fail the build when a bundle holds a regular expression lookbehind, (?<= or (?<!. Safari before
+ * 16.4 cannot read it, so every page using that bundle stayed blank white on older iPhones and
+ * iPads; rewritten for old browsers it still throws when it runs.
+ */
+function guardOldBrowsers(): Plugin {
+    return {
+        name: 'alsenform:guard-old-browsers',
+        apply: 'build',
+        generateBundle(options, bundle) {
+            for (const chunk of Object.values(bundle)) {
+                if (chunk.type === 'chunk' && /\(\?<[=!]/.test(chunk.code)) {
+                    this.error(
+                        `${chunk.fileName} memakai regex lookbehind (?<= atau (?<!), yang membuat halaman putih di Safari sebelum 16.4. Tulis ulang regex itu tanpa lookbehind.`,
+                    );
+                }
+            }
+        },
+    };
+}
+
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
 
@@ -78,8 +106,12 @@ export default defineConfig(({ mode }) => {
                     },
                 },
             }),
+            guardOldBrowsers(),
             precompressAssets(),
         ],
+        build: {
+            target: BROWSER_TARGETS,
+        },
         resolve: {
             alias: {
                 '@': path.resolve(__dirname, './resources/js'),

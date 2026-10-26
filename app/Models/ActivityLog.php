@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A login, logout or exam step with the device, browser and time it happened.
+ * A login, logout, exam step or page that failed to load, with the device, browser and time it happened.
  */
 class ActivityLog extends Model
 {
@@ -23,6 +23,9 @@ class ActivityLog extends Model
 
     public const EXAM_SUBMITTED = 'exam_submitted';
 
+    /** A page the browser could not show, with its App\Support\PageFailure code in the meta. */
+    public const PAGE_FAILED = 'page_failed';
+
     /**
      * Labels of the events, in the order the report lists them.
      *
@@ -33,6 +36,7 @@ class ActivityLog extends Model
         self::LOGOUT => 'Keluar (logout)',
         self::EXAM_STARTED => 'Mulai ujian',
         self::EXAM_SUBMITTED => 'Kirim jawaban',
+        self::PAGE_FAILED => 'Halaman gagal dimuat',
     ];
 
     /**

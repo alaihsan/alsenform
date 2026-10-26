@@ -12,6 +12,7 @@ use App\Http\Controllers\ExamProgressController;
 use App\Http\Controllers\ExamTokenController;
 use App\Http\Controllers\FollowUpExamController;
 use App\Http\Controllers\GradingController;
+use App\Http\Controllers\PageFailureController;
 use App\Http\Controllers\QuestionBankController;
 use App\Http\Controllers\QuestionImportController;
 use App\Http\Controllers\QuizFolderController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
 use App\Http\Middleware\EnsureDonationsEnabled;
 use App\Services\DocxImportTemplate;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -34,6 +36,13 @@ use Inertia\Inertia;
 Route::get('cek-koneksi', [ConnectionCheckController::class, 'page'])->name('connection-check');
 Route::get('cek-koneksi/ping', [ConnectionCheckController::class, 'ping'])->middleware('throttle:connection-check-ping')->name('connection-check.ping');
 Route::get('cek-koneksi/unduh', [ConnectionCheckController::class, 'download'])->middleware('throttle:connection-check-download')->name('connection-check.download');
+
+// A page that stayed blank in a browser (see resources/views/app.blade.php), also before login. Sent
+// by the page guard with sendBeacon, which cannot carry the CSRF token; it only adds to the report.
+Route::post('galat-halaman', PageFailureController::class)
+    ->middleware('throttle:page-failures')
+    ->withoutMiddleware(ValidateCsrfToken::class)
+    ->name('page-failures.store');
 
 // Lisensi: the licence as the LICENSE file says it, open to everyone.
 Route::get('lisensi', fn () => Inertia::render('License', [

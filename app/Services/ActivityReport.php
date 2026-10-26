@@ -7,6 +7,7 @@ use App\Models\QuizForm;
 use App\Models\User;
 use App\Support\DisplayTime;
 use App\Support\HtmlToPlainText;
+use App\Support\PageFailure;
 use App\Support\XlsxWriter;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -17,9 +18,9 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * The activity report of the Laporan menu: logins, logouts and exam participation with the
- * device, browser and time. Admins see everything; teachers see their students' logins and
- * the activity on the exams they own or help edit.
+ * The activity report of the Laporan menu: logins, logouts, exam participation and pages that
+ * failed to load, with the device, browser and time. Admins see everything; teachers see their
+ * students' logins and failed pages, and the activity on the exams they own or help edit.
  */
 class ActivityReport
 {
@@ -204,13 +205,28 @@ class ActivityReport
             'ip' => $log->ip_address,
             'userAgent' => $log->user_agent,
             'note' => match (true) {
+                $log->event === ActivityLog::PAGE_FAILED => $this->pageFailureNote($log),
                 ($log->meta['auto'] ?? false) && ($log->meta['locked'] ?? false) => 'Dikirim otomatis: waktu habis saat terkunci',
                 (bool) ($log->meta['auto'] ?? false) => 'Dikirim otomatis: waktu habis, halaman tertutup',
                 ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',
                 (bool) ($log->meta['timeout'] ?? false) => 'Waktu habis',
                 default => null,
             },
+            // A page that failed to load: the page, and the browser's error or the file it could not get.
+            'detail' => $log->event === ActivityLog::PAGE_FAILED
+                ? (implode(' · ', array_filter([$log->meta['path'] ?? null, $log->meta['message'] ?? null, $log->meta['asset'] ?? null])) ?: null)
+                : null,
         ];
+    }
+
+    /**
+     * The code of a page that failed to load, with what it means.
+     */
+    protected function pageFailureNote(ActivityLog $log): string
+    {
+        $code = (string) ($log->meta['code'] ?? '');
+
+        return ($failure = PageFailure::tryFrom($code)) ? "{$failure->value}: {$failure->title()}" : ($code ?: 'Halaman gagal dimuat');
     }
 
     public function filename(array $filters): string
@@ -238,7 +254,7 @@ class ActivityReport
         $timezone = $this->now()->format('T');
 
         $rows = [
-            [XlsxWriter::cell('Laporan Aktivitas Pengguna (Login & Ujian)', 'title')],
+            [XlsxWriter::cell('Laporan Aktivitas Pengguna (Login, Ujian & Halaman Gagal Dimuat)', 'title')],
             [XlsxWriter::cell(implode('   •   ', array_filter([
                 'Periode '.$this->dateLabel($filters['from']).($filters['from'] === $filters['to'] ? '' : ' s.d. '.$this->dateLabel($filters['to'])),
                 $filters['event'] ? ActivityLog::EVENT_LABELS[$filters['event']] : null,
@@ -267,7 +283,7 @@ class ActivityReport
                 XlsxWriter::cell($row['os'], 'text'),
                 XlsxWriter::cell($row['browser'], 'text'),
                 XlsxWriter::cell($row['ip'], 'textCenter'),
-                XlsxWriter::cell($row['note'], 'text'),
+                XlsxWriter::cell(implode(' — ', array_filter([$row['note'], $row['detail']])) ?: null, 'text'),
                 XlsxWriter::cell($row['userAgent'], 'text'),
             ];
         }
@@ -305,7 +321,7 @@ class ActivityReport
             ->where('activity_logs.user_id', $viewer->id)
             ->orWhereIn('activity_logs.quiz_form_id', $ownForms)
             ->orWhere(fn (Builder $logins) => $logins
-                ->whereIn('event', [ActivityLog::LOGIN, ActivityLog::LOGOUT])
+                ->whereIn('event', [ActivityLog::LOGIN, ActivityLog::LOGOUT, ActivityLog::PAGE_FAILED])
                 ->whereHas('user', fn (Builder $users) => $this->whereStudent($users))));
     }
 

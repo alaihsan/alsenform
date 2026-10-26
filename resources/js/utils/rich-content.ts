@@ -215,7 +215,9 @@ export function formatRichContent(rawContent?: string | null): string {
     // 2. \[ ... \] (display math)
     // 3. $ ... $ (inline math) - avoid matching standalone currency like $50
     // 4. \( ... \) (inline math)
-    const mathPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$(?!\s)[^$\n]+(?<!\s)\$|\\\([\s\S]+?\\\))/g;
+    // Inline math ends on a character that is not a space without a lookbehind, which Safari before
+    // 16.4 cannot read: the whole page then failed to load there (blank white).
+    const mathPattern = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$(?!\s)[^$\n]*[^\s$]\$|\\\([\s\S]+?\\\))/g;
 
     const parts = content.split(mathPattern);
 

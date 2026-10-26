@@ -25,17 +25,44 @@ declare module 'vite/client' {
     }
 }
 
+// The page guard of resources/views/app.blade.php: it shows an error code instead of a blank page.
+declare global {
+    interface Window {
+        FalconPageGuard?: { booted: () => void; failed: (code: string, message: string) => void };
+    }
+}
+
 // The product name is the same everywhere, whatever APP_NAME says.
 const appName = BRAND_NAME;
+
+/** Whether nothing of the page is on screen: only the footer and the connection notice, or nothing. */
+const isPageEmpty = (el: Element): boolean =>
+    Array.from(el.children).every(
+        (child) =>
+            child.matches('[data-testid="brand-footer"], [role="alert"]') ||
+            (!child.textContent?.trim() && !child.querySelector('img, svg, video, input')),
+    );
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
-        createApp({ render: () => [h(App, props), h(BrandFooter), h(ConnectionLostNotice)] })
+        const app = createApp({ render: () => [h(App, props), h(BrandFooter), h(ConnectionLostNotice)] })
             .use(plugin)
-            .use(ZiggyVue)
-            .mount(el);
+            .use(ZiggyVue);
+
+        // An error that leaves the page empty is shown with its code (FF-302), never as a blank page.
+        app.config.errorHandler = (error, _instance, info) => {
+            console.error(error);
+            setTimeout(() => {
+                if (isPageEmpty(el)) {
+                    window.FalconPageGuard?.failed('FF-302', `${error instanceof Error ? error.message : String(error)} (${info})`);
+                }
+            });
+        };
+
+        app.mount(el);
+        window.FalconPageGuard?.booted();
     },
     progress: {
         color: '#4B5563',

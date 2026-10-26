@@ -9,6 +9,9 @@
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+        {{-- First of all: no page stays blank white, also where the app's scripts cannot run. --}}
+        @include('partials.page-guard')
+
         {{-- Web fonts are an optional enhancement, fetched only once the page has loaded: on an intranet
              without internet a font request can hang for minutes, which left pages loading forever
              (and blank on browsers that wait for every style sheet). System fonts are used until then. --}}
@@ -29,5 +32,22 @@
     </head>
     <body class="font-sans antialiased">
         @inertia
+        <noscript>
+            @php($failure = \App\Support\PageFailure::JavascriptOff)
+            <div id="ff-guard" role="alert" data-code="{{ $failure->value }}">
+                <div class="ff-card">
+                    <span class="ff-icon" aria-hidden="true">!</span>
+                    <h1>{{ $failure->title() }}</h1>
+                    <p>{{ $failure->explanation() }}</p>
+                    <span class="ff-code">{{ $failure->value }}</span>
+                    <ol>
+                        @foreach ($failure->steps() as $step)
+                            <li>{{ $step }}</li>
+                        @endforeach
+                    </ol>
+                    <p class="ff-note">Sebutkan kode <strong>{{ $failure->value }}</strong> kepada guru atau admin.</p>
+                </div>
+            </div>
+        </noscript>
     </body>
 </html>
