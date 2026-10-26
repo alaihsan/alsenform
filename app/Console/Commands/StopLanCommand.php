@@ -11,7 +11,7 @@ class StopLanCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'lan:stop {--port=8000 : Port server Falcon Forms}';
+    protected $signature = 'lan:stop {--port='.ServeLanCommand::DEFAULT_PORT.' : Port server Falcon Forms}';
 
     /**
      * The console command description.

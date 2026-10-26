@@ -16,12 +16,17 @@ use Throwable;
 class ServeLanCommand extends Command
 {
     /**
+     * The port of the intranet address, http://falcon.lan:2026.
+     */
+    public const DEFAULT_PORT = 2026;
+
+    /**
      * The name and signature of the console command.
      *
      * @var string
      */
     protected $signature = 'lan:serve 
-                            {--port=8000 : Port untuk menjalankan server}
+                            {--port='.self::DEFAULT_PORT.' : Port untuk menjalankan server}
                             {--host=0.0.0.0 : Host binding address}
                             {--workers=24 : Jumlah concurrent worker process untuk melayani hingga ratusan siswa}
                             {--optimize : Jalankan optimasi cache sebelum server mulai}
@@ -48,6 +53,13 @@ class ServeLanCommand extends Command
      * How often (in seconds) the server hands in the exams whose time ran out.
      */
     protected float $autoSubmitIntervalSeconds = 60.0;
+
+    /**
+     * What the network's DNS answered for each name, looked up once per network.
+     *
+     * @var array<string, string|null>
+     */
+    protected array $resolvedHosts = [];
 
     /**
      * Execute the console command.
@@ -265,6 +277,7 @@ class ServeLanCommand extends Command
      */
     protected function announceNetworkChange(array $interfaces, string $host, int $port): void
     {
+        $this->resolvedHosts = [];
         $this->newLine();
         $this->output->writeln('<bg=yellow;fg=black;options=bold> ⚠️  ALAMAT IP SERVER BERUBAH ('.date('H:i:s').') </>');
 
@@ -273,6 +286,7 @@ class ServeLanCommand extends Command
         } elseif ($host === '0.0.0.0') {
             $this->output->writeln('   Server tetap berjalan. Jawaban siswa aman (tersimpan di perangkat dan di server).');
             $this->output->writeln('   Bagikan URL baru ini ke siswa (lalu login ulang, jawaban akan dipulihkan otomatis):');
+            $this->outputLanHost($interfaces, $port, '   ');
             foreach ($interfaces as $label => $ip) {
                 $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
             }
@@ -580,7 +594,7 @@ class ServeLanCommand extends Command
 
         $data = json_decode((string) file_get_contents($infoFile), true);
         $pid = (int) ($data['pid'] ?? 0);
-        $port = (int) ($data['port'] ?? 8000);
+        $port = (int) ($data['port'] ?? self::DEFAULT_PORT);
         $portPids = $this->getPortPids($port);
         $isRunning = ! empty($portPids) || ($pid > 0 && ! empty(trim((string) @shell_exec("ps -p {$pid} -o pid= 2>/dev/null"))));
 
@@ -619,6 +633,7 @@ class ServeLanCommand extends Command
         }
 
         $this->output->writeln('   🌐 <options=bold>Akses URL Siswa (alamat saat ini):</>');
+        $this->outputLanHost($interfaces, $port, '   ');
         foreach ($interfaces as $label => $ip) {
             $this->output->writeln("      👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
         }
@@ -667,7 +682,83 @@ class ServeLanCommand extends Command
     {
         $address = $host !== '0.0.0.0' && $host !== 'localhost' ? $host : reset($interfaces);
 
+        // The intranet name when the network's DNS leads it to the address the server listens on.
+        $lanHost = $this->lanHost();
+        if ($lanHost !== null && $this->lanHostPointsHere($host === '0.0.0.0' ? $interfaces : [$host])) {
+            return $this->urlFor($lanHost, $port);
+        }
+
         return $address ? "http://{$address}:{$port}" : null;
+    }
+
+    /**
+     * The intranet name students type (LAN_HOST, falcon.lan by default), or null when there is none.
+     */
+    protected function lanHost(): ?string
+    {
+        $host = strtolower(trim((string) config('app.lan_host')));
+
+        return preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/', $host) ? $host : null;
+    }
+
+    /**
+     * The IPv4 address the network's DNS gives for a name, or null when it does not know the name.
+     */
+    protected function resolveHost(string $host): ?string
+    {
+        if (! array_key_exists($host, $this->resolvedHosts)) {
+            $address = @gethostbyname($host);
+            $this->resolvedHosts[$host] = $address !== $host && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false ? $address : null;
+        }
+
+        return $this->resolvedHosts[$host];
+    }
+
+    /**
+     * Whether the intranet name leads to one of these addresses of the server.
+     *
+     * @param  array<array-key, string>  $addresses
+     */
+    protected function lanHostPointsHere(array $addresses): bool
+    {
+        $lanHost = $this->lanHost();
+        $address = $lanHost !== null ? $this->resolveHost($lanHost) : null;
+
+        return $address !== null && in_array($address, $addresses, true);
+    }
+
+    protected function urlFor(string $host, int $port): string
+    {
+        return $port === 80 ? "http://{$host}" : "http://{$host}:{$port}";
+    }
+
+    /**
+     * The intranet address, and what the router still needs when the name does not lead here yet.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function outputLanHost(array $interfaces, int $port, string $indent = ''): void
+    {
+        $lanHost = $this->lanHost();
+        if ($lanHost === null) {
+            return;
+        }
+
+        $url = $this->urlFor($lanHost, $port);
+        $address = $this->resolveHost($lanHost);
+        $serverIp = $interfaces !== [] ? reset($interfaces) : 'IP server ini';
+
+        if ($address !== null && in_array($address, $interfaces, true)) {
+            $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address})</>");
+
+            return;
+        }
+
+        $this->output->writeln("{$indent}   👉 <fg=yellow;options=bold>{$url}</> <fg=gray>(alamat intranet, belum aktif)</>");
+        $this->output->writeln($address !== null
+            ? "{$indent}      <fg=yellow>⚠️  {$lanHost} masih mengarah ke {$address}, bukan ke server ini. Ubah DNS statisnya di router: {$lanHost} → {$serverIp}</>"
+            : "{$indent}      <fg=yellow>⚠️  Router belum mengenal {$lanHost}. Tambahkan DNS statis di router: {$lanHost} → {$serverIp}</>");
+        $this->output->writeln("{$indent}      <fg=gray>Atur juga DHCP Reservation (IP tetap) untuk server ini. Sampai saat itu, pakai alamat IP di bawah.</>");
     }
 
     /**
@@ -972,8 +1063,11 @@ class ServeLanCommand extends Command
      */
     protected function outputNetworkAdvice(array $interfaces, int $port): void
     {
-        $firstIp = $interfaces !== [] ? reset($interfaces) : 'localhost';
-        $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>http://{$firstIp}:{$port}/cek-koneksi</> di perangkat itu.");
+        $lanHost = $this->lanHost();
+        $baseUrl = $lanHost !== null && $this->lanHostPointsHere($interfaces)
+            ? $this->urlFor($lanHost, $port)
+            : 'http://'.($interfaces !== [] ? reset($interfaces) : 'localhost').":{$port}";
+        $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>{$baseUrl}/cek-koneksi</> di perangkat itu.");
 
         foreach ($this->networkWarnings($interfaces) as $warning) {
             $this->output->writeln(" <fg=yellow;options=bold>⚠️  {$warning}</>");
@@ -1040,6 +1134,7 @@ class ServeLanCommand extends Command
         $this->newLine();
 
         $this->output->writeln(' <fg=yellow;options=bold>🌐 URL Akses untuk Siswa, Guru & Pengawas:</>');
+        $this->outputLanHost($interfaces, $port);
         if (! empty($interfaces)) {
             foreach ($interfaces as $label => $ip) {
                 $this->output->writeln("   👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
@@ -1048,7 +1143,6 @@ class ServeLanCommand extends Command
             $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
         }
 
-        $this->output->writeln('   👉 <fg=green;options=bold>http://alsenform.test</> <fg=gray>(Jika router memiliki DNS / via Nginx Herd Port 80)</>');
         if ($hostname) {
             $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
         }
@@ -1095,6 +1189,7 @@ class ServeLanCommand extends Command
         $this->newLine();
 
         $this->output->writeln(' <fg=yellow;options=bold>🌐 URL Akses untuk Siswa, Guru & Pengawas:</>');
+        $this->outputLanHost($interfaces, $port);
         if (! empty($interfaces)) {
             foreach ($interfaces as $label => $ip) {
                 $this->output->writeln("   👉 <fg=cyan;options=bold>http://{$ip}:{$port}</> <fg=gray>({$label})</>");
@@ -1102,8 +1197,6 @@ class ServeLanCommand extends Command
         } else {
             $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
         }
-
-        $this->output->writeln('   👉 <fg=green;options=bold>http://alsenform.test</> <fg=gray>(Jika router memiliki DNS / via Nginx Herd Port 80)</>');
 
         if ($hostname) {
             $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");

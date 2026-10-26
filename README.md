@@ -27,6 +27,7 @@ Falcon Forms lahir dari kebutuhan sekolah yang ujiannya sering terganggu karena 
 - [Instalasi](#instalasi)
 - [Menjalankan di jaringan sekolah](#menjalankan-di-jaringan-sekolah)
 - [Memperbarui aplikasi](#memperbarui-aplikasi)
+- [Kode galat halaman](#kode-galat-halaman)
 - [Pengembangan](#pengembangan)
 - [Kontribusi](#kontribusi)
 - [Lisensi](#lisensi)
@@ -172,7 +173,8 @@ Data bisa disaring per tanggal, jenis aktivitas, ujian, peran, atau dicari berda
 Perintah `php artisan lan:serve` menyiapkan semuanya untuk hari ujian:
 
 - Menjalankan server dengan banyak worker (bawaan 24) supaya siswa yang mengirim jawaban bersamaan tidak mengantre.
-- Menampilkan alamat yang bisa dibuka siswa untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN), termasuk nama Bonjour/mDNS untuk perangkat Apple.
+- Berjalan di port **2026** dengan alamat intranet **`http://falcon.lan:2026`**. Saat menyala, perintah ini memeriksa apakah DNS router sudah mengarahkan `falcon.lan` ke server; bila belum (atau masih ke IP lama), ia menuliskan entri DNS yang perlu ditambahkan di router.
+- Menampilkan juga alamat IP untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN), termasuk nama Bonjour/mDNS untuk perangkat Apple.
 - Di macOS, mencegah komputer tertidur selama server berjalan (caffeinate).
 - Memberi tahu alamat baru kalau IP server berubah di tengah ujian.
 - Memperbarui database dan cache secara otomatis setelah aplikasi di-update.
@@ -192,6 +194,8 @@ Supaya halaman tetap cepat di jaringan yang padat:
 - **Pusat bantuan** di dalam aplikasi, dengan panduan terpisah untuk guru dan siswa, termasuk aturan lengkap impor Word.
 - **Halaman error berbahasa Indonesia** dengan petunjuk yang jelas, misalnya saat sesi habis, akses ditolak, berkas terlalu besar, atau server sedang pemeliharaan.
 - **Pemberitahuan saat server tidak bisa dihubungi**, lengkap dengan tombol coba lagi, supaya siswa tidak bingung ketika Wi-Fi putus.
+- **Tidak ada lagi halaman putih kosong.** Bila halaman tidak dapat ditampilkan, layar menunjukkan kode, artinya, dan langkah yang perlu dilakukan (lihat [Kode galat halaman](#kode-galat-halaman)). Kejadiannya tercatat di Laporan Aktivitas sebagai "Halaman gagal dimuat", lengkap dengan perangkat, browser, halaman, dan pesan galatnya, jadi admin bisa melihat siapa yang terkena dan mengapa.
+- **Jalan di perangkat lama**: tampilan dibuat untuk Chrome 73, Safari/iOS 12.2, Firefox 68, Edge 79, dan yang lebih baru. Fungsi baru yang belum ada di browser lama dilengkapi oleh halaman itu sendiri, browser yang menolak penyimpanan lokal (mode privat, cookie diblokir) tetap bisa dipakai, dan berkas tampilan yang gagal terunduh dicoba sekali lagi otomatis. Build gagal dengan pesan jelas bila ada kode yang memakai regex *lookbehind*, yang dulu membuat halaman putih di iPhone/iPad dengan iOS di bawah 16.4.
 
 ---
 
@@ -313,12 +317,22 @@ Seeder membuat akun admin `superadmin@falconforms.test` dengan password `superad
 php artisan lan:serve
 ```
 
-Alamat untuk siswa akan muncul di layar, misalnya `http://192.168.1.10:8000`. Pastikan perangkat siswa tersambung ke router yang sama dan fitur *AP Isolation* di router dimatikan.
+Siswa membuka **`http://falcon.lan:2026`**. Alamat IP server juga muncul di layar, misalnya `http://192.168.1.10:2026`, dan selalu bisa dipakai. Pastikan perangkat siswa tersambung ke router yang sama dan fitur *AP Isolation* di router dimatikan.
+
+### Mengaktifkan alamat falcon.lan
+
+Nama `falcon.lan` dijawab oleh DNS router, jadi router perlu diberi tahu sekali:
+
+1. Atur **DHCP Reservation** (IP tetap) untuk komputer server di router, misalnya `192.168.1.10`.
+2. Tambahkan **DNS statis** di router: `falcon.lan` → `192.168.1.10`. Letaknya tergantung merek router, misalnya MikroTik: *IP → DNS → Static*; OpenWrt: *Network → DHCP and DNS → Hostnames*; pfSense/OPNsense: *Services → DNS Resolver → Host Overrides*; banyak router rumahan: *LAN → DHCP/DNS → Static DNS* atau *Local DNS*.
+3. Jalankan `php artisan lan:serve`. Bila DNS sudah benar, layar menulis `http://falcon.lan:2026 (alamat intranet → 192.168.1.10)`; bila belum, layar menulis entri DNS yang masih perlu ditambahkan.
+
+Perangkat harus memakai DNS dari router (bawaan Wi-Fi sekolah). Perangkat yang memakai DNS lain (misalnya 8.8.8.8 atau "DNS Pribadi" di Android) tidak mengenal `falcon.lan` dan tetap bisa memakai alamat IP. Nama lain bisa dipakai dengan `LAN_HOST` di berkas `.env` (misalnya `LAN_HOST=ujian.sekolah.lan`); kosongkan untuk hanya menampilkan alamat IP.
 
 | Perintah | Fungsi |
 | --- | --- |
-| `php artisan lan:serve` | Menjalankan server di port 8000 |
-| `php artisan lan:serve --port=8001` | Memakai port lain |
+| `php artisan lan:serve` | Menjalankan server di port 2026 (`http://falcon.lan:2026`) |
+| `php artisan lan:serve --port=2027` | Memakai port lain |
 | `php artisan lan:serve --workers=32` | Menambah worker untuk peserta yang lebih banyak |
 | `php artisan lan:serve --daemon` | Berjalan di latar belakang |
 | `php artisan lan:status` | Melihat status dan alamat server latar belakang |
@@ -328,7 +342,7 @@ Alamat untuk siswa akan muncul di layar, misalnya `http://192.168.1.10:8000`. Pa
 
 Tips untuk hari ujian:
 
-- Atur **DHCP reservation** (IP tetap) untuk komputer server di router, supaya alamat yang dibagikan ke siswa tidak berubah.
+- Atur **DHCP reservation** (IP tetap) untuk komputer server di router, supaya alamat yang dibagikan ke siswa tidak berubah dan `falcon.lan` tetap mengarah ke server.
 - Pakai Wi-Fi 5 GHz bila bisa. Kabel LAN adalah pilihan paling stabil untuk komputer server.
 - Jangan me-restart server di tengah ujian. Jawaban siswa memang tetap aman, tetapi mereka tidak bisa mengirim selama server mati.
 
@@ -346,6 +360,22 @@ npm run build
 Setelah itu, hentikan server (Ctrl+C) lalu jalankan lagi `php artisan lan:serve`. Perintah ini otomatis menjalankan migrasi database, memperbarui cache, dan membuat ulang tampilan (`npm run build`) bila kode tampilannya lebih baru daripada hasil build terakhir; tanpa itu, browser tetap memakai tampilan lama dan tombol baru (misalnya Add-ons) tidak berfungsi. Kalau aplikasi dijalankan dengan cara lain (misalnya lewat Herd), jalankan `php artisan migrate --force` dan `npm run build` secara manual.
 
 Kalau langkah itu terlewat, aplikasi memperbaikinya sendiri. Begitu ada halaman yang gagal karena tabel baru belum ada, database langsung diperbarui dan halaman dibuka ulang.
+
+---
+
+## Kode galat halaman
+
+Bila halaman tidak dapat ditampilkan, layar menunjukkan salah satu kode berikut, bukan halaman putih. Setiap kejadian (kecuali FF-101) tercatat di **Laporan Aktivitas** dengan aktivitas "Halaman gagal dimuat", lengkap dengan perangkat, browser, halaman, dan pesan galatnya.
+
+| Kode | Arti | Yang dilakukan |
+| --- | --- | --- |
+| FF-101 | JavaScript dimatikan di browser | Nyalakan JavaScript, atau pakai browser lain |
+| FF-102 | Browser terlalu lama (di bawah Chrome 73, Safari/iOS 12.2, Firefox 68, Edge 79) | Perbarui browser atau pakai Chrome terbaru |
+| FF-201 | Berkas tampilan gagal diunduh (Wi-Fi terputus, server sangat sibuk) | Halaman dicoba sekali lagi otomatis; periksa Wi-Fi, buka Cek Koneksi |
+| FF-202 | Berkas tampilan tidak ada di server (HTTP 404), biasanya saat aplikasi sedang diperbarui | Muat ulang; bila tetap, jalankan `npm run build` di server lalu nyalakan ulang server |
+| FF-301 | Galat di browser saat membuka halaman | Muat ulang; pesan galat di layar dan di Laporan menunjukkan penyebabnya |
+| FF-302 | Galat di browser yang mengosongkan halaman setelah terbuka | Muat ulang |
+| FF-401 | Halaman belum tampil setelah 20 detik (jaringan sangat lambat) | Tunggu (pesan hilang sendiri begitu halaman tampil) atau muat ulang |
 
 ---
 
