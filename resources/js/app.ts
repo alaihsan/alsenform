@@ -1,6 +1,6 @@
 import '../css/app.css';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
@@ -43,9 +43,38 @@ const isPageEmpty = (el: Element): boolean =>
             (!child.textContent?.trim() && !child.querySelector('img, svg, video, input')),
     );
 
+/**
+ * A page whose code is lost to the network once the app runs (Wi-Fi dropping as a link is clicked)
+ * is opened with a full page load, instead of the click doing nothing. A link opens the page asked
+ * for; a sent form (already handled by the server) or the back button loads the address shown again.
+ * The first page is the page guard's (resources/views/partials/page-guard.blade.php).
+ */
+let isAppMounted = false;
+let pendingVisit: { url: string; isGet: boolean } | null = null;
+router.on('start', (event) => {
+    pendingVisit = { url: event.detail.visit.url.href, isGet: event.detail.visit.method === 'get' };
+});
+router.on('finish', () => {
+    pendingVisit = null;
+});
+
+const resolvePage = (name: string): Promise<DefineComponent> =>
+    resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')).catch((error: unknown) => {
+        if (!isAppMounted) {
+            throw error;
+        }
+        if (pendingVisit?.isGet) {
+            window.location.assign(pendingVisit.url);
+        } else {
+            window.location.reload();
+        }
+
+        return new Promise<DefineComponent>(() => {});
+    });
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
+    resolve: resolvePage,
     setup({ el, App, props, plugin }) {
         const app = createApp({ render: () => [h(App, props), h(BrandFooter), h(ConnectionLostNotice)] })
             .use(plugin)
@@ -62,6 +91,7 @@ createInertiaApp({
         };
 
         app.mount(el);
+        isAppMounted = true;
         window.FalconPageGuard?.booted();
     },
     progress: {

@@ -100,12 +100,7 @@ class QuizResultsReport
                 XlsxWriter::cell($student['maxScore'], 'integer'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
                 XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
-                XlsxWriter::cell(match (true) {
-                    $student['isAutoSubmitted'] => 'Waktu habis (dikirim otomatis)',
-                    $student['lateMinutes'] !== null => "Waktu habis (terlambat {$student['lateMinutes']} menit)",
-                    $student['isTimeout'] => 'Waktu habis',
-                    default => 'Selesai',
-                }.($student['ungraded'] > 0 ? "; {$student['ungraded']} esai/berkas belum dinilai (nilai sementara)" : ''), 'textCenter'),
+                XlsxWriter::cell($this->statusText($student), 'textCenter'),
                 XlsxWriter::cell($student['submittedAt'], 'datetime'),
                 XlsxWriter::cell("{$student['attempt']} dari {$student['attempts']}", 'textCenter'),
             ];
@@ -157,34 +152,20 @@ class QuizResultsReport
             ];
 
             foreach ($questions as $questionIndex => $question) {
-                if ($student['questionIds'] !== null && ! in_array((string) $question['id'], $student['questionIds'], true)) {
-                    $row[] = XlsxWriter::cell('— (soal tidak didapat)', 'ungraded');
+                $cell = $this->answerCell($question, $student);
 
-                    continue;
+                if ($cell['mark'] !== 'absent') {
+                    $givenCounts[$questionIndex]++;
                 }
-
-                $givenCounts[$questionIndex]++;
-                $answer = $student['answers'][$question['id']] ?? null;
-                $text = $this->answerText($question, $answer);
-                $isCorrect = $this->scoring->isCorrect($question, $answer);
-                $manual = $student['manualScores'][$question['id']] ?? null;
-
-                // Graded by the teacher: that grade decides, and is shown with the answer.
-                if (is_numeric($manual)) {
-                    $points = $this->scoring->points($question);
-                    $isCorrect = (float) $manual >= $points ? true : ((float) $manual <= 0 ? false : null);
-                    $text = trim(($text === '' ? '(tidak dijawab)' : $text)."\nNilai guru: ".$this->decimal((float) $manual)."/{$points}");
-                }
-
-                if ($isCorrect === true) {
+                if ($cell['mark'] === 'correct') {
                     $correctCounts[$questionIndex]++;
                 }
 
-                $row[] = match ($isCorrect) {
-                    true => XlsxWriter::cell($text, 'correct'),
-                    false => XlsxWriter::cell($text === '' ? '(tidak dijawab)' : $text, 'wrong'),
-                    null => XlsxWriter::cell($text, 'ungraded'),
-                };
+                $row[] = XlsxWriter::cell($cell['text'], match ($cell['mark']) {
+                    'correct' => 'correct',
+                    'wrong' => 'wrong',
+                    default => 'ungraded',
+                });
             }
 
             $rows[] = $row;
@@ -441,6 +422,7 @@ class QuizResultsReport
                 $studentMax = $result['max'];
 
                 return [
+                    'id' => $response->id,
                     'nis' => $response->user?->nis ?: '-',
                     // Guests on a public quiz: the name and class they gave before starting.
                     'name' => $response->user?->name ?: ($response->respondent_name ?: 'Anonim'),
@@ -466,6 +448,114 @@ class QuizResultsReport
                 ?: strnatcasecmp($a['name'], $b['name'])
                 ?: $a['attempt'] <=> $b['attempt'])
             ->values();
+    }
+
+    /**
+     * The workbook as one table for the Filter Cerdas add-on, to find, filter and sort in the app:
+     * the columns of the grade recap, then each question with the student's answer and whether it
+     * is right, with the same values as the Excel workbook.
+     *
+     * @return array{columns: list<array{key: string, label: string, type: string, hint?: string}>, rows: list<array{id: int, cells: list<mixed>, marks: list<string>}>, kkm: float}
+     */
+    public function grid(QuizForm $quizForm): array
+    {
+        $questions = QuizItems::questions($quizForm->questions);
+        $kkm = $quizForm->kkm();
+        $students = $this->students($quizForm, $questions, $this->scoring->maxPoints($questions));
+
+        $columns = [
+            ['key' => 'no', 'label' => 'No', 'type' => 'number'],
+            ['key' => 'name', 'label' => 'Nama Lengkap', 'type' => 'text'],
+            ['key' => 'nis', 'label' => 'NIS', 'type' => 'text'],
+            ['key' => 'kelas', 'label' => 'Kelas', 'type' => 'text'],
+            ['key' => 'email', 'label' => 'Email', 'type' => 'text'],
+            ['key' => 'grade', 'label' => 'Nilai (0-100)', 'type' => 'number'],
+            ['key' => 'score', 'label' => 'Skor', 'type' => 'number'],
+            ['key' => 'maxScore', 'label' => 'Skor Maksimal', 'type' => 'number'],
+            ['key' => 'result', 'label' => 'Keterangan', 'type' => 'text'],
+            ['key' => 'status', 'label' => 'Status', 'type' => 'text'],
+            ['key' => 'submittedAt', 'label' => 'Waktu Selesai', 'type' => 'datetime'],
+            ['key' => 'attempt', 'label' => 'Percobaan', 'type' => 'text'],
+        ];
+        foreach ($questions as $index => $question) {
+            // "3. Title (10 poin)", and the answer key (or "Esai, dinilai guru") as the hint.
+            [$label, $hint] = array_pad(explode("\n", $this->questionHeader($index + 1, $question), 2), 2, '');
+            $columns[] = ['key' => 'q:'.$question['id'], 'label' => $label, 'type' => 'answer', 'hint' => $hint];
+        }
+
+        $rows = $students->values()->map(function (array $student, int $index) use ($questions, $kkm): array {
+            $answers = array_map(fn (array $question): array => $this->answerCell($question, $student), $questions);
+
+            return [
+                'id' => $student['id'],
+                'cells' => [
+                    $index + 1,
+                    $student['name'],
+                    $student['nis'],
+                    $student['kelas'],
+                    $student['email'],
+                    $student['grade'],
+                    $student['score'],
+                    $student['maxScore'],
+                    $student['grade'] >= $kkm ? 'Tuntas' : 'Belum Tuntas',
+                    $this->statusText($student),
+                    $student['submittedAt']?->format('Y-m-d H:i'),
+                    "{$student['attempt']} dari {$student['attempts']}",
+                    ...array_column($answers, 'text'),
+                ],
+                'marks' => array_column($answers, 'mark'),
+            ];
+        })->all();
+
+        return ['columns' => $columns, 'rows' => $rows, 'kkm' => $kkm];
+    }
+
+    /**
+     * What a student's answer to a question shows and whether it is right, in the workbook and in
+     * the Filter Cerdas add-on alike.
+     *
+     * @param  array<string, mixed>  $question
+     * @param  array<string, mixed>  $student
+     * @return array{text: string, mark: 'correct'|'wrong'|'ungraded'|'absent'}
+     */
+    public function answerCell(array $question, array $student): array
+    {
+        if ($student['questionIds'] !== null && ! in_array((string) $question['id'], $student['questionIds'], true)) {
+            return ['text' => '— (soal tidak didapat)', 'mark' => 'absent'];
+        }
+
+        $answer = $student['answers'][$question['id']] ?? null;
+        $text = $this->answerText($question, $answer);
+        $isCorrect = $this->scoring->isCorrect($question, $answer);
+        $manual = $student['manualScores'][$question['id']] ?? null;
+
+        // Graded by the teacher: that grade decides, and is shown with the answer.
+        if (is_numeric($manual)) {
+            $points = $this->scoring->points($question);
+            $isCorrect = (float) $manual >= $points ? true : ((float) $manual <= 0 ? false : null);
+            $text = trim(($text === '' ? '(tidak dijawab)' : $text)."\nNilai guru: ".$this->decimal((float) $manual)."/{$points}");
+        }
+
+        return match ($isCorrect) {
+            true => ['text' => $text, 'mark' => 'correct'],
+            false => ['text' => $text === '' ? '(tidak dijawab)' : $text, 'mark' => 'wrong'],
+            null => ['text' => $text, 'mark' => 'ungraded'],
+        };
+    }
+
+    /**
+     * How the attempt was handed in, and whether its grade is still provisional.
+     *
+     * @param  array<string, mixed>  $student
+     */
+    protected function statusText(array $student): string
+    {
+        return match (true) {
+            $student['isAutoSubmitted'] => 'Waktu habis (dikirim otomatis)',
+            $student['lateMinutes'] !== null => "Waktu habis (terlambat {$student['lateMinutes']} menit)",
+            $student['isTimeout'] => 'Waktu habis',
+            default => 'Selesai',
+        }.($student['ungraded'] > 0 ? "; {$student['ungraded']} esai/berkas belum dinilai (nilai sementara)" : '');
     }
 
     /**

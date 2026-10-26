@@ -292,6 +292,8 @@ class QuizFormPayloads
             'misconceptions' => $quizForm->usesAddon(Addon::Misconception)
                 ? app(Misconceptions::class)->analyzeResponses(QuizItems::questions($formQuestions), $responses)
                 : null,
+            // Filter Cerdas: the Excel mode, fetched only when it is opened.
+            'smartFilterUrl' => $quizForm->usesAddon(Addon::SmartFilter) ? route('forms.smart-filter', $quizForm) : null,
         ];
     }
 

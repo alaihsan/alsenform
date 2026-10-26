@@ -12,6 +12,7 @@ import {
     Info,
     KeyRound,
     Languages,
+    ListFilter,
     Paintbrush,
     Plus,
     Puzzle,
@@ -67,6 +68,7 @@ const ICONS: Record<string, unknown> = {
     sigma: Sigma,
     atom: Atom,
     languages: Languages,
+    'list-filter': ListFilter,
 };
 
 /** A colour per add-on, so the cards are told apart at a glance. */
@@ -80,6 +82,7 @@ const TONES: Record<string, string> = {
     'math-formulas': 'bg-sky-50 text-sky-600 ring-sky-100',
     'science-formulas': 'bg-teal-50 text-teal-600 ring-teal-100',
     'arabic-rtl': 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+    'smart-filter': 'bg-cyan-50 text-cyan-600 ring-cyan-100',
 };
 const toneOf = (addon: AddonEntry) => TONES[addon.key] ?? 'bg-slate-100 text-slate-600 ring-slate-200';
 

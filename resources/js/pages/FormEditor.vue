@@ -65,6 +65,7 @@ import {
     Image,
     Key,
     Link2,
+    ListFilter,
     Maximize2,
     MoreVertical,
     Paintbrush,
@@ -89,7 +90,7 @@ import {
     CornerDownRight,
     GitBranch,
 } from 'lucide-vue-next';
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 
 const getYoutubeEmbedUrl = (url: string): string | undefined => {
@@ -495,6 +496,29 @@ const formDesignerAddon = computed(() => addonCatalog.value.find((addon) => addo
 const formulaPalettes = computed(() => FORMULA_PALETTES.filter((palette) => addonCatalog.value.some((addon) => addon.key === palette.key && addon.installed)));
 // Teks Arab (RTL): the RTL button in each question's toolbar while the teacher editing has the add-on installed.
 const hasRtlButton = computed(() => addonCatalog.value.some((addon) => addon.key === 'arabic-rtl' && addon.installed));
+
+// Filter Cerdas: the results in a full-screen Excel mode, loaded (code and data) only when it is opened.
+const isSmartFilterOpen = ref(false);
+const smartFilterError = ref('');
+const SmartFilter = defineAsyncComponent({
+    loader: () => import('@/components/addons/SmartFilter.vue'),
+    // The browser remembers a failed import for the rest of the page: only reloading the page helps,
+    // which the teacher does with the button (after pending changes are saved).
+    onError: (_error, _retry, fail) => {
+        fail();
+        isSmartFilterOpen.value = false;
+        smartFilterError.value = 'Filter Cerdas belum dapat dibuka: koneksi terputus saat memuatnya, atau aplikasi baru saja diperbarui.';
+    },
+});
+const openSmartFilter = () => {
+    smartFilterError.value = '';
+    isSmartFilterOpen.value = true;
+};
+const smartFilterAddon = computed(() => addonCatalog.value.find((addon) => addon.key === 'smart-filter') ?? null);
+const isSmartFilterOn = computed(() => Boolean(smartFilterAddon.value && isAddonOnForExam(smartFilterAddon.value)));
+const smartFilterUrl = computed(() =>
+    props.quizForm?.id ? (props.quizForm.responses?.smartFilterUrl ?? route('forms.smart-filter', { quizForm: props.quizForm.id })) : null,
+);
 
 // Desainer Form: the exam's design, drawn in the editor while the add-on is on for the exam.
 const isDesignerOn = computed(() => Boolean(formDesignerAddon.value && isAddonOnForExam(formDesignerAddon.value)));
@@ -1974,6 +1998,7 @@ const leaveEditor = (leave: () => void) => {
 };
 
 const navigateBackToDashboard = () => leaveEditor(() => router.visit(route('dashboard')));
+const reloadPage = () => leaveEditor(() => window.location.reload());
 
 // Watch form changes: keep unsaved edits in this browser until the server has them.
 watch(
@@ -3641,6 +3666,57 @@ watch(
                             </button>
                         </div>
                         <GradingPanel v-if="isGradingOpen && quizForm?.responses?.gradingUrl" :url="quizForm.responses.gradingUrl" @close="closeGrading" />
+
+                        <!-- Filter Cerdas add-on: find, filter and sort every column (answers too) in an Excel mode -->
+                        <div
+                            v-if="responseCount && isSmartFilterOn && smartFilterUrl"
+                            class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50/60 px-4 py-3"
+                            data-testid="smart-filter-callout"
+                        >
+                            <ListFilter class="h-5 w-5 shrink-0 text-cyan-700" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                <b>Filter Cerdas</b>: cari, saring, dan urutkan kolom apa saja, termasuk jawaban setiap soal, seperti di Excel.
+                                <span v-if="smartFilterError" class="mt-1 block text-xs font-semibold text-rose-700" role="alert">
+                                    {{ smartFilterError }}
+                                    <button type="button" class="ml-1 underline" @click="reloadPage">Muat ulang halaman</button>
+                                </span>
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl bg-cyan-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-cyan-700"
+                                @click="openSmartFilter"
+                            >
+                                Buka Filter Cerdas
+                            </button>
+                        </div>
+                        <div
+                            v-else-if="responseCount && smartFilterAddon"
+                            class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/40 px-4 py-3"
+                        >
+                            <Puzzle class="h-5 w-5 shrink-0 text-cyan-600" />
+                            <p class="min-w-0 flex-1 text-sm text-slate-700">
+                                {{
+                                    smartFilterAddon.installedForOwner
+                                        ? 'Add-on Filter Cerdas dimatikan untuk ujian ini.'
+                                        : 'Ingin mencari, menyaring, dan mengurutkan semua jawaban seperti di Excel? Pasang add-on Filter Cerdas.'
+                                }}
+                            </p>
+                            <button
+                                type="button"
+                                class="rounded-xl border border-cyan-200 bg-white px-3 py-1.5 text-xs font-bold text-cyan-700 transition hover:bg-cyan-50"
+                                @click="smartFilterAddon.installedForOwner ? setAddonForExam(smartFilterAddon, true) : (isAddonGalleryOpen = true)"
+                            >
+                                {{ smartFilterAddon.installedForOwner ? 'Aktifkan' : 'Lihat add-on' }}
+                            </button>
+                        </div>
+                        <SmartFilter
+                            v-if="isSmartFilterOpen && isSmartFilterOn && smartFilterUrl"
+                            :url="smartFilterUrl"
+                            :title="stripRichFormatting(form.title)"
+                            :export-url="exportResponsesUrl"
+                            :storage-key="String(quizForm?.id ?? '')"
+                            @close="isSmartFilterOpen = false"
+                        />
 
                         <!-- Rekapitulasi Nilai Siswa: every column sortable, A–Z initials like Moodle -->
                         <GradebookTable :rows="gradebook" :max-score="maxScore" :export-url="exportResponsesUrl" />

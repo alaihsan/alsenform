@@ -19,6 +19,7 @@ enum Addon: string
     case MathFormulas = 'math-formulas';
     case ScienceFormulas = 'science-formulas';
     case ArabicRtl = 'arabic-rtl';
+    case SmartFilter = 'smart-filter';
 
     public function label(): string
     {
@@ -32,6 +33,7 @@ enum Addon: string
             self::MathFormulas => 'Rumus Matematika',
             self::ScienceFormulas => 'Rumus IPA',
             self::ArabicRtl => 'Teks Arab (RTL)',
+            self::SmartFilter => 'Filter Cerdas',
         };
     }
 
@@ -47,6 +49,7 @@ enum Addon: string
             self::MathFormulas => 'Katalog rumus LaTeX lengkap untuk soal matematika: aljabar, trigonometri, kalkulus, matriks, statistika, sampai geometri. Klik, rumus masuk ke soal.',
             self::ScienceFormulas => 'Katalog rumus LaTeX untuk Fisika, Kimia dan Biologi, lengkap dengan keterangan simbol dan satuannya; persamaan reaksi kimia ditulis rapi dengan \\ce{...}.',
             self::ArabicRtl => 'Tombol RTL di bilah alat soal: tulis soal berbahasa Arab dan ayat Al-Qur\'an dari kanan ke kiri.',
+            self::SmartFilter => 'Mode Excel untuk hasil ujian: cari, saring, dan urutkan kolom apa saja, termasuk jawaban setiap soal, langsung di aplikasi.',
         };
     }
 
@@ -62,6 +65,7 @@ enum Addon: string
             self::MathFormulas => 'Tombol Rumus Matematika (ikon Σ) di bilah alat setiap soal membuka katalog rumus matematika yang dikelompokkan per bab: operasi dan relasi, pecahan, pangkat dan akar, aljabar dan persamaan, fungsi dan logaritma, trigonometri, geometri bidang dan ruang, geometri analitik, barisan dan deret, limit, turunan, integral, matriks dan vektor, statistika, peluang dan kombinatorika, himpunan dan logika, bilangan kompleks, huruf Yunani, serta notasi, kurung dan tanda panah. Setiap rumus tampil sebagai pratinjau KaTeX dan kode LaTeX-nya; cari dengan kata kunci, uji kode sendiri dengan pratinjau langsung, lalu sisipkan dengan satu klik. Rumus yang sudah ada di soal tetap tampil untuk guru dan siswa walaupun add-on dilepas.',
             self::ScienceFormulas => 'Tombol Rumus IPA (ikon atom) di bilah alat setiap soal membuka katalog rumus Fisika (besaran dan satuan, gerak lurus, gerak parabola dan melingkar, dinamika, usaha dan energi, momentum, elastisitas, rotasi dan kesetimbangan, gravitasi, fluida, suhu dan kalor, termodinamika, getaran dan gelombang, bunyi, optik, listrik statis dan dinamis, medan magnet, induksi dan arus bolak-balik, fisika modern, fisika inti), Kimia (penulisan rumus dan persamaan reaksi, struktur atom, stoikiometri, konsentrasi larutan, sifat koligatif, termokimia, laju reaksi, kesetimbangan, asam basa, penyangga dan hidrolisis, Ksp, redoks dan elektrokimia, kimia organik, kimia unsur dan industri) dan Biologi (fotosintesis dan respirasi, enzim dan pencernaan, genetika dan persilangan Mendel, Hardy-Weinberg, ekologi dan pertumbuhan populasi, fisiologi manusia, sel dan pertumbuhan). Setiap rumus disertai keterangan simbol dan satuannya. Persamaan reaksi memakai \\ce{...} (mhchem), jadi indeks, muatan ion, wujud zat dan panah kesetimbangan tertulis benar. Rumus yang sudah ada di soal tetap tampil untuk guru dan siswa walaupun add-on dilepas.',
             self::ArabicRtl => 'Tombol RTL di bilah alat setiap soal membalik arah kolom pertanyaan menjadi kanan ke kiri selama Anda menyunting, sehingga kalimat Arab, harakat dan tanda waqaf diketik dan disunting dengan urutan yang benar, juga bila soal bercampur huruf Latin. Tekan sekali lagi untuk kembali ke kiri ke kanan. Tanpa add-on ini, kolom yang isinya sebagian besar huruf Arab tetap otomatis menjadi kanan ke kiri, dan teks Arab tetap tampil dengan font Mushaf Madinah untuk guru dan siswa.',
+            self::SmartFilter => 'Tombol Filter Cerdas di tab Jawaban membuka hasil ujian dalam satu tabel layar penuh seperti Excel, dengan kolom yang sama dengan berkas Excel: No, nama, NIS, kelas, email, nilai, skor, keterangan tuntas, status, waktu selesai, percobaan, lalu jawaban setiap soal yang diwarnai hijau (benar), merah (salah), atau abu-abu (tidak dinilai otomatis). Cari kata di semua sel, saring setiap kolom (berisi teks, centang nilai tertentu, rentang angka atau tanggal, jawaban benar/salah), urutkan kolom mana pun, sembunyikan kolom yang tidak perlu, dan unduh hasil saringan sebagai CSV. Kolom nomor dan nama tetap terlihat saat tabel digeser; bilah bawah menghitung rata-rata, nilai tertinggi dan terendah dari baris yang tampil. Data baru dimuat saat tabel dibuka dan hanya baris yang terlihat yang digambar, jadi tetap ringan untuk ratusan siswa. Saringan dan urutan diingat di perangkat ini untuk setiap ujian.',
         };
     }
 
@@ -80,6 +84,7 @@ enum Addon: string
             self::MathFormulas => 'sigma',
             self::ScienceFormulas => 'atom',
             self::ArabicRtl => 'languages',
+            self::SmartFilter => 'list-filter',
         };
     }
 
@@ -132,6 +137,10 @@ enum Addon: string
             self::ArabicRtl => [
                 'Editor: tombol RTL di bilah alat setiap soal untuk membalik arah tulisan kolom pertanyaan (kanan ke kiri atau kiri ke kanan).',
             ],
+            self::SmartFilter => [
+                'Tab Jawaban: tombol "Buka Filter Cerdas" yang membuka hasil ujian dalam mode Excel layar penuh.',
+                'Cari di semua sel, saringan per kolom, urutan per kolom, sembunyikan kolom, dan unduh hasil saringan (CSV).',
+            ],
         };
     }
 
@@ -169,6 +178,9 @@ enum Addon: string
             self::ArabicRtl => [
                 'Tidak membaca data apa pun: hanya mengatur arah tulisan kolom soal yang sedang Anda sunting.',
             ],
+            self::SmartFilter => [
+                'Jawaban, nilai, nama, NIS, kelas dan email siswa di ujian Anda, sama dengan isi berkas Excel (tidak dikirim ke mana pun).',
+            ],
         };
     }
 
@@ -178,7 +190,7 @@ enum Addon: string
     public function onByDefault(): bool
     {
         return match ($this) {
-            self::ItemAnalysis, self::Remedial, self::Misconception, self::FormDesigner, self::QuizRecap, self::MathFormulas, self::ScienceFormulas, self::ArabicRtl => true,
+            self::ItemAnalysis, self::Remedial, self::Misconception, self::FormDesigner, self::QuizRecap, self::MathFormulas, self::ScienceFormulas, self::ArabicRtl, self::SmartFilter => true,
             // Students could not start an exam without a token: switched on per exam by the teacher.
             self::ExamToken => false,
         };

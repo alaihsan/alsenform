@@ -136,6 +136,8 @@ export type QuizFormPayload = {
         gradingUrl?: string;
         ungradedTotal?: number;
         hasGradableQuestions?: boolean;
+        /** Filter Cerdas add-on on for this exam: the Excel mode's data, fetched when it is opened. */
+        smartFilterUrl?: string | null;
         latest: {
             id: number;
             name?: string | null;

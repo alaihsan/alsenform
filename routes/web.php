@@ -22,6 +22,7 @@ use App\Http\Controllers\QuizRecapController;
 use App\Http\Controllers\QuizResponseController;
 use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\QuizResultController;
+use App\Http\Controllers\SmartFilterController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
 use App\Http\Controllers\UserController;
@@ -97,6 +98,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
         Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
         Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
+        Route::get('forms/{quizForm}/filter-cerdas', SmartFilterController::class)->name('forms.smart-filter');
         Route::get('forms/{quizForm}/progress', ExamProgressController::class)->name('forms.progress');
         Route::get('forms/{quizForm}/exam-token', ExamTokenController::class)->name('forms.exam-token');
         Route::get('forms/{quizForm}/class-map', ClassMapController::class)->name('forms.class-map');

@@ -362,9 +362,11 @@
             }
         });
 
-        /* A part of a page could not be fetched, often a page left open while the server was updated. */
+        /* A part of a page could not be fetched before the page was on screen (often a page from before
+           an update): reload once. Once the app runs, it handles its own parts, without reloading a page
+           a teacher may be typing in. */
         window.addEventListener('vite:preloadError', function (event) {
-            if (reloadOnce() && event.preventDefault) {
+            if (!state.booted && reloadOnce() && event.preventDefault) {
                 event.preventDefault();
             }
         });
