@@ -343,8 +343,22 @@ Di berkas `.env` server, isi `APP_URL=http://falcon.lan:2026` dan biarkan `SESSI
 | `php artisan lan:serve --daemon` | Berjalan di latar belakang |
 | `php artisan lan:status` | Melihat status dan alamat server latar belakang |
 | `php artisan lan:stop` | Menghentikan server |
+| `php artisan lan:check` | Memeriksa mengapa `http://falcon.lan:2026` belum berfungsi, beserta cara memperbaikinya |
 | `php artisan exam:optimize --production` | Menyiapkan cache dan mode produksi sebelum ujian besar |
 | `php artisan exam:submit-expired` | Mengirim jawaban ujian yang waktunya habis tetapi belum terkirim. `lan:serve` menjalankannya tiap menit, dan ujian yang dibuka guru selalu diperiksa dulu, jadi biasanya tidak perlu dijalankan manual |
+
+### Bila alamat baru belum berfungsi
+
+Jalankan `php artisan lan:check` di komputer server. Perintah ini memeriksa satu per satu dan menulis cara memperbaiki setiap tanda ✗:
+
+- **Tampilan**: `public/build` sudah di-build sesuai kode terbaru (`npm run build`).
+- **`public/hot`**: berkas sisa `npm run dev` / `composer dev`. Selama berkas ini ada, setiap halaman mengambil tampilan dari server pengembangan yang sudah mati, sehingga tampil putih (FF-201). `lan:serve` kini menghapusnya sendiri.
+- **`.env`**: `APP_URL`, `LAN_HOST`, `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE`.
+- **Server**: berjalan di port 2026, menjawab di alamat IP-nya, dan tidak ada server lama di port 8000.
+- **Firewall macOS**: tidak memblokir koneksi masuk ke PHP.
+- **Router**: ditanya langsung seperti perangkat siswa bertanya, apakah mengenal `falcon.lan` dan mengarahkannya ke server ini; juga apakah DNS yang dibagikan DHCP mengenalnya.
+
+Yang tidak ikut diperbarui oleh `git pull` (dan harus diubah sendiri): berkas `.env`, hasil build (`npm run build`), `public/hot`, skrip atau pintasan lain yang menjalankan server dengan `--port=8000`, serta pengaturan DNS dan DHCP di router.
 
 Tips untuk hari ujian:
 

@@ -557,6 +557,7 @@ test('lan:serve says which DNS entry the router needs while falcon.lan does not 
         ->toContain('belum aktif')
         ->toContain('Router belum mengenal falcon.lan. Tambahkan DNS statis di router: falcon.lan → 192.168.1.20')
         ->toContain('DHCP Reservation')
+        ->toContain('php artisan lan:check')
         ->toContain('http://192.168.1.20:2026/cek-koneksi')
         ->and($unknown->appUrl())->toBe('http://192.168.1.20:2026');
 

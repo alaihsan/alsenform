@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Actions\SubmitExpiredAttempts;
+use App\Support\DnsLookup;
 use App\Support\PendingMigrations;
 use FilesystemIterator;
 use Illuminate\Console\Command;
@@ -40,6 +41,7 @@ class ServeLanCommand extends Command
                             {--d|daemon : Jalankan server di latar belakang (background mode)}
                             {--stop : Hentikan server yang sedang berjalan di latar belakang}
                             {--status : Periksa status server yang sedang berjalan di latar belakang}
+                            {--check : Periksa semua yang dibutuhkan alamat intranet (http://falcon.lan:2026) beserta cara memperbaikinya}
                             {--no-caffeinate : Jangan aktifkan proteksi anti-sleep macOS}';
 
     /**
@@ -67,6 +69,11 @@ class ServeLanCommand extends Command
     protected array $resolvedHosts = [];
 
     /**
+     * The problems found so far by lan:check.
+     */
+    protected int $checkProblems = 0;
+
+    /**
      * Execute the console command.
      */
     public function handle(): int
@@ -77,6 +84,10 @@ class ServeLanCommand extends Command
 
         if ($this->option('status')) {
             return $this->handleStatus();
+        }
+
+        if ($this->option('check')) {
+            return $this->handleCheck();
         }
 
         $port = (int) $this->option('port');
@@ -131,6 +142,7 @@ class ServeLanCommand extends Command
         }
 
         $this->retireLegacyServer($port);
+        $this->removeStaleViteHotFile();
 
         if ($this->isPortInUse($port, $host)) {
             $resolvedPort = $this->resolveBusyPort($port, $host);
@@ -582,6 +594,364 @@ class ServeLanCommand extends Command
     }
 
     /**
+     * Everything outside the code that keeps the intranet address from working, checked on this
+     * computer and on the school network the way a student's device sees it, with the fix for each.
+     */
+    protected function handleCheck(): int
+    {
+        $port = (int) $this->option('port');
+        $lanHost = $this->lanHost();
+        $interfaces = $this->detectNetworkInterfaces();
+        $serverIp = $interfaces !== [] ? (string) reset($interfaces) : null;
+        $this->checkProblems = 0;
+
+        $this->newLine();
+        $this->output->writeln(' <options=bold>🔎 PEMERIKSAAN ALAMAT INTRANET</> <fg=cyan;options=bold>'.($lanHost !== null ? $this->urlFor($lanHost, $port) : "port {$port}").'</>');
+        $this->newLine();
+
+        $this->output->writeln(' <options=bold>Komputer server</>');
+
+        $commit = trim((string) @shell_exec('git -C '.escapeshellarg(base_path()).' log -1 --format="%h %s" 2>/dev/null'));
+        if ($commit !== '') {
+            $this->checkLine(true, "Kode aplikasi: {$commit}");
+        }
+
+        if (! file_exists($this->manifestPath())) {
+            $this->checkLine(false, 'Tampilan belum di-build (public/build kosong): halaman tidak dapat tampil.', ['Jalankan: npm run build']);
+        } elseif ($this->assetsAreOutdated()) {
+            $this->checkLine(false, 'Tampilan lebih lama daripada kode (setelah git pull): tombol dan perbaikan baru belum muncul.', ['Jalankan: npm run build, lalu jalankan ulang server']);
+        } else {
+            $this->checkLine(true, 'Tampilan sudah di-build sesuai kode terbaru (public/build).');
+        }
+
+        $hotUrl = $this->viteHotUrl();
+        if ($hotUrl !== null) {
+            $this->isListening($hotUrl)
+                ? $this->checkLine(null, "npm run dev sedang berjalan ({$hotUrl}): halaman memakai server pengembangan, bukan hasil build.", ['Untuk ujian, hentikan npm run dev (Ctrl+C) agar halaman memakai hasil build.'])
+                : $this->checkLine(false, "Berkas public/hot tertinggal dari npm run dev: halaman mencari tampilan di {$hotUrl} yang sudah mati, jadi tampil putih atau FF-201.", ['Hapus berkas public/hot (php artisan lan:serve kini menghapusnya otomatis).']);
+        }
+
+        if ($lanHost === null) {
+            $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.lan']);
+        }
+
+        $expectedUrl = $lanHost !== null ? $this->urlFor($lanHost, $port) : null;
+        $appUrl = rtrim((string) config('app.url'), '/');
+        if ($expectedUrl !== null && $appUrl !== $expectedUrl) {
+            $this->checkLine(null, "APP_URL={$appUrl}: belum alamat baru.", ["Ubah di .env: APP_URL={$expectedUrl}"]);
+        } elseif ($expectedUrl !== null) {
+            $this->checkLine(true, "APP_URL={$appUrl}");
+        }
+
+        foreach ($this->sessionCookieWarnings() as $warning) {
+            $this->checkLine(false, $warning);
+        }
+
+        $isServing = false;
+        if (! $this->isPortInUse($port)) {
+            $this->checkLine(false, "Server belum berjalan di port {$port}.", ['Jalankan: php artisan lan:serve']);
+        } elseif (! $this->isAlsenformServer($this->getPortPids($port))) {
+            $this->checkLine(false, "Port {$port} dipakai program lain, bukan Falcon Forms.", ["Hentikan program itu, atau jalankan: php artisan lan:serve --force (menghentikan pemakai port {$port})"]);
+        } else {
+            $isServing = true;
+            $this->checkLine(true, "Server Falcon Forms berjalan di port {$port}.");
+        }
+
+        if ($port !== self::LEGACY_PORT && $this->isPortInUse(self::LEGACY_PORT) && $this->isAlsenformServer($this->getPortPids(self::LEGACY_PORT))) {
+            $this->checkLine(false, 'Server lama masih berjalan di port '.self::LEGACY_PORT.': perangkat yang membuka alamat lama tetap memakainya.', ['Setelah ujian di alamat lama selesai: php artisan lan:stop --port='.self::LEGACY_PORT]);
+        }
+
+        if ($isServing && $serverIp !== null) {
+            $status = $this->httpStatus("http://{$serverIp}:{$port}/up");
+            $status === 200
+                ? $this->checkLine(true, "Server menjawab di http://{$serverIp}:{$port}")
+                : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat pesan galat di terminal lan:serve atau storage/logs/laravel.log']);
+        }
+
+        foreach ($this->firewallProblems() as [$problem, $fix]) {
+            $this->checkLine(false, $problem, [$fix]);
+        }
+
+        $this->newLine();
+        $this->output->writeln(' <options=bold>Jaringan sekolah</>');
+
+        if ($interfaces === []) {
+            $this->checkLine(false, 'Server tidak tersambung ke jaringan mana pun.', ['Sambungkan kabel LAN atau Wi-Fi sekolah.']);
+        } else {
+            $this->checkLine(true, 'IP server: '.implode(', ', array_map(fn (string $label, string $ip): string => "{$ip} ({$label})", array_keys($interfaces), $interfaces)));
+        }
+
+        if ($lanHost !== null && $serverIp !== null) {
+            $routerKnows = $this->checkRouterDns($lanHost, $interfaces, $serverIp);
+            $this->checkDhcpDns($lanHost, $interfaces, $serverIp, $routerKnows);
+
+            $ownAddress = $this->resolveHost($lanHost);
+            if ($ownAddress !== null && in_array($ownAddress, $interfaces, true)) {
+                $status = $isServing ? $this->httpStatus($this->urlFor($lanHost, $port).'/up') : null;
+                $this->checkLine($isServing ? $status === 200 : null, $isServing && $status === 200
+                    ? $this->urlFor($lanHost, $port).' terbuka dari komputer server ini.'
+                    : "Komputer server mengenal {$lanHost} → {$ownAddress}, tetapi halamannya belum terbuka.");
+            } else {
+                $this->checkLine(null, "Komputer server sendiri belum mengenal {$lanHost} (DNS-nya bukan router). Siswa tidak terpengaruh; di komputer ini pakai http://localhost:{$port}.");
+            }
+        }
+
+        $this->newLine();
+        $this->output->writeln(' <options=bold>Di perangkat siswa</> <fg=gray>(tidak bisa diperiksa dari sini)</>');
+        $this->output->writeln('   • Ketik alamat lengkap: <fg=cyan>'.($expectedUrl ?? "http://IP-server:{$port}").'</> (dengan http:// dan port), lalu simpan sebagai bookmark.');
+        $this->output->writeln('   • Matikan "DNS Pribadi" (Android), "DNS aman" di Chrome, VPN, atau iCloud Private Relay: semuanya melewati DNS router.');
+        $this->output->writeln('   • Setelah pengaturan router diubah, matikan lalu nyalakan Wi-Fi perangkat agar jawaban DNS lama terlupa.');
+        if ($serverIp !== null) {
+            $this->output->writeln("   • Alamat IP selalu bisa dipakai sebagai cadangan: <fg=cyan>http://{$serverIp}:{$port}</>");
+        }
+
+        $this->newLine();
+        if ($this->checkProblems === 0) {
+            $this->output->writeln(' <fg=green;options=bold>✓ Tidak ada masalah yang ditemukan di server dan router.</>');
+
+            return self::SUCCESS;
+        }
+
+        $this->output->writeln(" <fg=red;options=bold>✗ {$this->checkProblems} masalah perlu diperbaiki (lihat tanda ✗ di atas).</>");
+
+        return self::FAILURE;
+    }
+
+    /**
+     * One line of the check: passed (true), a problem (false) or worth knowing (null), with its fixes.
+     *
+     * @param  list<string>  $fixes
+     */
+    protected function checkLine(?bool $passed, string $text, array $fixes = []): void
+    {
+        if ($passed === false) {
+            $this->checkProblems++;
+        }
+
+        $mark = match ($passed) {
+            true => '<fg=green>✓</>',
+            false => '<fg=red;options=bold>✗</>',
+            null => '<fg=yellow>⚠</>',
+        };
+        $this->output->writeln("   {$mark} {$text}");
+
+        foreach ($fixes as $fix) {
+            $this->output->writeln("      <fg=yellow>→ {$fix}</>");
+        }
+    }
+
+    /**
+     * Whether the router answers the intranet name with the server's address, asked the way
+     * a student's device asks it.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function checkRouterDns(string $lanHost, array $interfaces, string $serverIp): bool
+    {
+        $gateway = $this->defaultGateway();
+        if ($gateway === null) {
+            $this->checkLine(null, 'Router (default gateway) tidak ditemukan, DNS router tidak dapat diperiksa.');
+
+            return false;
+        }
+
+        $answer = $this->lookupAt($gateway, $lanHost);
+        $addHint = "Tambahkan DNS statis di router: {$lanHost} → {$serverIp}. MikroTik: IP → DNS → Static; OpenWrt: Network → DHCP and DNS → Hostnames; pfSense/OPNsense: DNS Resolver → Host Overrides; router lain: menu Static DNS / Local DNS.";
+
+        $knows = $answer['status'] === DnsLookup::FOUND && array_intersect($answer['addresses'], $interfaces) !== [];
+
+        match (true) {
+            $knows => $this->checkLine(true, "Router {$gateway} mengenal {$lanHost} → ".implode(', ', $answer['addresses'])),
+            $answer['status'] === DnsLookup::FOUND => $this->checkLine(false, "Router {$gateway} mengarahkan {$lanHost} ke ".implode(', ', $answer['addresses']).", bukan ke server ini ({$serverIp}).", ["Ubah DNS statis di router: {$lanHost} → {$serverIp}", 'Atur juga DHCP Reservation (IP tetap) untuk server ini agar tidak berubah lagi.']),
+            $answer['status'] === DnsLookup::UNKNOWN => $this->checkLine(false, "Router {$gateway} belum mengenal {$lanHost}: perangkat siswa tidak bisa membuka alamat ini.", [$addHint, 'Atur juga DHCP Reservation (IP tetap) untuk server ini.', 'Modem bawaan penyedia internet sering tidak punya menu DNS statis: pakai router sendiri (misalnya MikroTik) di belakangnya, atau bagikan alamat IP ke siswa.']),
+            $answer['status'] === DnsLookup::REFUSED => $this->checkLine(false, "Router {$gateway} menolak menjawab DNS untuk perangkat lain.", ['MikroTik: IP → DNS → centang "Allow Remote Requests" (tutup port 53 dari internet di firewall).', $addHint]),
+            default => $this->checkLine(null, "Router {$gateway} tidak menjawab DNS: DNS jaringan ini dijalankan perangkat lain.", ["Pasang DNS statis {$lanHost} → {$serverIp} di server DNS yang dibagikan DHCP (lihat baris berikut)."]),
+        };
+
+        return $knows;
+    }
+
+    /**
+     * Whether the DNS servers this computer got from the network know the intranet name: devices
+     * on the same Wi-Fi usually get the same ones from DHCP.
+     *
+     * @param  array<string, string>  $interfaces
+     */
+    protected function checkDhcpDns(string $lanHost, array $interfaces, string $serverIp, bool $routerKnows): void
+    {
+        $servers = array_slice($this->dnsServers(), 0, 3);
+        if ($servers === []) {
+            return;
+        }
+
+        $knowing = array_values(array_filter($servers, function (string $server) use ($lanHost, $interfaces): bool {
+            $answer = $this->lookupAt($server, $lanHost);
+
+            return $answer['status'] === DnsLookup::FOUND && array_intersect($answer['addresses'], $interfaces) !== [];
+        }));
+
+        if ($knowing !== []) {
+            $this->checkLine(true, 'DNS yang dibagikan jaringan ('.implode(', ', $servers).") mengenal {$lanHost}.");
+
+            return;
+        }
+
+        $this->checkLine(false, 'DNS yang dipakai komputer ini ('.implode(', ', $servers).") tidak mengenal {$lanHost}. Perangkat siswa yang mendapat DNS yang sama dari DHCP juga tidak bisa membukanya.", [
+            $routerKnows
+                ? 'Di pengaturan DHCP router, isi DNS server dengan '.$this->defaultGateway().', bukan 8.8.8.8 atau DNS penyedia internet.'
+                : "Pasang DNS statis {$lanHost} → {$serverIp} di router, lalu di pengaturan DHCP router isi DNS server dengan IP router itu.",
+            'Bila DNS komputer server ini diatur manual, abaikan baris ini untuk server; pastikan saja DHCP membagikan DNS router ke perangkat siswa.',
+        ]);
+    }
+
+    /**
+     * The default gateway, usually the school router.
+     */
+    protected function defaultGateway(): ?string
+    {
+        $output = PHP_OS_FAMILY === 'Darwin'
+            ? (string) @shell_exec('route -n get default 2>/dev/null')
+            : (string) @shell_exec('ip -4 route show default 2>/dev/null');
+
+        if (preg_match('/(?:gateway:\s*|default via\s+)(\d+\.\d+\.\d+\.\d+)/', $output, $matches)) {
+            return $matches[1];
+        }
+
+        // Linux without the "ip" tool: the kernel's table, addresses in little-endian hex.
+        foreach (@file('/proc/net/route') ?: [] as $line) {
+            $columns = preg_split('/\s+/', trim($line)) ?: [];
+            if (($columns[1] ?? '') === '00000000' && preg_match('/^[0-9A-F]{8}$/i', $columns[2] ?? '') && $columns[2] !== '00000000') {
+                return implode('.', array_reverse(array_map('hexdec', str_split($columns[2], 2))));
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The DNS servers this computer uses (loopback resolvers left out).
+     *
+     * @return list<string>
+     */
+    protected function dnsServers(): array
+    {
+        $output = PHP_OS_FAMILY === 'Darwin'
+            ? (string) @shell_exec('scutil --dns 2>/dev/null')
+            : (string) @file_get_contents('/etc/resolv.conf');
+
+        preg_match_all('/nameserver(?:\[\d+\])?\s*:?\s*(\d+\.\d+\.\d+\.\d+)/', $output, $matches);
+
+        return array_values(array_unique(array_filter($matches[1], fn (string $ip): bool => ! str_starts_with($ip, '127.'))));
+    }
+
+    /**
+     * @return array{status: string, addresses: list<string>}
+     */
+    protected function lookupAt(string $server, string $name): array
+    {
+        return app(DnsLookup::class)->query($server, $name);
+    }
+
+    /**
+     * The HTTP status of a page of this server, or null when it does not answer.
+     */
+    protected function httpStatus(string $url): ?int
+    {
+        $context = stream_context_create(['http' => ['timeout' => 5, 'ignore_errors' => true, 'header' => "Connection: close\r\n"]]);
+        $http_response_header = null;
+        @file_get_contents($url, false, $context);
+        $headers = function_exists('http_get_last_response_headers') ? http_get_last_response_headers() : $http_response_header;
+
+        return is_array($headers) && isset($headers[0]) && preg_match('/^HTTP\/\S+\s+(\d{3})/', $headers[0], $matches) ? (int) $matches[1] : null;
+    }
+
+    /**
+     * What the macOS firewall blocks of the server, with the fix for each.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    protected function firewallProblems(): array
+    {
+        $tool = '/usr/libexec/ApplicationFirewall/socketfilterfw';
+        if (PHP_OS_FAMILY !== 'Darwin' || ! is_file($tool)) {
+            return [];
+        }
+
+        if (! preg_match('/enabled/i', (string) @shell_exec("{$tool} --getglobalstate 2>/dev/null"))) {
+            return [];
+        }
+
+        $problems = [];
+        if (preg_match('/block all[^\n]*\benabled\b/i', (string) @shell_exec("{$tool} --getblockall 2>/dev/null"))) {
+            $problems[] = ['Firewall macOS memblokir semua koneksi masuk: perangkat siswa tidak dapat terhubung.', 'System Settings → Network → Firewall → Options: matikan "Block all incoming connections".'];
+        }
+
+        $php = realpath(PHP_BINARY) ?: PHP_BINARY;
+        $state = (string) @shell_exec("{$tool} --getappblocked ".escapeshellarg($php).' 2>/dev/null');
+        if (preg_match('/\bblocked\b/i', $state) && ! preg_match('/permitted|allowed|not blocked|not part/i', $state)) {
+            $problems[] = ["Firewall macOS memblokir PHP ({$php}): perangkat siswa tidak dapat terhubung.", 'System Settings → Network → Firewall → Options: ubah php menjadi "Allow incoming connections".'];
+        }
+
+        return $problems;
+    }
+
+    /**
+     * The address of the Vite development server written to public/hot by "npm run dev", if any.
+     */
+    protected function viteHotUrl(): ?string
+    {
+        $file = $this->viteHotFile();
+
+        return is_file($file) ? (trim((string) file_get_contents($file)) ?: null) : null;
+    }
+
+    protected function viteHotFile(): string
+    {
+        return public_path('hot');
+    }
+
+    /**
+     * Whether something accepts connections at the host and port of a URL.
+     */
+    protected function isListening(string $url): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        $port = parse_url($url, PHP_URL_PORT) ?? 80;
+        if (! is_string($host) || $host === '') {
+            return false;
+        }
+
+        $connection = @stream_socket_client("tcp://{$host}:{$port}", $errorCode, $errorMessage, 1.0);
+        if ($connection === false) {
+            return false;
+        }
+        fclose($connection);
+
+        return true;
+    }
+
+    /**
+     * public/hot left behind by "npm run dev" makes every page fetch its scripts from a development
+     * server that no longer runs: blank pages (FF-201) for everyone. Removed before serving.
+     */
+    protected function removeStaleViteHotFile(): void
+    {
+        $hotUrl = $this->viteHotUrl();
+        if ($hotUrl === null) {
+            return;
+        }
+
+        if ($this->isListening($hotUrl)) {
+            $this->warn("⚠️  npm run dev masih berjalan ({$hotUrl}): halaman siswa memakai server pengembangan. Untuk ujian, hentikan npm run dev agar halaman memakai hasil build.");
+
+            return;
+        }
+
+        @unlink($this->viteHotFile());
+        $this->info('✓ Berkas public/hot (sisa npm run dev) dihapus: halaman memakai tampilan hasil build.');
+    }
+
+    /**
      * Check status of the background daemon server.
      */
     protected function handleStatus(): int
@@ -767,6 +1137,7 @@ class ServeLanCommand extends Command
             ? "{$indent}      <fg=yellow>⚠️  {$lanHost} masih mengarah ke {$address}, bukan ke server ini. Ubah DNS statisnya di router: {$lanHost} → {$serverIp}</>"
             : "{$indent}      <fg=yellow>⚠️  Router belum mengenal {$lanHost}. Tambahkan DNS statis di router: {$lanHost} → {$serverIp}</>");
         $this->output->writeln("{$indent}      <fg=gray>Atur juga DHCP Reservation (IP tetap) untuk server ini. Sampai saat itu, pakai alamat IP di bawah.</>");
+        $this->output->writeln("{$indent}      <fg=gray>Pemeriksaan lengkap beserta cara memperbaikinya:</> <fg=yellow>php artisan lan:check</>");
     }
 
     /**
