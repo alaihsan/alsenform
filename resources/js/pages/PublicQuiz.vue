@@ -546,7 +546,12 @@ const getRespondentIdentifier = () => {
     let id = localStorage.getItem(`respondent_id_${props.quizForm.id}`);
     if (!id) {
         id = 'resp_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
-        localStorage.setItem(`respondent_id_${props.quizForm.id}`, id);
+        // A shared tablet's storage can be full of earlier students' drafts: the exam must still open.
+        try {
+            localStorage.setItem(`respondent_id_${props.quizForm.id}`, id);
+        } catch {
+            // Kept for this page only.
+        }
     }
     return id;
 };
@@ -995,7 +1000,11 @@ const startCountdown = () => {
         let startTime = localStorage.getItem(`form_start_time_${props.quizForm.id}`);
         if (!startTime) {
             startTime = Date.now().toString();
-            localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
+            try {
+                localStorage.setItem(`form_start_time_${props.quizForm.id}`, startTime);
+            } catch {
+                // Storage full: the time is counted from this page.
+            }
         }
         endTime = parseInt(startTime) + timeLimit * 60 * 1000;
     }

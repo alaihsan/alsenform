@@ -38,6 +38,7 @@ import {
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
+import { copyText } from '@/lib/clipboard';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { FORMULA_PALETTES } from '@/lib/formulas';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
@@ -1750,12 +1751,7 @@ const handleImportExamViewFile = async (event: Event) => {
 };
 
 const copyShareUrl = async () => {
-    try {
-        await navigator.clipboard.writeText(shareUrl.value);
-        markChanged('Tautan disalin');
-    } catch {
-        markChanged(shareUrl.value);
-    }
+    markChanged((await copyText(shareUrl.value)) ? 'Tautan disalin' : shareUrl.value);
 };
 
 // Toast Notification State

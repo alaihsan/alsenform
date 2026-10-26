@@ -67,13 +67,20 @@ enum PageFailure: string
                 'Tunggu sebentar lalu tekan Muat ulang.',
                 'Bila tetap muncul, minta admin menjalankan "npm run build" di server, lalu menyalakan ulang server.',
             ],
-            self::StartError, self::RenderError => [
+            self::StartError => [
                 'Tekan Muat ulang.',
-                'Bila tetap muncul, tutup tab ini dan buka alamatnya lagi, atau coba browser lain (Chrome).',
+                'Bila tetap muncul, perbarui browser (Chrome lewat Play Store, Safari lewat Pembaruan Perangkat Lunak) atau buka alamat ini di Chrome versi terbaru.',
+                'Masih muncul? Tutup aplikasi lain lalu buka lagi; di tablet bersama, hapus data situs ini di pengaturan browser (jawaban yang sudah tersimpan tetap aman di server).',
+            ],
+            self::RenderError => [
+                'Tekan Muat ulang.',
+                'Bila tetap muncul, matikan pemblokir iklan, mode hemat data, atau ekstensi browser untuk alamat ini, lalu muat ulang.',
+                'Masih muncul? Coba browser lain (Chrome terbaru) dan sebutkan pesan di kotak abu-abu di bawah kepada guru atau admin.',
             ],
             self::SlowLoad => [
-                'Tunggu sebentar, atau tekan Muat ulang.',
-                'Bila sering terjadi, dekatkan perangkat ke router atau buka Cek Koneksi.',
+                'Tunggu: pesan ini hilang sendiri begitu halaman tampil.',
+                'Bila lebih dari satu menit, tekan Muat ulang.',
+                'Bila sering terjadi, dekatkan perangkat ke router (pilih Wi-Fi 5 GHz bila ada), lalu buka Cek Koneksi.',
             ],
         };
     }

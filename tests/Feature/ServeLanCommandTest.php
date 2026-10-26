@@ -36,18 +36,10 @@ test('lan:serve detectNetworkInterfaces returns array', function () {
         {
             return $this->detectNetworkInterfaces();
         }
-
-        public function testHostName(): ?string
-        {
-            return $this->detectLocalHostName();
-        }
     };
 
     $interfaces = $command->testInterfaces();
     expect($interfaces)->toBeArray();
-
-    $hostname = $command->testHostName();
-    expect($hostname === null || is_string($hostname))->toBeTrue();
 });
 
 test('lan:serve port utility methods work correctly', function () {
@@ -132,6 +124,49 @@ test('lan:stop stops an alsenform server that has no background metadata', funct
             ->and($command->isPortInUse($port))->toBeFalse();
     } finally {
         $server->stop(0);
+    }
+});
+
+test('lan:stop --port stops the server on that port, not the background server next to it', function () {
+    $backgroundPort = 59143;
+    $oldPort = 59144;
+    $background = startLanTestServer($backgroundPort, [base_path('server.php')]);
+    $old = startLanTestServer($oldPort, [base_path('server.php')]);
+    $infoFile = storage_path('framework/testing/lan_server_background.json');
+    File::ensureDirectoryExists(dirname($infoFile));
+    file_put_contents($infoFile, json_encode(['pid' => $background->getPid(), 'port' => $backgroundPort]));
+
+    try {
+        $command = new class($infoFile) extends ServeLanCommand
+        {
+            public function __construct(protected string $infoFile)
+            {
+                parent::__construct();
+            }
+
+            protected function infoFilePath(): string
+            {
+                return $this->infoFile;
+            }
+
+            public function stop(): int
+            {
+                return $this->handleStop();
+            }
+        };
+        $command->setInput(new ArrayInput(['--port' => (string) $oldPort], $command->getDefinition()));
+        $buffer = new BufferedOutput;
+        $command->setOutput(new OutputStyle(new ArrayInput([]), $buffer));
+
+        expect($command->stop())->toBe(0)
+            ->and($buffer->fetch())->toContain("Server Falcon Forms pada port {$oldPort} telah dihentikan")
+            ->and($command->isPortInUse($oldPort))->toBeFalse()
+            ->and($command->isPortInUse($backgroundPort))->toBeTrue()
+            ->and(file_exists($infoFile))->toBeTrue();
+    } finally {
+        @unlink($infoFile);
+        $background->stop(0);
+        $old->stop(0);
     }
 });
 
@@ -465,7 +500,7 @@ function lanServeWithDns(array $dns): ServeLanCommand
 
         public function banner(): void
         {
-            $this->outputBanner(['Wi-Fi (en0)' => '192.168.1.20'], null, self::DEFAULT_PORT, 24, false);
+            $this->outputBanner(['Wi-Fi (en0)' => '192.168.1.20'], self::DEFAULT_PORT, 24, false);
         }
 
         public function appUrl(string $host = '0.0.0.0'): ?string
@@ -507,6 +542,8 @@ test('falcon.lan is the address students use once the router points it at the se
         ->toContain('http://falcon.lan:2026/cek-koneksi')
         ->not->toContain('belum aktif')
         ->not->toContain('alsenform.test')
+        ->not->toContain('.local')
+        ->not->toContain(':8000')
         ->and($command->appUrl())->toBe('http://falcon.lan:2026')
         ->and($command->appUrl('192.168.1.20'))->toBe('http://falcon.lan:2026');
 });
@@ -553,4 +590,107 @@ test('another intranet name can be set with LAN_HOST, or none', function () {
     $none->banner();
     expect(lanOutput($none))->not->toContain('alamat intranet')->toContain('http://192.168.1.20:2026')
         ->and($none->appUrl())->toBe('http://192.168.1.20:2026');
+});
+
+test('lan:serve warns about session cookie settings that stop logins over http://falcon.lan', function () {
+    config(['session.domain' => 'alsenform.local', 'session.secure' => true]);
+    $command = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+    $command->banner();
+
+    expect(lanOutput($command))
+        ->toContain('SESSION_DOMAIN=alsenform.local di .env')
+        ->toContain('SESSION_SECURE_COOKIE=true di .env');
+
+    config(['session.domain' => null, 'session.secure' => null]);
+    $fine = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+    $fine->banner();
+
+    expect(lanOutput($fine))->not->toContain('SESSION_');
+});
+
+/**
+ * A lan:serve that finds a server on the old port 8000: one of its own, or another program.
+ */
+function lanServeWithLegacyServer(bool $isFalconServer, bool $interactive, string $answer = 'yes'): ServeLanCommand
+{
+    $command = new class($isFalconServer) extends ServeLanCommand
+    {
+        /** @var list<int> */
+        public array $stoppedPorts = [];
+
+        public function __construct(protected bool $isFalconServer)
+        {
+            parent::__construct();
+        }
+
+        public function isPortInUse(int $port, string $host = '127.0.0.1'): bool
+        {
+            return $port === self::LEGACY_PORT && ! in_array($port, $this->stoppedPorts, true);
+        }
+
+        public function getPortPids(int $port): array
+        {
+            return ['3001'];
+        }
+
+        protected function isAlsenformServer(array $pids): bool
+        {
+            return $this->isFalconServer;
+        }
+
+        public function killPortProcesses(int $port): bool
+        {
+            $this->stoppedPorts[] = $port;
+
+            return true;
+        }
+
+        public function retire(int $port = self::DEFAULT_PORT): void
+        {
+            $this->retireLegacyServer($port);
+        }
+    };
+
+    $input = new ArrayInput([], $command->getDefinition());
+    $input->setInteractive($interactive);
+    $answers = fopen('php://memory', 'r+');
+    fwrite($answers, "{$answer}\n");
+    rewind($answers);
+    $input->setStream($answers);
+
+    $command->setInput($input);
+    $command->setOutput(new OutputStyle($input, new BufferedOutput));
+
+    return $command;
+}
+
+test('lan:serve stops its own server left on the old port 8000 when the operator agrees', function () {
+    $command = lanServeWithLegacyServer(isFalconServer: true, interactive: true);
+    $command->retire();
+
+    expect($command->stoppedPorts)->toBe([8000])
+        ->and(lanOutput($command))
+        ->toContain('Server Falcon Forms lama masih berjalan di port 8000')
+        ->toContain('Server lama di port 8000 dihentikan');
+});
+
+test('lan:serve leaves the old server running when declined or unattended, with the command to stop it', function (bool $interactive) {
+    $command = lanServeWithLegacyServer(isFalconServer: true, interactive: $interactive, answer: 'no');
+    $command->retire();
+
+    expect($command->stoppedPorts)->toBe([])
+        ->and(lanOutput($command))->toContain('php artisan lan:stop --port=8000');
+})->with(['declined' => true, 'unattended' => false]);
+
+test('lan:serve never touches another program on port 8000, nor a server asked to run there', function () {
+    $other = lanServeWithLegacyServer(isFalconServer: false, interactive: true);
+    $other->retire();
+
+    $onLegacyPort = lanServeWithLegacyServer(isFalconServer: true, interactive: true);
+    $onLegacyPort->retire(8000);
+
+    expect($other->stoppedPorts)->toBe([])
+        ->and(lanOutput($other))->toBe('')
+        ->and($onLegacyPort->stoppedPorts)->toBe([])
+        ->and(lanOutput($onLegacyPort))->toBe('');
 });

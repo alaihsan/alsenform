@@ -176,7 +176,9 @@ Perintah `php artisan lan:serve` menyiapkan semuanya untuk hari ujian:
 
 - Menjalankan server dengan banyak worker (bawaan 24) supaya siswa yang mengirim jawaban bersamaan tidak mengantre.
 - Berjalan di port **2026** dengan alamat intranet **`http://falcon.lan:2026`**. Saat menyala, perintah ini memeriksa apakah DNS router sudah mengarahkan `falcon.lan` ke server; bila belum (atau masih ke IP lama), ia menuliskan entri DNS yang perlu ditambahkan di router.
-- Menampilkan juga alamat IP untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN), termasuk nama Bonjour/mDNS untuk perangkat Apple.
+- Menampilkan juga alamat IP untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN) sebagai cadangan. Nama berakhiran `.local` (misalnya `alsenform.local`) tidak dipakai lagi.
+- Bila server Falcon Forms lama masih berjalan di port 8000 (alamat lama seperti `http://alsenform.local:8000`), perintah ini menawarkan untuk menghentikannya, supaya siswa tidak tertinggal di alamat lama.
+- Memperingatkan pengaturan `.env` yang membuat login gagal (419) lewat `http://falcon.lan:2026`: `SESSION_DOMAIN` yang terisi dan `SESSION_SECURE_COOKIE=true`.
 - Di macOS, mencegah komputer tertidur selama server berjalan (caffeinate).
 - Memberi tahu alamat baru kalau IP server berubah di tengah ujian.
 - Memperbarui database dan cache secara otomatis setelah aplikasi di-update.
@@ -329,7 +331,9 @@ Nama `falcon.lan` dijawab oleh DNS router, jadi router perlu diberi tahu sekali:
 2. Tambahkan **DNS statis** di router: `falcon.lan` → `192.168.1.10`. Letaknya tergantung merek router, misalnya MikroTik: *IP → DNS → Static*; OpenWrt: *Network → DHCP and DNS → Hostnames*; pfSense/OPNsense: *Services → DNS Resolver → Host Overrides*; banyak router rumahan: *LAN → DHCP/DNS → Static DNS* atau *Local DNS*.
 3. Jalankan `php artisan lan:serve`. Bila DNS sudah benar, layar menulis `http://falcon.lan:2026 (alamat intranet → 192.168.1.10)`; bila belum, layar menulis entri DNS yang masih perlu ditambahkan.
 
-Perangkat harus memakai DNS dari router (bawaan Wi-Fi sekolah). Perangkat yang memakai DNS lain (misalnya 8.8.8.8 atau "DNS Pribadi" di Android) tidak mengenal `falcon.lan` dan tetap bisa memakai alamat IP. Nama lain bisa dipakai dengan `LAN_HOST` di berkas `.env` (misalnya `LAN_HOST=ujian.sekolah.lan`); kosongkan untuk hanya menampilkan alamat IP.
+Perangkat harus memakai DNS dari router (bawaan Wi-Fi sekolah). Perangkat yang memakai DNS lain (misalnya 8.8.8.8, "DNS Pribadi" di Android, "DNS aman" di Chrome yang diatur ke Google/Cloudflare, VPN, atau iCloud Private Relay) tidak mengenal `falcon.lan` dan tetap bisa memakai alamat IP. Nama lain bisa dipakai dengan `LAN_HOST` di berkas `.env` (misalnya `LAN_HOST=ujian.sekolah.lan`); kosongkan untuk hanya menampilkan alamat IP.
+
+Di berkas `.env` server, isi `APP_URL=http://falcon.lan:2026` dan biarkan `SESSION_DOMAIN=null`. Ketik alamatnya lengkap dengan `http://` dan port saat pertama kali (`http://falcon.lan:2026`), lalu simpan sebagai bookmark; tanpa itu sebagian browser menganggap `falcon.lan` sebagai kata pencarian. Data yang disimpan browser (draf jawaban di perangkat, filter, pilihan tampilan) terikat pada alamat, jadi pindah alamat sebaiknya tidak di tengah ujian; jawaban yang sudah tersimpan di server tetap aman.
 
 | Perintah | Fungsi |
 | --- | --- |
@@ -378,6 +382,43 @@ Bila halaman tidak dapat ditampilkan, layar menunjukkan salah satu kode berikut,
 | FF-301 | Galat di browser saat membuka halaman | Muat ulang; pesan galat di layar dan di Laporan menunjukkan penyebabnya |
 | FF-302 | Galat di browser yang mengosongkan halaman setelah terbuka | Muat ulang |
 | FF-401 | Halaman belum tampil setelah 20 detik (jaringan sangat lambat) | Tunggu (pesan hilang sendiri begitu halaman tampil) atau muat ulang |
+
+### Menangani FF-301 dan FF-302
+
+Keduanya berarti JavaScript halaman berhenti karena galat di browser: FF-301 saat halaman baru dibuka, FF-302 setelah halaman sempat tampil. Panelnya menampilkan pesan galat di kotak abu-abu, dan pesan yang sama tercatat di **Laporan Aktivitas** (aktivitas "Halaman gagal dimuat") beserta perangkat, browser, halaman, dan waktunya.
+
+1. Di perangkat: tekan **Muat ulang**. Bila hilang, penyebabnya sesaat (memori perangkat penuh, koneksi putus di tengah).
+2. Bila muncul lagi, buka Laporan Aktivitas lalu cari polanya:
+   - **Banyak perangkat dengan browser yang sama** (misalnya Safari iOS lama atau WebView Android lama): browser itu kurang lengkap. Perbarui browser atau pakai Chrome terbaru.
+   - **Semua perangkat, satu halaman yang sama**: galat di halaman itu. Kirimkan kode, alamat halaman, dan pesan galatnya ke pengembang.
+   - **Hanya satu perangkat**: penyebabnya di perangkat itu. Matikan pemblokir iklan, mode hemat data, atau ekstensi untuk alamat ini, tutup aplikasi lain, atau coba browser lain.
+3. Arti pesan yang sering muncul:
+   - `QuotaExceededError`: penyimpanan browser penuh, biasanya di tablet yang dipakai bergantian. Hapus data situs `falcon.lan` di pengaturan browser setelah ujian.
+   - `insertBefore`, `removeChild`, atau `not a child of this node`: isi halaman diubah dari luar oleh terjemahan otomatis atau ekstensi. Terjemahan kini dimatikan untuk semua halaman; sisanya biasanya ekstensi.
+   - `SyntaxError` atau `is not a function`: browser terlalu lama untuk sebagian kode. Perbarui browser.
+   - `Failed to fetch dynamically imported module` atau `Importing a module script failed`: berkas tampilan gagal diunduh, biasanya saat aplikasi sedang diperbarui. Jalankan `npm run build`, nyalakan ulang server, lalu muat ulang.
+
+Pencegahan:
+
+- Perbarui aplikasi di luar jam ujian, lalu jalankan `npm run build` dan nyalakan ulang server sebelum siswa membuka halaman.
+- Sehari sebelum ujian, buka halaman ujian dan **Cek Koneksi** sekali di setiap jenis perangkat siswa (tablet sekolah, HP Android, iPad). Galat yang muncul langsung terlihat di Laporan Aktivitas.
+- Pastikan browser perangkat sekolah diperbarui otomatis (Chrome lewat Play Store, Safari lewat pembaruan iOS), dan jangan pasang pemblokir iklan atau ekstensi di perangkat ujian.
+- Di tablet yang dipakai bergantian, hapus data situs secara berkala (misalnya tiap akhir semester). Draf jawaban terhapus sendiri setelah dikirim, tetapi ujian yang ditinggalkan tetap menyimpan drafnya.
+
+### Menangani FF-401
+
+FF-401 berarti halaman belum tampil setelah 20 detik. Pesannya hilang sendiri begitu halaman selesai dimuat, jadi biasanya cukup menunggu.
+
+1. **Hanya satu atau dua perangkat**: sinyal Wi-Fi perangkat itu lemah. Buka **Cek Koneksi** di perangkat tersebut; dekatkan ke router, pilih Wi-Fi 5 GHz, atau matikan VPN, proxy, dan "DNS Pribadi".
+2. **Banyak perangkat sekaligus, biasanya saat ujian dimulai**: server atau access point kewalahan. Lihat terminal `lan:serve` (peringatan server lewat Wi-Fi saja atau AirDrop/Handoff aktif), dan bandingkan waktu kejadian di Laporan Aktivitas dengan jumlah siswa yang membuka halaman bersamaan.
+3. Bila hasil Cek Koneksi menunjukkan waktu server yang tinggi, server sedang sibuk. Jalankan `php artisan exam:optimize --production` sebelum ujian berikutnya, dan tambah `--workers` bila peserta lebih dari 200.
+
+Pencegahan:
+
+- Sambungkan server ke router atau access point dengan **kabel LAN**, matikan AirDrop dan Handoff di Mac server, dan atur DHCP Reservation agar IP-nya tetap.
+- Sediakan access point yang cukup: kira-kira satu access point untuk 30–40 perangkat, dengan Wi-Fi 5 GHz untuk siswa.
+- Minta siswa membuka halaman ujian 5–10 menit sebelum mulai. Pembukaan pertama mengunduh sekitar 330 KB; pembukaan berikutnya hanya sekitar 20 KB karena sisanya dari cache, jadi tidak semua perangkat mengunduh penuh pada detik yang sama.
+- Selama ujian, jangan jalankan pekerjaan berat di server (build, unggah video besar, cadangan Time Machine), dan jangan perbarui aplikasi.
 
 ---
 

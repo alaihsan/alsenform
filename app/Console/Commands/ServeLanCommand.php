@@ -21,6 +21,11 @@ class ServeLanCommand extends Command
     public const DEFAULT_PORT = 2026;
 
     /**
+     * The port of the address used before, such as http://alsenform.local:8000.
+     */
+    public const LEGACY_PORT = 8000;
+
+    /**
      * The name and signature of the console command.
      *
      * @var string
@@ -125,6 +130,8 @@ class ServeLanCommand extends Command
             }
         }
 
+        $this->retireLegacyServer($port);
+
         if ($this->isPortInUse($port, $host)) {
             $resolvedPort = $this->resolveBusyPort($port, $host);
             if ($resolvedPort === null) {
@@ -134,15 +141,14 @@ class ServeLanCommand extends Command
         }
 
         $interfaces = $this->detectNetworkInterfaces();
-        $hostname = $this->detectLocalHostName();
 
         if ($this->option('daemon')) {
-            return $this->handleDaemon($port, $host, $workers, $interfaces, $hostname);
+            return $this->handleDaemon($port, $host, $workers, $interfaces);
         }
 
         $useCaffeinate = ! $this->option('no-caffeinate') && file_exists('/usr/bin/caffeinate');
 
-        $this->outputBanner($interfaces, $hostname, $port, $workers, $useCaffeinate);
+        $this->outputBanner($interfaces, $port, $workers, $useCaffeinate);
 
         // Run PHP development server on 0.0.0.0 with multi-worker support and Anti-Sleep
         $serverScript = base_path('server.php');
@@ -426,7 +432,7 @@ class ServeLanCommand extends Command
      *
      * @param  array<string, string>  $interfaces
      */
-    protected function handleDaemon(int $port, string $host, int $workers, array $interfaces, ?string $hostname): int
+    protected function handleDaemon(int $port, string $host, int $workers, array $interfaces): int
     {
         $logPath = storage_path('logs/lan_server.log');
         $infoFile = $this->infoFilePath();
@@ -506,7 +512,7 @@ class ServeLanCommand extends Command
         $data['pid'] = $activePid;
         file_put_contents($infoFile, json_encode($data, JSON_PRETTY_PRINT));
 
-        $this->outputDaemonBanner($interfaces, $hostname, $port, $workers, $activePid, $useCaffeinate, $logPath);
+        $this->outputDaemonBanner($interfaces, $port, $workers, $activePid, $useCaffeinate, $logPath);
 
         return self::SUCCESS;
     }
@@ -518,8 +524,12 @@ class ServeLanCommand extends Command
     {
         $infoFile = $this->infoFilePath();
         $port = (int) $this->option('port');
+        $data = file_exists($infoFile) ? json_decode((string) file_get_contents($infoFile), true) : null;
+        $serverPort = (int) ($data['port'] ?? $port);
 
-        if (! file_exists($infoFile)) {
+        // No background server, or another port in use next to it (such as a server left on the old
+        // port 8000): stop what runs on the port asked for, never the background server.
+        if (! is_array($data) || ($port !== $serverPort && $this->isPortInUse($port))) {
             if (! $this->isPortInUse($port)) {
                 $this->info('ℹ️  Tidak ada server latar belakang yang sedang aktif.');
 
@@ -548,9 +558,7 @@ class ServeLanCommand extends Command
             return self::SUCCESS;
         }
 
-        $data = json_decode((string) file_get_contents($infoFile), true);
         $pid = (int) ($data['pid'] ?? 0);
-        $serverPort = (int) ($data['port'] ?? $port);
 
         if ($pid > 0) {
             @shell_exec("kill -TERM {$pid} 2>/dev/null");
@@ -1044,19 +1052,6 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * Detect Bonjour/mDNS local hostname.
-     */
-    protected function detectLocalHostName(): ?string
-    {
-        $name = trim((string) @shell_exec('scutil --get LocalHostName 2>/dev/null'));
-        if (! $name) {
-            $name = trim((string) @gethostname());
-        }
-
-        return $name ? "{$name}.local" : null;
-    }
-
-    /**
      * Where to check a slow device, and the server's network set-ups that make pages slow.
      *
      * @param  array<string, string>  $interfaces
@@ -1069,7 +1064,7 @@ class ServeLanCommand extends Command
             : 'http://'.($interfaces !== [] ? reset($interfaces) : 'localhost').":{$port}";
         $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>{$baseUrl}/cek-koneksi</> di perangkat itu.");
 
-        foreach ($this->networkWarnings($interfaces) as $warning) {
+        foreach ([...$this->networkWarnings($interfaces), ...$this->sessionCookieWarnings()] as $warning) {
             $this->output->writeln(" <fg=yellow;options=bold>⚠️  {$warning}</>");
         }
 
@@ -1100,6 +1095,72 @@ class ServeLanCommand extends Command
     }
 
     /**
+     * Session cookie settings that stop logins over http://falcon.lan:2026 and the IP addresses:
+     * the browser drops the cookie, and every login or form ends in "419 Page Expired".
+     *
+     * @return list<string>
+     */
+    protected function sessionCookieWarnings(): array
+    {
+        $warnings = [];
+        $domain = trim((string) config('session.domain'));
+
+        if ($domain !== '') {
+            $warnings[] = "SESSION_DOMAIN={$domain} di .env: browser menolak cookie login di alamat lain (falcon.lan, alamat IP), jadi login gagal (419). Kosongkan baris itu (SESSION_DOMAIN=null) lalu jalankan ulang server.";
+        }
+
+        if (config('session.secure') === true) {
+            $warnings[] = 'SESSION_SECURE_COOKIE=true di .env: cookie login hanya dikirim lewat HTTPS, padahal server ini memakai http://, jadi login gagal (419). Ubah menjadi SESSION_SECURE_COOKIE=false lalu jalankan ulang server.';
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * A Falcon Forms server still running on the old port keeps the old address alive, and students
+     * would carry on there. It is stopped when the operator agrees (an exam may still be running
+     * on it); unattended or declined, the command to stop it later is shown.
+     */
+    protected function retireLegacyServer(int $port): void
+    {
+        if ($port === self::LEGACY_PORT || ! $this->isPortInUse(self::LEGACY_PORT)) {
+            return;
+        }
+
+        $pids = $this->getPortPids(self::LEGACY_PORT);
+        if (! $this->isAlsenformServer($pids)) {
+            return;
+        }
+
+        $legacyPort = self::LEGACY_PORT;
+        $this->warn("⚠️  Server Falcon Forms lama masih berjalan di port {$legacyPort} (alamat lama, misalnya http://alsenform.local:{$legacyPort}).");
+
+        $shouldStop = $this->option('force')
+            || ($this->input->isInteractive() && $this->confirm("Hentikan server lama itu sekarang? Siswa yang masih membukanya perlu pindah ke alamat baru (port {$port}).", true));
+
+        if (! $shouldStop) {
+            $this->line("   Server lama dibiarkan berjalan. Setelah ujian di alamat lama selesai, hentikan dengan: <fg=yellow>php artisan lan:stop --port={$legacyPort}</>");
+
+            return;
+        }
+
+        if (! $this->killPortProcesses(self::LEGACY_PORT)) {
+            $this->error("Gagal menghentikan server lama di port {$legacyPort}.");
+            $this->explainBusyPort(self::LEGACY_PORT, $pids);
+
+            return;
+        }
+
+        $infoFile = $this->infoFilePath();
+        $info = is_file($infoFile) ? json_decode((string) file_get_contents($infoFile), true) : null;
+        if (is_array($info) && (int) ($info['port'] ?? 0) === self::LEGACY_PORT) {
+            @unlink($infoFile);
+        }
+
+        $this->info("✓ Server lama di port {$legacyPort} dihentikan. Alamat lama tidak dipakai lagi.");
+    }
+
+    /**
      * Whether macOS AWDL (AirDrop, Handoff, Sidecar) is active: it takes the Wi-Fi radio to other
      * channels several times a second, which delays and drops the server's Wi-Fi traffic.
      */
@@ -1117,7 +1178,7 @@ class ServeLanCommand extends Command
      *
      * @param  array<string, string>  $interfaces
      */
-    protected function outputDaemonBanner(array $interfaces, ?string $hostname, int $port, int $workers, int $pid, bool $useCaffeinate, string $logPath): void
+    protected function outputDaemonBanner(array $interfaces, int $port, int $workers, int $pid, bool $useCaffeinate, string $logPath): void
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
@@ -1142,10 +1203,6 @@ class ServeLanCommand extends Command
         } else {
             $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
         }
-
-        if ($hostname) {
-            $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
-        }
         $this->newLine();
         $this->outputNetworkAdvice($interfaces, $port);
 
@@ -1164,7 +1221,7 @@ class ServeLanCommand extends Command
      *
      * @param  array<string, string>  $interfaces
      */
-    protected function outputBanner(array $interfaces, ?string $hostname, int $port, int $workers = 24, bool $useCaffeinate = true): void
+    protected function outputBanner(array $interfaces, int $port, int $workers = 24, bool $useCaffeinate = true): void
     {
         $this->newLine();
         $this->output->writeln('<bg=blue;fg=white;options=bold> ========================================================================= </>');
@@ -1196,10 +1253,6 @@ class ServeLanCommand extends Command
             }
         } else {
             $this->output->writeln("   👉 <fg=cyan;options=bold>http://0.0.0.0:{$port}</>");
-        }
-
-        if ($hostname) {
-            $this->output->writeln("   👉 <fg=magenta;options=bold>http://{$hostname}:{$port}</> <fg=gray>(Perangkat Apple / mDNS Bonjour)</>");
         }
 
         $this->output->writeln("   👉 <fg=white>http://localhost:{$port}</> <fg=gray>(Hanya di komputer ini)</>");

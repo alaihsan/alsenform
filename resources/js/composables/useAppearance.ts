@@ -42,7 +42,11 @@ export function useAppearance() {
 
     function updateAppearance(value: Appearance) {
         appearance.value = value;
-        localStorage.setItem('appearance', value);
+        try {
+            localStorage.setItem('appearance', value);
+        } catch {
+            // Storage full or blocked: the theme still changes, only not remembered.
+        }
         updateTheme(value);
     }
 

@@ -16,7 +16,11 @@ onMounted(() => {
 
 const handleSidebarChange = (open: boolean) => {
     isOpen.value = open;
-    localStorage.setItem('sidebar', String(open));
+    try {
+        localStorage.setItem('sidebar', String(open));
+    } catch {
+        // Storage full or blocked: the sidebar is only remembered until the page closes.
+    }
 };
 </script>
 

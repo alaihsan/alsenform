@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BrandMark from '@/components/BrandMark.vue';
 import { BRAND_NAME } from '@/lib/brand';
+import { copyText } from '@/lib/clipboard';
 import AccountMenu from '@/components/AccountMenu.vue';
 import FormCardPreview from '@/components/FormCardPreview.vue';
 import {
@@ -181,17 +182,7 @@ const statusFilterLabel = computed(() => {
 const activeFolderFilter = computed(() => folders.value.find((folder) => folder.id === folderFilter.value) ?? null);
 
 function copyPublicUrl(form: RecentForm): void {
-    if (!navigator.clipboard) {
-        showToast('Browser tidak mengizinkan copy otomatis');
-        activeMenuId.value = null;
-
-        return;
-    }
-
-    navigator.clipboard
-        .writeText(form.publicUrl)
-        .then(() => showToast('Tautan publik disalin'))
-        .catch(() => showToast('Browser tidak mengizinkan copy otomatis'));
+    copyText(form.publicUrl).then((isCopied) => showToast(isCopied ? 'Tautan publik disalin' : 'Browser tidak mengizinkan copy otomatis'));
     activeMenuId.value = null;
 }
 

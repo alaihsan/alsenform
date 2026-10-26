@@ -32,6 +32,25 @@ test('every page carries the guard with all codes, and FF-101 for browsers witho
     }
 });
 
+test('each code tells what to do next, in order', function () {
+    expect(PageFailure::StartError->steps())->toHaveCount(3)
+        ->and(implode(' ', PageFailure::StartError->steps()))->toContain('perbarui browser')->toContain('hapus data situs')
+        ->and(implode(' ', PageFailure::RenderError->steps()))->toContain('pemblokir iklan')->toContain('kotak abu-abu')
+        ->and(PageFailure::SlowLoad->steps()[0])->toContain('hilang sendiri')
+        ->and(implode(' ', PageFailure::SlowLoad->steps()))->toContain('Cek Koneksi');
+
+    foreach (PageFailure::cases() as $failure) {
+        expect($failure->steps())->not->toBeEmpty()->and($failure->steps()[0])->not->toBe('');
+    }
+});
+
+test('pages are in Indonesian and never machine translated, which would break them (FF-302)', function () {
+    $html = $this->get(route('login'))->assertOk()->getContent();
+
+    expect($html)->toContain('<html lang="id" translate="no">')
+        ->toContain('<meta name="google" content="notranslate">');
+});
+
 test('a guest\'s blank exam page is recorded with its code, device and exam', function () {
     $this->withHeader('User-Agent', OLD_IPAD)
         ->post(route('page-failures.store'), [
