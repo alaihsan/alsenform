@@ -108,6 +108,16 @@ function runLanCheck(array $probes = []): array
             return $this->probes['routerPage'] ?? null;
         }
 
+        protected function hasWinbox(string $gateway): bool
+        {
+            return $this->probes['winbox'] ?? false;
+        }
+
+        protected function describeProcesses(array $pids): array
+        {
+            return $this->probes['processes'] ?? [];
+        }
+
         protected function resolveHost(string $host): ?string
         {
             return array_key_exists('serverDns', $this->probes) ? $this->probes['serverDns'] : '192.168.1.20';
@@ -238,6 +248,7 @@ test('lan:check counts a router that does not know the name once, and gives the 
         'dns' => ['172.16.0.1' => [DnsLookup::UNKNOWN, []]],
         'serverDns' => null,
         'routerPage' => '<html><head><title>RouterOS router configuration page</title></head></html>',
+        'processes' => ['4120 1 guru /usr/bin/php -S 0.0.0.0:8000 /Users/guru/alsenform/server.php'],
     ]);
 
     expect($exitCode)->toBe(1)
@@ -250,7 +261,14 @@ test('lan:check counts a router that does not know the name once, and gives the 
         ->toContain('⚠ Komputer server juga belum mengenal falcon.lan, karena router belum mengenalnya.')
         ->not->toContain('DNS-nya bukan router')
         ->not->toContain('DNS yang dipakai komputer ini')
+        ->toContain('Prosesnya (PID, PID induk, pengguna, perintah): 4120 1 guru /usr/bin/php -S 0.0.0.0:8000')
+        ->toContain('sudo kill -9 $(sudo lsof -nP -iTCP:8000 -sTCP:LISTEN -t)')
         ->toContain('3 masalah perlu diperbaiki');
+
+    // A MikroTik whose web page is switched off still has Winbox open.
+    [, $winbox] = runLanCheck(['dns' => ['192.168.1.1' => [DnsLookup::UNKNOWN, []]], 'winbox' => true]);
+    expect($winbox)->toContain('Router 192.168.1.1 (MikroTik) belum mengenal falcon.lan')
+        ->toContain('/ip dns static add name=falcon.lan address=192.168.1.20');
 
     $routerWith = fn (string $page): string => runLanCheck(['dns' => ['192.168.1.1' => [DnsLookup::UNKNOWN, []]], 'routerPage' => $page])[1];
 

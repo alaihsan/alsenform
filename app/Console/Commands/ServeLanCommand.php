@@ -657,8 +657,14 @@ class ServeLanCommand extends Command
             $this->checkLine(true, "Server Falcon Forms berjalan di port {$port}.");
         }
 
-        if ($port !== self::LEGACY_PORT && $this->isPortInUse(self::LEGACY_PORT) && $this->isAlsenformServer($this->getPortPids(self::LEGACY_PORT))) {
-            $this->checkLine(false, 'Server lama masih berjalan di port '.self::LEGACY_PORT.': perangkat yang membuka alamat lama tetap memakainya.', ['Setelah ujian di alamat lama selesai: php artisan lan:stop --port='.self::LEGACY_PORT]);
+        if ($port !== self::LEGACY_PORT && $this->isPortInUse(self::LEGACY_PORT) && $this->isAlsenformServer($legacyPids = $this->getPortPids(self::LEGACY_PORT))) {
+            $legacyPort = self::LEGACY_PORT;
+            $process = $this->describeProcesses($legacyPids)[0] ?? null;
+            $this->checkLine(false, "Server lama masih berjalan di port {$legacyPort}: perangkat yang membuka alamat lama tetap memakainya.", array_values(array_filter([
+                $process !== null ? 'Prosesnya (PID, PID induk, pengguna, perintah): '.mb_strimwidth($process, 0, 160, '…') : null,
+                "Setelah ujian di alamat lama selesai: php artisan lan:stop --port={$legacyPort} (atau Ctrl+C di jendela Terminal yang menjalankannya)",
+                "Bila masih berjalan (dulu dijalankan dengan sudo): sudo kill -9 $(sudo lsof -nP -iTCP:{$legacyPort} -sTCP:LISTEN -t)",
+            ])));
         }
 
         if ($isServing && $serverIp !== null) {
@@ -787,6 +793,11 @@ class ServeLanCommand extends Command
      */
     protected function routerBrand(string $gateway): ?string
     {
+        // Winbox, MikroTik's configuration tool, listens on 8291 even where the web page is off.
+        if ($this->hasWinbox($gateway)) {
+            return 'MikroTik';
+        }
+
         $page = $this->routerPage($gateway);
         if ($page === null) {
             return null;
@@ -814,15 +825,30 @@ class ServeLanCommand extends Command
         return null;
     }
 
+    protected function hasWinbox(string $gateway): bool
+    {
+        return $this->isListening("http://{$gateway}:8291");
+    }
+
     /**
-     * The first part of the router's settings page, or null when it has none on port 80.
+     * The first part of the router's settings page (http, else https, whose certificate a router
+     * signs itself), or null when it has none.
      */
     protected function routerPage(string $gateway): ?string
     {
-        $context = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true, 'header' => "Connection: close\r\n"]]);
-        $page = @file_get_contents("http://{$gateway}/", false, $context, 0, 65536);
+        $context = stream_context_create([
+            'http' => ['timeout' => 3, 'ignore_errors' => true, 'header' => "Connection: close\r\n"],
+            'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
+        ]);
 
-        return is_string($page) && $page !== '' ? $page : null;
+        foreach (["http://{$gateway}/", "https://{$gateway}/"] as $url) {
+            $page = @file_get_contents($url, false, $context, 0, 65536);
+            if (is_string($page) && $page !== '') {
+                return $page;
+            }
+        }
+
+        return null;
     }
 
     /**
