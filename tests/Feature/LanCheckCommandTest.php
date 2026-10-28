@@ -2,6 +2,7 @@
 
 use App\Console\Commands\ServeLanCommand;
 use App\Support\DnsLookup;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -166,6 +167,13 @@ function runLanCheck(array $probes = []): array
         protected function assetsAreOutdated(): bool
         {
             return $this->probes['outdated'] ?? false;
+        }
+
+        protected function latestBackup(): ?array
+        {
+            return array_key_exists('backup', $this->probes)
+                ? $this->probes['backup']
+                : ['path' => '/tmp/falcon-forms-20261028-010000.dump', 'name' => 'falcon-forms-20261028-010000.dump', 'size' => 1024, 'created_at' => CarbonImmutable::now()->subHours(3)];
         }
 
         public function check(): int
@@ -358,4 +366,17 @@ test('lan:serve removes public/hot left by npm run dev, but not while the dev se
         fclose($listener);
         @unlink($hotFile);
     }
+});
+
+test('lan:check counts a missing or stale database backup as a problem', function () {
+    [, $fresh] = runLanCheck();
+    expect($fresh)->toContain('✓ Backup database terakhir 3 jam yang lalu (falcon-forms-20261028-010000.dump).');
+
+    [$exitCode, $none] = runLanCheck(['backup' => null]);
+    expect($exitCode)->toBe(1)
+        ->and($none)->toContain('✗ Belum ada backup database')
+        ->toContain('Jalankan: php artisan db:backup');
+
+    [, $stale] = runLanCheck(['backup' => ['path' => '/tmp/a.dump', 'name' => 'falcon-forms-20261020-010000.dump', 'size' => 1024, 'created_at' => CarbonImmutable::now()->subDays(2)]]);
+    expect($stale)->toContain('✗ Backup database terakhir 2 hari yang lalu (falcon-forms-20261020-010000.dump), lebih dari 24 jam.');
 });

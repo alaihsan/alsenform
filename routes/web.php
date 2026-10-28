@@ -24,6 +24,7 @@ use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\QuizResultController;
 use App\Http\Controllers\ResponseHistoryController;
 use App\Http\Controllers\ServerErrorController;
+use App\Http\Controllers\ServerHealthController;
 use App\Http\Controllers\SmartFilterController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
@@ -170,6 +171,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
         Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
         Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
+
+        // Kesehatan Server: database, backup, disk, errors and exams running, before and during an exam
+        Route::get('reports/server-health', ServerHealthController::class)->name('server-health.index');
 
         // Galat Server: every fault of the server once, found by the code on its error page
         Route::get('reports/server-errors', [ServerErrorController::class, 'index'])->name('server-errors.index');

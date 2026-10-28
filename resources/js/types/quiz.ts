@@ -51,6 +51,21 @@ export type SectionTarget = 'next' | 'submit' | number;
 
 export type PreviewAnswer = string | string[] | Record<number, any>;
 
+/** How well the answers of an exam got to the server (App\Services\ExamDelivery). */
+export type ExamDelivery = {
+    attempts: number;
+    /** Percent of students whose answers always reached the server within 30 seconds. */
+    savedInTime: number | null;
+    savedInTimeOf: number;
+    slowestSaveSeconds: number | null;
+    /** Percent of hand-ins that went through at the first try. */
+    firstTry: number | null;
+    firstTryOf: number;
+    autoSubmitted: number;
+    errors: number;
+    errorsPer100: number | null;
+};
+
 export type QuizFormPayload = {
     id: number;
     title: string;
@@ -144,6 +159,8 @@ export type QuizFormPayload = {
             email: string | null;
             submittedAt: string;
         }[];
+        /** Whether the answers got to the server: saved in time, handed in at the first try, errors. */
+        delivery?: ExamDelivery;
         gradebook?: {
             id: number;
             user_id?: number | null;

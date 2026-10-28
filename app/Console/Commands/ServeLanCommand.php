@@ -3,14 +3,15 @@
 namespace App\Console\Commands;
 
 use App\Actions\SubmitExpiredAttempts;
+use App\Services\DatabaseBackup;
+use App\Support\AssetBuild;
+use App\Support\DisplayTime;
 use App\Support\DnsLookup;
 use App\Support\PendingMigrations;
-use FilesystemIterator;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -62,6 +63,11 @@ class ServeLanCommand extends Command
     protected float $autoSubmitIntervalSeconds = 60.0;
 
     /**
+     * How often (in seconds) the server checks whether today's backup and clean-up are due.
+     */
+    protected float $maintenanceCheckIntervalSeconds = 3600.0;
+
+    /**
      * What the network's DNS answered for each name, looked up once per network.
      *
      * @var array<string, string|null>
@@ -111,6 +117,7 @@ class ServeLanCommand extends Command
         }
 
         $this->syncWithCurrentCode();
+        $this->runDailyMaintenance((float) config('maintenance.backup.fresh_hours'));
 
         if ($this->option('optimize')) {
             $this->call('exam:optimize');
@@ -232,6 +239,8 @@ class ServeLanCommand extends Command
         $lastCheckedAt = microtime(true);
         // Right away first: exams may have run out while the server was off.
         $lastAutoSubmitAt = 0.0;
+        // Done when the server started.
+        $lastMaintenanceCheckAt = microtime(true);
 
         while ($process->isRunning()) {
             usleep((int) (min(0.5, $this->networkCheckIntervalSeconds) * 1_000_000));
@@ -239,6 +248,11 @@ class ServeLanCommand extends Command
             if (microtime(true) - $lastAutoSubmitAt >= $this->autoSubmitIntervalSeconds) {
                 $lastAutoSubmitAt = microtime(true);
                 $this->submitExpiredExams();
+            }
+
+            if (microtime(true) - $lastMaintenanceCheckAt >= $this->maintenanceCheckIntervalSeconds) {
+                $lastMaintenanceCheckAt = microtime(true);
+                $this->runDailyMaintenance((float) config('maintenance.backup.max_age_hours'));
             }
 
             if (microtime(true) - $lastCheckedAt < $this->networkCheckIntervalSeconds) {
@@ -253,6 +267,26 @@ class ServeLanCommand extends Command
                 $knownAddresses = $currentAddresses;
                 $this->announceNetworkChange($currentInterfaces, $host, $port);
             }
+        }
+    }
+
+    /**
+     * A copy of the database when the latest is older than the given hours, then records past
+     * their retention removed (config/maintenance.php). A failed backup never stops the server: it
+     * is shown here and recorded in Galat Server.
+     */
+    protected function runDailyMaintenance(float $backupOlderThanHours): void
+    {
+        if (! app(DatabaseBackup::class)->isOlderThan($backupOlderThanHours)) {
+            return;
+        }
+
+        Artisan::call('db:backup', [], $this->output);
+
+        try {
+            Artisan::call('model:prune');
+        } catch (Throwable $exception) {
+            report($exception);
         }
     }
 
@@ -373,7 +407,7 @@ class ServeLanCommand extends Command
 
     protected function manifestPath(): string
     {
-        return public_path('build/manifest.json');
+        return app(AssetBuild::class)->manifestPath();
     }
 
     /**
@@ -383,39 +417,15 @@ class ServeLanCommand extends Command
      */
     protected function assetSourcePaths(): array
     {
-        return array_map(fn (string $path): string => base_path($path), ['resources/js', 'resources/css', 'vite.config.ts', 'tailwind.config.js', 'package.json']);
+        return app(AssetBuild::class)->sourcePaths();
     }
 
     /**
-     * Whether the bundle is older than its sources: after "git pull" or a merge without "npm run
-     * build", browsers would still get the previous pages, whose new buttons do nothing.
+     * Whether the bundle is older than its sources (see App\Support\AssetBuild).
      */
     protected function assetsAreOutdated(): bool
     {
-        $builtAt = @filemtime($this->manifestPath());
-
-        if ($builtAt === false) {
-            return true;
-        }
-
-        foreach ($this->assetSourcePaths() as $path) {
-            if (is_file($path) && filemtime($path) > $builtAt) {
-                return true;
-            }
-
-            if (! is_dir($path)) {
-                continue;
-            }
-
-            /** @var SplFileInfo $file */
-            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)) as $file) {
-                if ($file->isFile() && $file->getMTime() > $builtAt) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return app(AssetBuild::class)->isOutdated($this->manifestPath(), $this->assetSourcePaths());
     }
 
     /**
@@ -631,6 +641,16 @@ class ServeLanCommand extends Command
                 : $this->checkLine(false, "Berkas public/hot tertinggal dari npm run dev: halaman mencari tampilan di {$hotUrl} yang sudah mati, jadi tampil putih atau FF-201.", ['Hapus berkas public/hot (php artisan lan:serve kini menghapusnya otomatis).']);
         }
 
+        $latestBackup = $this->latestBackup();
+        $maxBackupAgeHours = (int) config('maintenance.backup.max_age_hours');
+        if ($latestBackup === null) {
+            $this->checkLine(false, 'Belum ada backup database: bila komputer server rusak, ujian, jawaban, dan nilai hilang.', ['Jalankan: php artisan db:backup (lan:serve juga membuatnya otomatis setiap hari)']);
+        } elseif ($latestBackup['created_at']->lt(now()->subHours($maxBackupAgeHours))) {
+            $this->checkLine(false, 'Backup database terakhir '.DisplayTime::ago($latestBackup['created_at'])." ({$latestBackup['name']}), lebih dari {$maxBackupAgeHours} jam.", ['Jalankan: php artisan db:backup']);
+        } else {
+            $this->checkLine(true, 'Backup database terakhir '.DisplayTime::ago($latestBackup['created_at'])." ({$latestBackup['name']}).");
+        }
+
         if ($lanHost === null) {
             $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.intranet']);
         }
@@ -727,6 +747,16 @@ class ServeLanCommand extends Command
         $this->output->writeln(" <fg=red;options=bold>✗ {$this->checkProblems} masalah perlu diperbaiki (lihat tanda ✗ di atas).</>");
 
         return self::FAILURE;
+    }
+
+    /**
+     * The newest copy of the database (see App\Services\DatabaseBackup), or null when there is none.
+     *
+     * @return array{path: string, name: string, size: int, created_at: CarbonImmutable}|null
+     */
+    protected function latestBackup(): ?array
+    {
+        return app(DatabaseBackup::class)->latest();
     }
 
     /**

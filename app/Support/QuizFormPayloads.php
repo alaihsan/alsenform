@@ -8,6 +8,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
 use App\Services\Addons;
+use App\Services\ExamDelivery;
 use App\Services\ItemAnalysis;
 use App\Services\Misconceptions;
 use App\Services\QuestionBank;
@@ -279,6 +280,8 @@ class QuizFormPayloads
                 'submittedAt' => DisplayTime::ago($response->created_at),
             ])->values()->all(),
             'gradebook' => $gradebook,
+            // Whether the answers got to the server: saved in time, handed in at the first try, errors.
+            'delivery' => app(ExamDelivery::class)->of($quizForm),
             'questions' => $questions,
             // Analisis butir soal: difficulty, discrimination and distractors of each question.
             // Only with the Analisis Butir Soal add-on on for this exam (not even computed otherwise).

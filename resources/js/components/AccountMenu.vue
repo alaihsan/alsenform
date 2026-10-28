@@ -2,7 +2,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { router, usePage } from '@inertiajs/vue3';
-import { BookOpen, ChartColumn, Home, Library, LogOut, Puzzle, ShieldCheck, UserRound, Users } from 'lucide-vue-next';
+import { Activity, BookOpen, ChartColumn, Home, Library, LogOut, Puzzle, ShieldCheck, UserRound, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = withDefaults(
@@ -43,6 +43,7 @@ const goHome = () => props.leave(() => router.visit(route('dashboard')));
 const goToUsers = () => props.leave(() => router.visit(route(isAdmin.value ? 'users.index' : 'students.index')));
 const goToCohorts = () => props.leave(() => router.visit(route('cohorts.index')));
 const goToReports = () => props.leave(() => router.visit(route('reports.index')));
+const goToServerHealth = () => props.leave(() => router.visit(route('server-health.index')));
 const goToQuestionBank = () => props.leave(() => router.visit(route('question-bank.page')));
 const goToAddons = () => props.leave(() => router.visit(route('addons.index')));
 const goToProfile = () => props.leave(() => router.visit(route('profile.edit')));
@@ -122,6 +123,14 @@ const logout = () => props.leave(() => router.post(route('logout')));
                 >
                     <ChartColumn class="h-4 w-4 text-slate-500" />
                     <span>Laporan</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    v-if="isAdmin"
+                    class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                    @select="goToServerHealth"
+                >
+                    <Activity class="h-4 w-4 text-slate-500" />
+                    <span>Kesehatan Server</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"

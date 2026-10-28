@@ -19,6 +19,7 @@ import QuestionLabelsEditor, { type LabelSuggestions, type QuestionLabels } from
 import RichTextInput from '@/components/form-editor/RichTextInput.vue';
 import SectionTargetSelect from '@/components/form-editor/SectionTargetSelect.vue';
 import SelectionFormatToolbar from '@/components/form-editor/SelectionFormatToolbar.vue';
+import DeliveryQualityCard from '@/components/form-editor/DeliveryQualityCard.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
@@ -3713,6 +3714,9 @@ watch(
                             :storage-key="String(quizForm?.id ?? '')"
                             @close="isSmartFilterOpen = false"
                         />
+
+                        <!-- Whether the answers got to the server: saved in time, handed in at the first try, errors -->
+                        <DeliveryQualityCard v-if="quizForm?.responses?.delivery?.attempts" :delivery="quizForm.responses.delivery" />
 
                         <!-- Rekapitulasi Nilai Siswa: every column sortable, A–Z initials like Moodle -->
                         <GradebookTable :rows="gradebook" :max-score="maxScore" :export-url="exportResponsesUrl" />
