@@ -59,6 +59,58 @@ test('lan:caddy saves the site in Caddy\'s folder of sites, and only replaces a 
         ->and(File::get($other))->toContain('perpus.intranet');
 });
 
+/**
+ * lan:caddy on a computer where another web server may keep the port on 127.0.0.1.
+ */
+function lanCaddyWith(?string $otherServer): string
+{
+    $command = new class($otherServer) extends CaddySiteCommand
+    {
+        public function __construct(protected ?string $otherServer)
+        {
+            parent::__construct();
+        }
+
+        protected function otherServerOnLoopback(int $port): ?string
+        {
+            return $this->otherServer;
+        }
+
+        protected function serverAddress(string $host): ?string
+        {
+            return '192.168.1.20';
+        }
+    };
+    $command->setLaravel(app());
+    $output = new BufferedOutput;
+    $command->run(new ArrayInput([]), $output);
+
+    return $output->fetch();
+}
+
+test('on a Mac with Herd, lan:caddy has Caddy take only the network address, beside Herd\'s nginx', function () {
+    $herd = lanCaddyWith('nginx');
+
+    expect($herd)->toContain("{\n")
+        ->toContain('default_bind 192.168.1.20')
+        ->toContain('/caddy/sites/*.caddy')
+        ->toContain('Port 80 di 127.0.0.1 sudah dipakai nginx (di Mac biasanya Herd')
+        ->toContain('DHCP Reservation');
+
+    // Nothing else on the port: Caddy listens on every address, no default_bind.
+    expect(lanCaddyWith(null))->not->toContain('default_bind')->toContain('/caddy/sites/*.caddy');
+});
+
+test('the main Caddyfile loads every app\'s site from one folder', function () {
+    expect((new CaddySiteCommand)->mainCaddyfile('/opt/homebrew/etc/caddy/sites', '192.168.1.20'))->toBe([
+        '{',
+        "\tdefault_bind 192.168.1.20",
+        '}',
+        '',
+        'import /opt/homebrew/etc/caddy/sites/*.caddy',
+    ])->and((new CaddySiteCommand)->mainCaddyfile('/etc/caddy/sites', null))->toBe(['import /etc/caddy/sites/*.caddy']);
+});
+
 test('lan:caddy needs an intranet name', function () {
     config(['app.lan_host' => '']);
 
@@ -85,9 +137,9 @@ function lanServeBehindCaddy(int $publicPort, bool $isCaddyRunning): ServeLanCom
             return $host === 'falcon.intranet' ? '192.168.1.20' : null;
         }
 
-        public function isPortInUse(int $port, string $host = '127.0.0.1'): bool
+        protected function answersAt(string $address, int $port): bool
         {
-            return $this->isCaddyRunning && in_array($port, [80, 443], true);
+            return $this->isCaddyRunning && $address === '192.168.1.20' && in_array($port, [80, 443], true);
         }
 
         protected function networkWarnings(array $interfaces): array
@@ -120,7 +172,7 @@ test('behind Caddy, lan:serve gives students the intranet name without a port', 
         // The address of the server itself still works, on lan:serve's own port.
         ->toContain('http://192.168.1.20:2026')
         ->not->toContain('falcon.intranet:2026')
-        ->not->toContain('Caddy belum berjalan')
+        ->not->toContain('Caddy belum menjawab')
         ->and($command->appUrl())->toBe('http://falcon.intranet');
 
     expect(lanServeBehindCaddy(443, isCaddyRunning: true)->appUrl())->toBe('https://falcon.intranet');
@@ -130,6 +182,6 @@ test('lan:serve says when Caddy is not running in front of it', function () {
     $command = lanServeBehindCaddy(80, isCaddyRunning: false);
     $command->banner();
 
-    expect($command->getOutput()->getOutput()->fetch())->toContain('Caddy belum berjalan di port 80, jadi http://falcon.intranet belum terbuka')
+    expect($command->getOutput()->getOutput()->fetch())->toContain('Caddy belum menjawab di 192.168.1.20:80, jadi http://falcon.intranet belum terbuka')
         ->toContain('php artisan lan:check');
 });

@@ -696,7 +696,10 @@ class ServeLanCommand extends Command
 
         $publicPort = $this->publicPort();
         if ($lanHost !== null && $publicPort !== null) {
-            $this->checkCaddy($lanHost, $publicPort, $port, $isServing);
+            // Where students reach Caddy: the address the name leads to when it is this server's.
+            $ownAddress = $this->resolveHost($lanHost);
+            $caddyAddress = $ownAddress !== null && in_array($ownAddress, $interfaces, true) ? $ownAddress : ($serverIp ?? '127.0.0.1');
+            $this->checkCaddy($lanHost, $caddyAddress, $publicPort, $port, $isServing);
         }
 
         foreach ($this->firewallProblems() as [$problem, $fix]) {
@@ -758,25 +761,32 @@ class ServeLanCommand extends Command
 
     /**
      * Whether Caddy in front of the server (LAN_PUBLIC_PORT) answers the intranet name with the
-     * pages of this server, asked on this computer.
+     * pages of this server, asked at the server's address on the school network, as students ask.
+     * (127.0.0.1 may belong to another server: on a Mac with Herd, nginx keeps 80 and 443 there.)
      */
-    protected function checkCaddy(string $lanHost, int $publicPort, int $port, bool $isServing): void
+    protected function checkCaddy(string $lanHost, string $address, int $publicPort, int $port, bool $isServing): void
     {
         $url = $this->urlFor($lanHost, $publicPort);
-        $writeSite = 'Buat situsnya: php artisan lan:caddy --write=<folder sites Caddy>/falcon-forms.caddy, lalu muat ulang Caddy (caddy reload --config <Caddyfile>).';
+        $writeSite = 'Buat situsnya: php artisan lan:caddy --write=<folder sites Caddy>/falcon-forms.caddy, lalu muat ulang Caddy.';
 
-        if (! $this->isPortInUse($publicPort)) {
-            $this->checkLine(false, "Caddy belum berjalan di port {$publicPort}: {$url} belum dapat dibuka.", [
+        if (! $this->answersAt($address, $publicPort)) {
+            $fixes = [
                 PHP_OS_FAMILY === 'Darwin'
                     ? 'Pasang dan jalankan Caddy: brew install caddy, lalu sudo brew services start caddy'
                     : 'Pasang dan jalankan Caddy: sudo apt install caddy, lalu sudo systemctl enable --now caddy',
                 $writeSite,
-            ]);
+            ];
+
+            if ($address !== '127.0.0.1' && $this->answersAt('127.0.0.1', $publicPort)) {
+                array_unshift($fixes, "Port {$publicPort} di 127.0.0.1 dipakai program lain (di Mac biasanya nginx milik Herd). Caddy cukup memakai alamat jaringan: di awal Caddyfile utama tulis { default_bind {$address} }, lalu jalankan ulang Caddy (sudo brew services restart caddy).");
+            }
+
+            $this->checkLine(false, "Caddy belum menjawab di {$address}:{$publicPort}: {$url} belum dapat dibuka.", $fixes);
 
             return;
         }
 
-        $status = $this->proxyStatus($lanHost, $publicPort);
+        $status = $this->proxyStatus($lanHost, $address, $publicPort);
 
         match (true) {
             $status === 200 => $this->checkLine(true, "Caddy meneruskan {$url} ke server Falcon Forms (port {$port})."),
@@ -1332,11 +1342,19 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * What Caddy answers for the intranet name on its port, asked on this computer: the HTTP status
+     * Whether something accepts connections at the address and port.
+     */
+    protected function answersAt(string $address, int $port): bool
+    {
+        return $this->isListening("http://{$address}:{$port}");
+    }
+
+    /**
+     * What Caddy answers for the intranet name on its port at the server's address: the HTTP status
      * of this application's health page, 0 when Caddy answers with an empty page (it has no site
      * for the name), or null when nothing answers.
      */
-    protected function proxyStatus(string $lanHost, int $publicPort): ?int
+    protected function proxyStatus(string $lanHost, string $address, int $publicPort): ?int
     {
         $scheme = $publicPort === 443 ? 'https' : 'http';
         $context = stream_context_create([
@@ -1345,7 +1363,7 @@ class ServeLanCommand extends Command
             'ssl' => ['peer_name' => $lanHost, 'verify_peer' => false, 'verify_peer_name' => false],
         ]);
         $http_response_header = null;
-        $body = @file_get_contents("{$scheme}://127.0.0.1:{$publicPort}/up", false, $context);
+        $body = @file_get_contents("{$scheme}://{$address}:{$publicPort}/up", false, $context);
         $headers = function_exists('http_get_last_response_headers') ? http_get_last_response_headers() : $http_response_header;
 
         if (! is_array($headers) || ! isset($headers[0]) || ! preg_match('/^HTTP\/\S+\s+(\d{3})/', $headers[0], $matches)) {
@@ -1377,8 +1395,8 @@ class ServeLanCommand extends Command
         if ($address !== null && in_array($address, $interfaces, true)) {
             $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address}".($publicPort !== null ? ', lewat Caddy' : '').')</>');
 
-            if ($publicPort !== null && ! $this->isPortInUse($publicPort)) {
-                $this->output->writeln("{$indent}      <fg=yellow>⚠️  Caddy belum berjalan di port {$publicPort}, jadi {$url} belum terbuka. Pemeriksaan dan cara memperbaikinya:</> <fg=yellow>php artisan lan:check</>");
+            if ($publicPort !== null && ! $this->answersAt($address, $publicPort)) {
+                $this->output->writeln("{$indent}      <fg=yellow>⚠️  Caddy belum menjawab di {$address}:{$publicPort}, jadi {$url} belum terbuka. Pemeriksaan dan cara memperbaikinya:</> <fg=yellow>php artisan lan:check</>");
             }
 
             return;

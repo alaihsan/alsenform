@@ -390,6 +390,26 @@ Bila komputer server juga menjalankan aplikasi web lain (perpustakaan, absensi, 
 
 Alamat IP server dengan port (`http://192.168.1.10:2026`) tetap bisa dipakai sebagai cadangan. Caddy berjalan di komputer yang sama, jadi alamat IP siswa di Laporan tetap benar (proxy di 127.0.0.1 selalu dipercaya; Caddy di komputer lain perlu dicantumkan di `TRUSTED_PROXIES`).
 
+#### Mac dengan Laravel Herd
+
+Herd menjalankan nginx sendiri di port 80 dan 443, khusus untuk 127.0.0.1 (situs `.test`). Caddy yang dipasang begitu saja akan gagal dengan *address already in use*. Caddy cukup memakai **alamat jaringan** server, sehingga keduanya berjalan berdampingan dan situs `.test` Herd tetap seperti biasa:
+
+1. `brew install caddy`, lalu `mkdir -p /opt/homebrew/etc/caddy/sites` (Mac Intel: ganti `/opt/homebrew` dengan `/usr/local` di semua langkah).
+2. `php artisan lan:caddy --write=/opt/homebrew/etc/caddy/sites/falcon-forms.caddy`. Perintah ini mengenali port 80 yang dipakai Herd dan menuliskan isi Caddyfile utama lengkap dengan IP server.
+3. Caddyfile utama `/opt/homebrew/etc/Caddyfile` (ganti IP-nya dengan IP server):
+
+   ```
+   {
+   	default_bind 192.168.1.10
+   }
+
+   import /opt/homebrew/etc/caddy/sites/*.caddy
+   ```
+4. `caddy validate --config /opt/homebrew/etc/Caddyfile`, lalu `sudo brew services start caddy`. Pakai `sudo`: di macOS hanya layanan root yang boleh memakai port 80 pada alamat tertentu, dan dengan begitu Caddy menyala sejak komputer hidup.
+5. Lanjutkan dari langkah 5 di atas (`.env`, router, `lan:check`).
+
+IP server harus tetap (DHCP Reservation di router): bila berubah, ubah `default_bind` dan DNS di router, lalu `sudo brew services restart caddy`. Backup memakai `pg_dump` milik PostgreSQL Herd; bila `php artisan db:backup` menyebut pg_dump tidak ditemukan, cari letaknya dengan `find ~/Library/Application\ Support/Herd -name pg_dump -type f` dan isi path itu di `BACKUP_PG_DUMP` di `.env`.
+
 HTTPS (`php artisan lan:caddy --https`, `LAN_PUBLIC_PORT=443`) memakai sertifikat lokal Caddy (`tls internal`), sehingga sertifikat akar Caddy harus dipasang di setiap perangkat siswa. Untuk perangkat milik siswa, HTTP biasanya lebih praktis.
 
 ### Bila alamat baru belum berfungsi

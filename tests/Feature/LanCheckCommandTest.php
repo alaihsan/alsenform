@@ -169,9 +169,14 @@ function runLanCheck(array $probes = []): array
             return $this->probes['outdated'] ?? false;
         }
 
-        protected function proxyStatus(string $lanHost, int $publicPort): ?int
+        protected function proxyStatus(string $lanHost, string $address, int $publicPort): ?int
         {
             return array_key_exists('proxy', $this->probes) ? $this->probes['proxy'] : 200;
+        }
+
+        protected function answersAt(string $address, int $port): bool
+        {
+            return in_array("{$address}:{$port}", $this->probes['answering'] ?? ["192.168.1.20:{$port}"], true);
         }
 
         protected function latestBackup(): ?array
@@ -398,9 +403,16 @@ test('behind Caddy, lan:check expects the address without a port and checks that
         ->toContain('✓ http://falcon.intranet terbuka dari komputer server ini.')
         ->toContain('Ketik alamat lengkap: http://falcon.intranet (dengan http://)');
 
-    [, $notRunning] = runLanCheck(['listening' => [2026]]);
-    expect($notRunning)->toContain('✗ Caddy belum berjalan di port 80: http://falcon.intranet belum dapat dibuka.')
-        ->toContain('php artisan lan:caddy --write=');
+    [, $notRunning] = runLanCheck(['answering' => []]);
+    expect($notRunning)->toContain('✗ Caddy belum menjawab di 192.168.1.20:80: http://falcon.intranet belum dapat dibuka.')
+        ->toContain('php artisan lan:caddy --write=')
+        ->not->toContain('default_bind');
+
+    // A Mac with Herd: its nginx keeps port 80 on 127.0.0.1, so Caddy takes the network address only.
+    [, $herd] = runLanCheck(['answering' => ['127.0.0.1:80']]);
+    expect($herd)->toContain('✗ Caddy belum menjawab di 192.168.1.20:80')
+        ->toContain('Port 80 di 127.0.0.1 dipakai program lain (di Mac biasanya nginx milik Herd)')
+        ->toContain('{ default_bind 192.168.1.20 }');
 
     [, $noSite] = runLanCheck(['listening' => [2026, 80], 'proxy' => 0]);
     expect($noSite)->toContain('✗ Port 80 menjawab, tetapi http://falcon.intranet belum sampai ke Falcon Forms (halaman kosong): situs Caddy untuk falcon.intranet belum ada atau salah.');
