@@ -334,13 +334,13 @@ class QuizResponseController extends Controller
             if ($autoSubmitted !== null) {
                 $this->completeAutoSubmitted($request, $quizForm, $session, $autoSubmitted, $validated['answers'], $examLayout);
 
-                return $this->submissionSucceeded($request, $quizForm);
+                return $this->submissionSucceeded($request, $quizForm, $autoSubmitted);
             }
 
             // On weak Wi-Fi the answers may have been saved while the response never reached the
             // browser. A retry of that same attempt is a success, not a second response.
             if ($isSameAttempt) {
-                return $this->submissionSucceeded($request, $quizForm);
+                return $this->submissionSucceeded($request, $quizForm, $this->responseOfAttempt($session));
             }
 
             // (A student out of attempts is answered below with its own message.)
@@ -410,7 +410,7 @@ class QuizResponseController extends Controller
             ? ['respondent_name' => null, 'respondent_class' => null, 'respondent_email' => null]
             : app(RespondentIdentity::class)->fromInput($quizForm, $validated, $session);
 
-        QuizResponse::query()->create([
+        $response = QuizResponse::query()->create([
             'quiz_form_id' => $quizForm->id,
             'quiz_session_id' => $session?->id,
             'user_id' => $user?->id,
@@ -424,6 +424,8 @@ class QuizResponseController extends Controller
             'score' => $score,
             'is_timeout' => $isTimeout,
             'late_seconds' => $countsSavedAnswers ? null : $lateSeconds,
+            // How many tries handing in took this page (weak Wi-Fi, a busy server), for the exam's figures.
+            'submit_attempts' => $validated['submit_attempts'] ?? null,
             'ip_address' => $request->ip(),
             'user_agent' => (string) $request->userAgent(),
         ]);
@@ -446,7 +448,7 @@ class QuizResponseController extends Controller
             meta: array_filter(['timeout' => $isTimeout, 'locked' => $wasLocked]),
         );
 
-        return $this->submissionSucceeded($request, $quizForm);
+        return $this->submissionSucceeded($request, $quizForm, $response);
     }
 
     /**
@@ -785,14 +787,23 @@ class QuizResponseController extends Controller
     }
 
     /**
-     * The response returned after the answers have been stored.
+     * The response handed in for an attempt (the latest, should there be more).
      */
-    protected function submissionSucceeded(Request $request, QuizForm $quizForm): RedirectResponse|JsonResponse
+    protected function responseOfAttempt(QuizSession $session): ?QuizResponse
+    {
+        return QuizResponse::query()->where('quiz_session_id', $session->id)->latest('id')->first();
+    }
+
+    /**
+     * The response returned after the answers have been stored, with the receipt of what was stored.
+     */
+    protected function submissionSucceeded(Request $request, QuizForm $quizForm, ?QuizResponse $response = null): RedirectResponse|JsonResponse
     {
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Jawaban berhasil disimpan.',
+                'receipt' => $response?->receiptCode(),
             ]);
         }
 
@@ -840,12 +851,17 @@ class QuizResponseController extends Controller
         }
 
         $assignedIds = app(ExamLayout::class)->assignedIds($quizForm, $session->layout);
+        $draftAnswers = app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($validated['answers'], $assignedIds));
 
         $session->update([
-            'draft_answers' => app(FileAnswers::class)->sanitize($quizForm, $session, $this->onlyAssigned($validated['answers'], $assignedIds)),
+            'draft_answers' => $draftAnswers,
             ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)] : []),
             'draft_saved_at' => now(),
+            // Peta Kelas and the exam's delivery figures: the device's answers are on the server now.
+            ...$session->arrivedDraftAttributes(isset($validated['pending_since']) ? (int) $validated['pending_since'] : null),
         ]);
+
+        $session->takeSnapshot($draftAnswers);
 
         return response()->json([
             'saved' => true,
@@ -896,6 +912,7 @@ class QuizResponseController extends Controller
                     'draft_answers' => $this->onlyAssigned($snapshot, app(ExamLayout::class)->assignedIds($quizForm, $session->layout)),
                     'draft_saved_at' => now(),
                 ]);
+                $session->takeSnapshot($session->draft_answers);
             }
 
             $session->markSeen();
@@ -913,6 +930,8 @@ class QuizResponseController extends Controller
         $request->validate([
             'session_token' => ['required', 'string', 'max:100'],
             'returning' => ['nullable', 'string', 'max:20'],
+            // Since when the page holds answers the server does not have yet (0: none).
+            'unsynced_since' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $session = $this->sessionOfRequest($request, $quizForm);
@@ -921,6 +940,11 @@ class QuizResponseController extends Controller
 
         $session->settleLeave($quizForm, $request->ip(), $request->input('returning'));
         $session->markSeen();
+
+        // Pages from before this was told leave it as it is.
+        if ($request->filled('unsynced_since') && $session->submitted_at === null) {
+            $session->noteUnsyncedSince((int) $request->input('unsynced_since'));
+        }
 
         return $this->lockState($quizForm, $session);
     }

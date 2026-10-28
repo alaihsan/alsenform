@@ -41,6 +41,8 @@ const props = defineProps<{
     primaryAction: ErrorAction;
     secondaryAction: ErrorAction;
     occurredAt: string | null;
+    /** The code of a server error in Laporan → Galat Server, to tell the teacher or admin. */
+    reference: string | null;
 }>();
 
 const icons: Record<string, Component> = {
@@ -129,7 +131,13 @@ const goBack = (): void => {
                     </a>
                 </div>
 
-                <p v-if="occurredAt" class="mt-6 text-[11px] text-slate-400">Waktu kejadian: {{ occurredAt }}</p>
+                <p
+                    v-if="reference"
+                    class="mt-6 inline-block rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3.5 py-1.5 text-xs text-slate-600"
+                >
+                    Kode laporan <strong class="select-all font-mono text-sm tracking-wider text-slate-900">{{ reference }}</strong>
+                </p>
+                <p v-if="occurredAt" :class="['text-[11px] text-slate-400', reference ? 'mt-2' : 'mt-6']">Waktu kejadian: {{ occurredAt }}</p>
             </section>
         </main>
     </AlsenformLayout>

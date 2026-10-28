@@ -414,6 +414,22 @@ let isSyncingServerDraft = false;
 let hasUnsyncedDraft = false;
 let lastServerDraftSyncAt = 0;
 let isServerDraftSealed = false;
+// Since when (server clock, ms) this page holds answers the server does not have, told to the server
+// so the proctor's Peta Kelas shows a student whose answers do not get through. And the first
+// change made while a draft was on its way, which is still unsynced once that draft arrives.
+let unsyncedSince: number | null = null;
+let changedDuringSyncAt: number | null = null;
+
+const noteUnsyncedChange = () => {
+    if (!canSyncDraftToServer()) {
+        return;
+    }
+    const now = serverNow();
+    unsyncedSince ??= now;
+    if (isSyncingServerDraft) {
+        changedDuringSyncAt ??= now;
+    }
+};
 
 const canSyncDraftToServer = () =>
     !!props.session?.token && !isServerDraftSealed && !props.accessRestricted && !props.quizForm.settings?.disableRespondentAutosave;
@@ -433,6 +449,7 @@ const syncDraftToServer = async () => {
     isSyncingServerDraft = true;
     hasUnsyncedDraft = false;
     lastServerDraftSyncAt = Date.now();
+    changedDuringSyncAt = null;
     try {
         await axios.post(
             `/forms/${props.quizForm.slug}/draft`,
@@ -441,14 +458,17 @@ const syncDraftToServer = async () => {
                 respondent_identifier: respondentIdentifier,
                 answers: answers.value,
                 doubts: doubtfulIds.value,
+                pending_since: unsyncedSince,
             },
             { timeout: REQUEST_TIMEOUT_MS },
         );
+        unsyncedSince = changedDuringSyncAt;
         markServerReachable(true);
     } catch (error: any) {
         if (error?.response?.status === 409) {
             // This attempt was already submitted: the device copy is enough from here on.
             isServerDraftSealed = true;
+            unsyncedSince = null;
             return;
         }
         hasUnsyncedDraft = true;
@@ -457,6 +477,7 @@ const syncDraftToServer = async () => {
         }
     } finally {
         isSyncingServerDraft = false;
+        changedDuringSyncAt = null;
     }
 };
 
@@ -480,6 +501,7 @@ const flushDraftWhenHidden = () => {
 
 const clearDraft = () => {
     hasUnsyncedDraft = false;
+    unsyncedSince = null;
     if (serverDraftTimer) {
         clearTimeout(serverDraftTimer);
         serverDraftTimer = null;
@@ -502,6 +524,7 @@ watch(
         if (isSubmitted.value) return;
         autoSaveStatus.value = 'saving';
         hasUnsyncedDraft = true;
+        noteUnsyncedChange();
         scheduleServerDraftSync();
         if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
         autoSaveTimeout = setTimeout(() => {
@@ -636,7 +659,7 @@ const refreshLockState = async () => {
         const response = isSendingLock
             ? await axios.post(`/forms/${props.quizForm.slug}/lock`, lockPayload(), { timeout: REQUEST_TIMEOUT_MS })
             : await axios.get(`/forms/${props.quizForm.slug}/status`, {
-                  params: { session_token: props.session?.token, returning: returningAs },
+                  params: { session_token: props.session?.token, returning: returningAs, unsynced_since: unsyncedSince ?? 0 },
                   timeout: REQUEST_TIMEOUT_MS,
               });
         if (!isServerReachable.value) {
@@ -1965,10 +1988,12 @@ const sendAnswers = async (isTimeout: boolean) => {
     try {
         for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
             try {
-                await axios.post(props.quizForm.submitUrl, submissionPayload(isTimeout), {
+                submitTries++;
+                const response = await axios.post(props.quizForm.submitUrl, submissionPayload(isTimeout), {
                     headers: { Accept: 'application/json' },
                     timeout: SUBMIT_TIMEOUT_MS,
                 });
+                submissionReceipt.value = typeof response.data?.receipt === 'string' ? response.data.receipt : null;
                 markServerReachable(true);
                 markSubmitted();
                 return;
@@ -2036,8 +2061,14 @@ const scheduleSubmissionRetry = () => {
     }, SUBMIT_RETRY_INTERVAL_MS);
 };
 
-/** The body of a submission, the same for every try (a repeated one is recognised by its session). */
+// Every try of handing in on this page, for the exam's delivery figures (a repeated one is recognised by its session).
+let submitTries = 0;
+// The receipt of the stored answers ("7F3A-9C21"): the student can show it if the answers are questioned.
+const submissionReceipt = ref<string | null>(null);
+
+/** The body of a submission: the same answers for every try (a repeated one is recognised by its session). */
 const submissionPayload = (isTimeout: boolean) => ({
+    submit_attempts: Math.max(1, submitTries),
     email: email.value || null,
     ...identityPayload(),
     answers: answersOnPath(),
@@ -2315,6 +2346,14 @@ const submitAnotherResponse = () => {
                 <h1 :class="['text-2xl font-semibold leading-tight sm:text-3xl', design ? 'af-title' : '']" :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }">
                     {{ quizForm.settings.confirmationMessage ?? 'Jawaban Anda sudah tercatat.' }}
                 </h1>
+                <p
+                    v-if="submissionReceipt"
+                    class="mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-900"
+                    data-testid="submission-receipt"
+                >
+                    Bukti kirim <strong class="select-all font-mono text-base tracking-wider">{{ submissionReceipt }}</strong>
+                    <span class="text-xs text-emerald-800">Catat atau foto kode ini: guru dapat mencocokkannya dengan jawaban yang tersimpan.</span>
+                </p>
                 <a
                     v-if="canSeeResults"
                     :href="quizForm.resultsUrl"

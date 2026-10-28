@@ -13,7 +13,8 @@ use Illuminate\Support\Collection;
 /**
  * Peta Kelas: every student of an exam at a glance for the proctor, while it runs. How far each
  * student is, how many questions they marked "Ragu-ragu", and whether something needs a look:
- * locked, left the exam page, lost the connection, or no new answer for a while.
+ * locked, left the exam page, lost the connection, answers that do not reach the server, or no
+ * new answer for a while.
  */
 class ClassMap
 {
@@ -34,9 +35,10 @@ class ClassMap
     public const IDLE_AFTER_MINUTES = 5;
 
     /**
-     * The order of the statuses on the map: what needs the proctor first.
+     * The order of the statuses on the map: what needs the proctor first. "unsaved": the page is
+     * online but its newest answers have not reached the server for a while (only on the device).
      */
-    public const STATUSES = ['locked', 'left', 'offline', 'idle', 'working', 'not_started', 'submitted'];
+    public const STATUSES = ['locked', 'left', 'offline', 'unsaved', 'idle', 'working', 'not_started', 'submitted'];
 
     public function __construct(protected ExamLayout $examLayout) {}
 
@@ -72,7 +74,7 @@ class ClassMap
                     'status' => $status,
                     'answered' => $session->submitted_at !== null
                         ? ($answeredInResponse[$session->id] ?? 0)
-                        : $this->answeredCount($session->draft_answers),
+                        : QuizSession::countAnswered($session->draft_answers),
                     'total' => $assigned !== null ? count($assigned) : $totalQuestions,
                     'doubts' => is_array($session->doubtful_question_ids) ? count($session->doubtful_question_ids) : 0,
                     'blurCount' => (int) $session->blur_count,
@@ -81,6 +83,9 @@ class ClassMap
                         : null,
                     'lastSeenSeconds' => $session->last_seen_at !== null ? (int) $session->last_seen_at->diffInSeconds(now()) : null,
                     'idleMinutes' => $status === 'idle' ? (int) $this->lastAnswerAt($session)?->diffInMinutes(now()) : null,
+                    // When the server last got the answers, and how long newer ones wait on the device.
+                    'savedSeconds' => $session->submitted_at === null && $session->draft_saved_at !== null ? (int) $session->draft_saved_at->diffInSeconds(now()) : null,
+                    'unsavedSeconds' => $session->submitted_at === null && $session->unsynced_since !== null ? (int) $session->unsynced_since->diffInSeconds(now()) : null,
                 ];
             })
             ->sort(fn (array $a, array $b): int => array_search($a['status'], self::STATUSES, true) <=> array_search($b['status'], self::STATUSES, true)
@@ -104,6 +109,7 @@ class ClassMap
             // The exam page was closed (or the student went elsewhere) and has not come back.
             $session->left_at !== null => 'left',
             ($session->last_seen_at ?? $session->started_at)->lt(now()->subSeconds(self::OFFLINE_AFTER_SECONDS)) => 'offline',
+            $session->unsynced_since?->lt(now()->subSeconds(QuizSession::UNSAVED_AFTER_SECONDS)) ?? false => 'unsaved',
             $this->lastAnswerAt($session)?->lt(now()->subMinutes(self::IDLE_AFTER_MINUTES)) ?? false => 'idle',
             default => 'working',
         };
@@ -112,16 +118,6 @@ class ClassMap
     protected function lastAnswerAt(QuizSession $session): ?CarbonInterface
     {
         return $session->draft_saved_at ?? $session->started_at;
-    }
-
-    /**
-     * @param  mixed  $answers  The saved answers of an attempt, by question.
-     */
-    protected function answeredCount(mixed $answers): int
-    {
-        return is_array($answers)
-            ? count(array_filter($answers, fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== []))
-            : 0;
     }
 
     /**
@@ -139,7 +135,7 @@ class ClassMap
         return QuizResponse::query()
             ->whereIn('quiz_session_id', $sessionIds)
             ->get(['quiz_session_id', 'answers'])
-            ->mapWithKeys(fn (QuizResponse $response): array => [$response->quiz_session_id => $this->answeredCount($response->answers)])
+            ->mapWithKeys(fn (QuizResponse $response): array => [$response->quiz_session_id => QuizSession::countAnswered($response->answers)])
             ->all();
     }
 }

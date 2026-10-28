@@ -671,7 +671,7 @@ class ServeLanCommand extends Command
             $status = $this->httpStatus("http://{$serverIp}:{$port}/up");
             $status === 200
                 ? $this->checkLine(true, "Server menjawab di http://{$serverIp}:{$port}")
-                : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat pesan galat di terminal lan:serve atau storage/logs/laravel.log']);
+                : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat Laporan → Galat Server di aplikasi, terminal lan:serve, atau storage/logs/']);
         }
 
         foreach ($this->firewallProblems() as [$problem, $fix]) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import AnswerHistoryModal from '@/components/form-editor/AnswerHistoryModal.vue';
 import type { QuizFormPayload } from '@/types/quiz';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Download, ListFilter, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Download, History, ListFilter, ShieldAlert, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 type GradebookRow = NonNullable<NonNullable<QuizFormPayload['responses']>['gradebook']>[number];
@@ -25,6 +26,10 @@ const lastInitial = ref<string | null>(null);
 const isInitialsPanelOpen = ref(false);
 
 const autoSubmittedHint = 'Waktu habis saat halaman ujian tertutup atau offline. Jawaban yang sudah tersimpan dikirim otomatis oleh sistem.';
+const brokenReceiptHint = 'Jawaban yang tersimpan sudah berubah di luar aplikasi sejak dikirim: tidak sama lagi dengan bukti kirim siswa.';
+
+// The student whose answer history is open.
+const historyRow = ref<GradebookRow | null>(null);
 const statusLabel = (row: GradebookRow) =>
     row.is_auto_submitted ? 'Otomatis' : row.lateMinutes ? `Terlambat ${row.lateMinutes} mnt` : row.is_timeout ? 'Timeout' : 'Selesai';
 
@@ -45,7 +50,10 @@ const searched = computed(() => {
     if (!query) {
         return props.rows;
     }
-    return props.rows.filter((row) => [row.name, row.nis, row.kelas, row.email].some((value) => (value ?? '').toLowerCase().includes(query)));
+    // The receipt a student shows (7F3A-9C21) finds their response too.
+    return props.rows.filter((row) =>
+        [row.name, row.nis, row.kelas, row.email, row.receipt].some((value) => (value ?? '').toLowerCase().includes(query)),
+    );
 });
 
 const matchesInitials = (row: GradebookRow, first: string | null, last: string | null) => {
@@ -321,6 +329,16 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                     >
                         {{ statusLabel(row) }}
                     </p>
+                    <button
+                        v-if="row.historyUrl"
+                        type="button"
+                        class="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-indigo-700"
+                        @click="historyRow = row"
+                    >
+                        <ShieldAlert v-if="row.receiptIntact === false" class="h-3 w-3 text-rose-600" :title="brokenReceiptHint" />
+                        <History v-else class="h-3 w-3" />
+                        <span class="font-mono">{{ row.receipt ?? 'Riwayat' }}</span>
+                    </button>
                 </div>
             </li>
             <li v-if="visibleRows.length === 0" class="px-4 py-8 text-center text-xs text-slate-400">
@@ -439,7 +457,20 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                                 {{ statusLabel(row) }}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-slate-400">{{ row.formattedDate }}</td>
+                        <td class="px-4 py-3 text-slate-400">
+                            {{ row.formattedDate }}
+                            <button
+                                v-if="row.historyUrl"
+                                type="button"
+                                class="mt-0.5 flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-indigo-700"
+                                :title="row.receiptIntact === false ? brokenReceiptHint : 'Bukti kirim dan riwayat jawaban selama ujian'"
+                                @click="historyRow = row"
+                            >
+                                <ShieldAlert v-if="row.receiptIntact === false" class="h-3 w-3 text-rose-600" />
+                                <History v-else class="h-3 w-3" />
+                                <span class="font-mono">{{ row.receipt ?? 'Riwayat' }}</span>
+                            </button>
+                        </td>
                     </tr>
                     <tr v-if="visibleRows.length === 0">
                         <td colspan="8" class="py-8 text-center text-slate-400">
@@ -453,5 +484,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                 </tbody>
             </table>
         </div>
+
+        <AnswerHistoryModal v-if="historyRow?.historyUrl" :url="historyRow.historyUrl" :name="historyRow.name" @close="historyRow = null" />
     </div>
 </template>

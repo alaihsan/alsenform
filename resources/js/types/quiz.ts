@@ -173,6 +173,12 @@ export type QuizFormPayload = {
             submittedAtTimestamp?: number;
             submittedAt: string;
             formattedDate: string;
+            /** The receipt shown to the student after handing in, as "7F3A-9C21". */
+            receipt?: string | null;
+            /** Whether the answers kept are still the ones handed in (null: no receipt). */
+            receiptIntact?: boolean | null;
+            /** The answers the server had during the exam, and what was handed in. */
+            historyUrl?: string;
         }[];
         questions: {
             id: number | string | null;

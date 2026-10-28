@@ -206,6 +206,7 @@ class ActivityReport
             'userAgent' => $log->user_agent,
             'note' => match (true) {
                 $log->event === ActivityLog::PAGE_FAILED => $this->pageFailureNote($log),
+                $log->event === ActivityLog::SERVER_ERROR => trim(($log->meta['reference'] ?? '').': galat server (HTTP '.($log->meta['status'] ?? 500).')', ': '),
                 ($log->meta['auto'] ?? false) && ($log->meta['locked'] ?? false) => 'Dikirim otomatis: waktu habis saat terkunci',
                 (bool) ($log->meta['auto'] ?? false) => 'Dikirim otomatis: waktu habis, halaman tertutup',
                 ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',
@@ -213,9 +214,12 @@ class ActivityReport
                 default => null,
             },
             // A page that failed to load: the page, and the browser's error or the file it could not get.
-            'detail' => $log->event === ActivityLog::PAGE_FAILED
-                ? (implode(' · ', array_filter([$log->meta['path'] ?? null, $log->meta['message'] ?? null, $log->meta['asset'] ?? null])) ?: null)
-                : null,
+            'detail' => match ($log->event) {
+                ActivityLog::PAGE_FAILED => implode(' · ', array_filter([$log->meta['path'] ?? null, $log->meta['message'] ?? null, $log->meta['asset'] ?? null])) ?: null,
+                // Where it happened; what went wrong is for the admin, on the Galat Server page.
+                ActivityLog::SERVER_ERROR => trim(($log->meta['method'] ?? '').' '.($log->meta['path'] ?? '')) ?: null,
+                default => null,
+            },
         ];
     }
 
@@ -321,7 +325,7 @@ class ActivityReport
             ->where('activity_logs.user_id', $viewer->id)
             ->orWhereIn('activity_logs.quiz_form_id', $ownForms)
             ->orWhere(fn (Builder $logins) => $logins
-                ->whereIn('event', [ActivityLog::LOGIN, ActivityLog::LOGOUT, ActivityLog::PAGE_FAILED])
+                ->whereIn('event', [ActivityLog::LOGIN, ActivityLog::LOGOUT, ActivityLog::PAGE_FAILED, ActivityLog::SERVER_ERROR])
                 ->whereHas('user', fn (Builder $users) => $this->whereStudent($users))));
     }
 

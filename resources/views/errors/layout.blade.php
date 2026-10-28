@@ -71,6 +71,9 @@
             .button-secondary:hover { background: #f8fafc; }
             .button:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
             .meta { margin: 1.5rem 0 0; font-size: 11px; color: #94a3b8; }
+            .reference { display: inline-block; margin: 1.5rem 0 0; padding: .375rem .875rem; border-radius: .75rem; background: #f8fafc; border: 1px dashed #cbd5e1; font-size: .75rem; color: #475569; }
+            .reference strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .875rem; letter-spacing: .05em; color: #0f172a; user-select: all; }
+            .reference + .meta { margin-top: .5rem; }
             @media (min-width: 640px) {
                 .header-inner { padding: 0 1.5rem; }
                 .brand-name { font-size: 1.125rem; }
@@ -131,6 +134,9 @@
                     </a>
                 </div>
 
+                @if ($page['reference'])
+                    <p class="reference">Kode laporan <strong>{{ $page['reference'] }}</strong></p>
+                @endif
                 @if ($page['occurredAt'])
                     <p class="meta">Waktu kejadian: {{ $page['occurredAt'] }}</p>
                 @endif

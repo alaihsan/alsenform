@@ -22,6 +22,8 @@ use App\Http\Controllers\QuizRecapController;
 use App\Http\Controllers\QuizResponseController;
 use App\Http\Controllers\QuizResponseExportController;
 use App\Http\Controllers\QuizResultController;
+use App\Http\Controllers\ResponseHistoryController;
+use App\Http\Controllers\ServerErrorController;
 use App\Http\Controllers\SmartFilterController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\UnlockRequestController;
@@ -98,6 +100,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
         Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
         Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');
+        Route::get('forms/{quizForm}/responses/{quizResponse}/history', ResponseHistoryController::class)->name('forms.responses.history');
         Route::get('forms/{quizForm}/filter-cerdas', SmartFilterController::class)->name('forms.smart-filter');
         Route::get('forms/{quizForm}/progress', ExamProgressController::class)->name('forms.progress');
         Route::get('forms/{quizForm}/exam-token', ExamTokenController::class)->name('forms.exam-token');
@@ -167,6 +170,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
         Route::post('users/import-students', [UserController::class, 'importStudents'])->name('users.import-students');
         Route::get('users/student-template', [UserController::class, 'downloadStudentTemplate'])->name('users.student-template');
+
+        // Galat Server: every fault of the server once, found by the code on its error page
+        Route::get('reports/server-errors', [ServerErrorController::class, 'index'])->name('server-errors.index');
+        Route::get('reports/server-errors/{serverError}', [ServerErrorController::class, 'show'])->name('server-errors.show');
+        Route::patch('reports/server-errors/{serverError}', [ServerErrorController::class, 'update'])->name('server-errors.update');
     });
 });
 
