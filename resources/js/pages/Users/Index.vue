@@ -2,6 +2,7 @@
 import { useFlashMessages } from '@/composables/useFlashMessages';
 import { useToast } from '@/composables/useToast';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
+import { copyText } from '@/lib/clipboard';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
@@ -128,8 +129,12 @@ function clearFilters(): void {
 
 // Copy to clipboard helper
 const copiedNis = ref<string | null>(null);
-function copyPassword(password: string, nis: string): void {
-    navigator.clipboard.writeText(password);
+async function copyPassword(password: string, nis: string): Promise<void> {
+    if (!(await copyText(password))) {
+        showToast('Browser tidak mengizinkan copy otomatis');
+
+        return;
+    }
     copiedNis.value = nis;
     showToast(`Password ${password} berhasil disalin!`);
     setTimeout(() => {
