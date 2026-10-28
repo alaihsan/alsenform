@@ -17,7 +17,7 @@ use Throwable;
 class ServeLanCommand extends Command
 {
     /**
-     * The port of the intranet address, http://falcon.lan:2026.
+     * The port of the intranet address, http://falcon.intranet:2026.
      */
     public const DEFAULT_PORT = 2026;
 
@@ -41,7 +41,7 @@ class ServeLanCommand extends Command
                             {--d|daemon : Jalankan server di latar belakang (background mode)}
                             {--stop : Hentikan server yang sedang berjalan di latar belakang}
                             {--status : Periksa status server yang sedang berjalan di latar belakang}
-                            {--check : Periksa semua yang dibutuhkan alamat intranet (http://falcon.lan:2026) beserta cara memperbaikinya}
+                            {--check : Periksa semua yang dibutuhkan alamat intranet (http://falcon.intranet:2026) beserta cara memperbaikinya}
                             {--no-caffeinate : Jangan aktifkan proteksi anti-sleep macOS}';
 
     /**
@@ -632,7 +632,7 @@ class ServeLanCommand extends Command
         }
 
         if ($lanHost === null) {
-            $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.lan']);
+            $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.intranet']);
         }
 
         $expectedUrl = $lanHost !== null ? $this->urlFor($lanHost, $port) : null;
@@ -1197,7 +1197,7 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * The intranet name students type (LAN_HOST, falcon.lan by default), or null when there is none.
+     * The intranet name students type (LAN_HOST, falcon.intranet by default), or null when there is none.
      */
     protected function lanHost(): ?string
     {
@@ -1593,7 +1593,7 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * Session cookie settings that stop logins over http://falcon.lan:2026 and the IP addresses:
+     * Session cookie settings that stop logins over http://falcon.intranet:2026 and the IP addresses:
      * the browser drops the cookie, and every login or form ends in "419 Page Expired".
      *
      * @return list<string>
@@ -1604,7 +1604,8 @@ class ServeLanCommand extends Command
         $domain = trim((string) config('session.domain'));
 
         if ($domain !== '') {
-            $warnings[] = "SESSION_DOMAIN={$domain} di .env: browser menolak cookie login di alamat lain (falcon.lan, alamat IP), jadi login gagal (419). Kosongkan baris itu (SESSION_DOMAIN=null) lalu jalankan ulang server.";
+            $otherAddresses = implode(', ', array_filter([$this->lanHost(), 'alamat IP']));
+            $warnings[] = "SESSION_DOMAIN={$domain} di .env: browser menolak cookie login di alamat lain ({$otherAddresses}), jadi login gagal (419). Kosongkan baris itu (SESSION_DOMAIN=null) lalu jalankan ulang server.";
         }
 
         if (config('session.secure') === true) {

@@ -151,7 +151,7 @@ const TONES = {
 const TIPS = [
     'Sambungkan komputer server ke router atau access point dengan kabel LAN, bukan Wi-Fi.',
     'Di server Mac, matikan AirDrop dan Handoff selama ujian: keduanya membuat Wi-Fi Mac tersendat setiap beberapa detik.',
-    'Buka aplikasi dengan http://falcon.lan:2026 atau alamat IP server (misalnya http://192.168.1.10:2026), bukan nama berakhiran .local, terutama di Windows dan Android.',
+    'Buka aplikasi dengan http://falcon.intranet:2026 atau alamat IP server (misalnya http://192.168.1.10:2026), bukan nama berakhiran .local, terutama di Windows dan Android.',
     'Di laptop Windows: matikan proxy (Settings → Network → Proxy, termasuk "Automatically detect settings") dan VPN, atau kecualikan alamat server.',
     'Antivirus dengan perlindungan web (Web Shield, HTTP scanning) bisa memperlambat atau memutus halaman: kecualikan alamat server.',
     'Atur mode daya laptop ke "Best performance" saat ujian; mode hemat daya ikut menghemat Wi-Fi.',

@@ -175,10 +175,10 @@ Data bisa disaring per tanggal, jenis aktivitas, ujian, peran, atau dicari berda
 Perintah `php artisan lan:serve` menyiapkan semuanya untuk hari ujian:
 
 - Menjalankan server dengan banyak worker (bawaan 24) supaya siswa yang mengirim jawaban bersamaan tidak mengantre.
-- Berjalan di port **2026** dengan alamat intranet **`http://falcon.lan:2026`**. Saat menyala, perintah ini memeriksa apakah DNS router sudah mengarahkan `falcon.lan` ke server; bila belum (atau masih ke IP lama), ia menuliskan entri DNS yang perlu ditambahkan di router.
+- Berjalan di port **2026** dengan alamat intranet **`http://falcon.intranet:2026`**. Saat menyala, perintah ini memeriksa apakah DNS router sudah mengarahkan `falcon.intranet` ke server; bila belum (atau masih ke IP lama), ia menuliskan entri DNS yang perlu ditambahkan di router.
 - Menampilkan juga alamat IP untuk setiap jaringan aktif (Wi-Fi 5 GHz, 2,4 GHz, kabel LAN) sebagai cadangan. Nama berakhiran `.local` (misalnya `alsenform.local`) tidak dipakai lagi.
 - Bila server Falcon Forms lama masih berjalan di port 8000 (alamat lama seperti `http://alsenform.local:8000`), perintah ini menawarkan untuk menghentikannya, supaya siswa tidak tertinggal di alamat lama.
-- Memperingatkan pengaturan `.env` yang membuat login gagal (419) lewat `http://falcon.lan:2026`: `SESSION_DOMAIN` yang terisi dan `SESSION_SECURE_COOKIE=true`.
+- Memperingatkan pengaturan `.env` yang membuat login gagal (419) lewat `http://falcon.intranet:2026`: `SESSION_DOMAIN` yang terisi dan `SESSION_SECURE_COOKIE=true`.
 - Di macOS, mencegah komputer tertidur selama server berjalan (caffeinate).
 - Memberi tahu alamat baru kalau IP server berubah di tengah ujian.
 - Memperbarui database dan cache secara otomatis setelah aplikasi di-update.
@@ -321,29 +321,29 @@ Seeder membuat akun admin `superadmin@falconforms.test` dengan password `superad
 php artisan lan:serve
 ```
 
-Siswa membuka **`http://falcon.lan:2026`**. Alamat IP server juga muncul di layar, misalnya `http://192.168.1.10:2026`, dan selalu bisa dipakai. Pastikan perangkat siswa tersambung ke router yang sama dan fitur *AP Isolation* di router dimatikan.
+Siswa membuka **`http://falcon.intranet:2026`**. Alamat IP server juga muncul di layar, misalnya `http://192.168.1.10:2026`, dan selalu bisa dipakai. Pastikan perangkat siswa tersambung ke router yang sama dan fitur *AP Isolation* di router dimatikan.
 
-### Mengaktifkan alamat falcon.lan
+### Mengaktifkan alamat falcon.intranet
 
-Nama `falcon.lan` dijawab oleh DNS router, jadi router perlu diberi tahu sekali:
+Nama `falcon.intranet` dijawab oleh DNS router, jadi router perlu diberi tahu sekali:
 
 1. Atur **DHCP Reservation** (IP tetap) untuk komputer server di router, misalnya `192.168.1.10`.
-2. Tambahkan **DNS statis** di router: `falcon.lan` → `192.168.1.10`. Letaknya tergantung merek router, misalnya MikroTik: *IP → DNS → Static*; OpenWrt: *Network → DHCP and DNS → Hostnames*; pfSense/OPNsense: *Services → DNS Resolver → Host Overrides*; banyak router rumahan: *LAN → DHCP/DNS → Static DNS* atau *Local DNS*.
-3. Jalankan `php artisan lan:serve`. Bila DNS sudah benar, layar menulis `http://falcon.lan:2026 (alamat intranet → 192.168.1.10)`; bila belum, layar menulis entri DNS yang masih perlu ditambahkan.
+2. Tambahkan **DNS statis** di router: `falcon.intranet` → `192.168.1.10`. Letaknya tergantung merek router, misalnya MikroTik: *IP → DNS → Static*; OpenWrt: *Network → DHCP and DNS → Hostnames*; pfSense/OPNsense: *Services → DNS Resolver → Host Overrides*; banyak router rumahan: *LAN → DHCP/DNS → Static DNS* atau *Local DNS*.
+3. Jalankan `php artisan lan:serve`. Bila DNS sudah benar, layar menulis `http://falcon.intranet:2026 (alamat intranet → 192.168.1.10)`; bila belum, layar menulis entri DNS yang masih perlu ditambahkan.
 
-Perangkat harus memakai DNS dari router (bawaan Wi-Fi sekolah). Perangkat yang memakai DNS lain (misalnya 8.8.8.8, "DNS Pribadi" di Android, "DNS aman" di Chrome yang diatur ke Google/Cloudflare, VPN, atau iCloud Private Relay) tidak mengenal `falcon.lan` dan tetap bisa memakai alamat IP. Nama lain bisa dipakai dengan `LAN_HOST` di berkas `.env` (misalnya `LAN_HOST=ujian.sekolah.lan`); kosongkan untuk hanya menampilkan alamat IP.
+Perangkat harus memakai DNS dari router (bawaan Wi-Fi sekolah). Perangkat yang memakai DNS lain (misalnya 8.8.8.8, "DNS Pribadi" di Android, "DNS aman" di Chrome yang diatur ke Google/Cloudflare, VPN, atau iCloud Private Relay) tidak mengenal `falcon.intranet` dan tetap bisa memakai alamat IP. Nama lain bisa dipakai dengan `LAN_HOST` di berkas `.env` (misalnya `LAN_HOST=ujian.sekolah.lan`); kosongkan untuk hanya menampilkan alamat IP.
 
-Di berkas `.env` server, isi `APP_URL=http://falcon.lan:2026` dan biarkan `SESSION_DOMAIN=null`. Ketik alamatnya lengkap dengan `http://` dan port saat pertama kali (`http://falcon.lan:2026`), lalu simpan sebagai bookmark; tanpa itu sebagian browser menganggap `falcon.lan` sebagai kata pencarian. Data yang disimpan browser (draf jawaban di perangkat, filter, pilihan tampilan) terikat pada alamat, jadi pindah alamat sebaiknya tidak di tengah ujian; jawaban yang sudah tersimpan di server tetap aman.
+Di berkas `.env` server, isi `APP_URL=http://falcon.intranet:2026` dan biarkan `SESSION_DOMAIN=null`. Ketik alamatnya lengkap dengan `http://` dan port saat pertama kali (`http://falcon.intranet:2026`), lalu simpan sebagai bookmark; tanpa itu sebagian browser menganggap `falcon.intranet` sebagai kata pencarian. Data yang disimpan browser (draf jawaban di perangkat, filter, pilihan tampilan) terikat pada alamat, jadi pindah alamat sebaiknya tidak di tengah ujian; jawaban yang sudah tersimpan di server tetap aman.
 
 | Perintah | Fungsi |
 | --- | --- |
-| `php artisan lan:serve` | Menjalankan server di port 2026 (`http://falcon.lan:2026`) |
+| `php artisan lan:serve` | Menjalankan server di port 2026 (`http://falcon.intranet:2026`) |
 | `php artisan lan:serve --port=2027` | Memakai port lain |
 | `php artisan lan:serve --workers=32` | Menambah worker untuk peserta yang lebih banyak |
 | `php artisan lan:serve --daemon` | Berjalan di latar belakang |
 | `php artisan lan:status` | Melihat status dan alamat server latar belakang |
 | `php artisan lan:stop` | Menghentikan server |
-| `php artisan lan:check` | Memeriksa mengapa `http://falcon.lan:2026` belum berfungsi, beserta cara memperbaikinya |
+| `php artisan lan:check` | Memeriksa mengapa `http://falcon.intranet:2026` belum berfungsi, beserta cara memperbaikinya |
 | `php artisan exam:optimize --production` | Menyiapkan cache dan mode produksi sebelum ujian besar |
 | `php artisan exam:submit-expired` | Mengirim jawaban ujian yang waktunya habis tetapi belum terkirim. `lan:serve` menjalankannya tiap menit, dan ujian yang dibuka guru selalu diperiksa dulu, jadi biasanya tidak perlu dijalankan manual |
 
@@ -356,13 +356,15 @@ Jalankan `php artisan lan:check` di komputer server. Perintah ini memeriksa satu
 - **`.env`**: `APP_URL`, `LAN_HOST`, `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE`.
 - **Server**: berjalan di port 2026, menjawab di alamat IP-nya, dan tidak ada server lama di port 8000.
 - **Firewall macOS**: tidak memblokir koneksi masuk ke PHP.
-- **Router**: ditanya langsung seperti perangkat siswa bertanya, apakah mengenal `falcon.lan` dan mengarahkannya ke server ini; juga apakah DNS yang dibagikan DHCP mengenalnya.
+- **Router**: ditanya langsung seperti perangkat siswa bertanya, apakah mengenal `falcon.intranet` dan mengarahkannya ke server ini; juga apakah DNS yang dibagikan DHCP mengenalnya.
 
 Yang tidak ikut diperbarui oleh `git pull` (dan harus diubah sendiri): berkas `.env`, hasil build (`npm run build`), `public/hot`, skrip atau pintasan lain yang menjalankan server dengan `--port=8000`, serta pengaturan DNS dan DHCP di router.
 
+Pindah dari alamat lama (`http://localhost:8000` atau `http://falcon.lan:2026`): ubah `.env` menjadi `APP_URL=http://falcon.intranet:2026` dan `LAN_HOST=falcon.intranet`, tambahkan DNS statis `falcon.intranet` → IP server di router, lalu jalankan ulang `php artisan lan:serve`. Entri DNS `falcon.lan` yang lama boleh dibiarkan sampai semua perangkat memakai alamat baru.
+
 Tips untuk hari ujian:
 
-- Atur **DHCP reservation** (IP tetap) untuk komputer server di router, supaya alamat yang dibagikan ke siswa tidak berubah dan `falcon.lan` tetap mengarah ke server.
+- Atur **DHCP reservation** (IP tetap) untuk komputer server di router, supaya alamat yang dibagikan ke siswa tidak berubah dan `falcon.intranet` tetap mengarah ke server.
 - Pakai Wi-Fi 5 GHz bila bisa. Kabel LAN adalah pilihan paling stabil untuk komputer server.
 - Jangan me-restart server di tengah ujian. Jawaban siswa memang tetap aman, tetapi mereka tidak bisa mengirim selama server mati.
 
@@ -407,7 +409,7 @@ Keduanya berarti JavaScript halaman berhenti karena galat di browser: FF-301 saa
    - **Semua perangkat, satu halaman yang sama**: galat di halaman itu. Kirimkan kode, alamat halaman, dan pesan galatnya ke pengembang.
    - **Hanya satu perangkat**: penyebabnya di perangkat itu. Matikan pemblokir iklan, mode hemat data, atau ekstensi untuk alamat ini, tutup aplikasi lain, atau coba browser lain.
 3. Arti pesan yang sering muncul:
-   - `QuotaExceededError`: penyimpanan browser penuh, biasanya di tablet yang dipakai bergantian. Hapus data situs `falcon.lan` di pengaturan browser setelah ujian.
+   - `QuotaExceededError`: penyimpanan browser penuh, biasanya di tablet yang dipakai bergantian. Hapus data situs `falcon.intranet` di pengaturan browser setelah ujian.
    - `insertBefore`, `removeChild`, atau `not a child of this node`: isi halaman diubah dari luar oleh terjemahan otomatis atau ekstensi. Terjemahan kini dimatikan untuk semua halaman; sisanya biasanya ekstensi.
    - `SyntaxError` atau `is not a function`: browser terlalu lama untuk sebagian kode. Perbarui browser.
    - `Failed to fetch dynamically imported module` atau `Importing a module script failed`: berkas tampilan gagal diunduh, biasanya saat aplikasi sedang diperbarui. Jalankan `npm run build`, nyalakan ulang server, lalu muat ulang.

@@ -60,13 +60,13 @@ return [
     |--------------------------------------------------------------------------
     |
     | The name students and teachers type on the school network, served by
-    | "php artisan lan:serve" on port 2026: http://falcon.lan:2026. The
-    | router's DNS must point this name at the server (a static DNS entry).
-    | Leave it empty to only announce the server's IP addresses.
+    | "php artisan lan:serve" on port 2026: http://falcon.intranet:2026.
+    | The router's DNS must point this name at the server (a static DNS
+    | entry). Leave it empty to only announce the server's IP addresses.
     |
     */
 
-    'lan_host' => env('LAN_HOST', 'falcon.lan'),
+    'lan_host' => env('LAN_HOST', 'falcon.intranet'),
 
     /*
     |--------------------------------------------------------------------------

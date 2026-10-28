@@ -2,6 +2,7 @@
 
 use App\Console\Commands\ServeLanCommand;
 use App\Support\PendingMigrations;
+use Dotenv\Dotenv;
 use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -531,52 +532,63 @@ test('the lan commands serve on port 2026 unless told otherwise', function () {
     }
 });
 
-test('falcon.lan is the address students use once the router points it at the server', function () {
-    $command = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+test('a new installation opens on http://falcon.intranet:2026', function () {
+    $example = Dotenv::parse((string) file_get_contents(base_path('.env.example')));
+
+    expect($example['APP_URL'])->toBe('http://falcon.intranet:2026')
+        ->and($example['LAN_HOST'])->toBe('falcon.intranet')
+        ->and(config('app.lan_host'))->toBe('falcon.intranet')
+        // php artisan serve reads these: the whole network on 2026 instead of localhost:8000.
+        ->and($example['SERVER_HOST'])->toBe('0.0.0.0')
+        ->and($example['SERVER_PORT'])->toBe((string) ServeLanCommand::DEFAULT_PORT);
+});
+
+test('falcon.intranet is the address students use once the router points it at the server', function () {
+    $command = lanServeWithDns(['falcon.intranet' => '192.168.1.20']);
     $command->banner();
 
     expect(lanOutput($command))
-        ->toContain('http://falcon.lan:2026')
+        ->toContain('http://falcon.intranet:2026')
         ->toContain('alamat intranet → 192.168.1.20')
         ->toContain('http://192.168.1.20:2026')
-        ->toContain('http://falcon.lan:2026/cek-koneksi')
+        ->toContain('http://falcon.intranet:2026/cek-koneksi')
         ->not->toContain('belum aktif')
         ->not->toContain('alsenform.test')
         ->not->toContain('.local')
         ->not->toContain(':8000')
-        ->and($command->appUrl())->toBe('http://falcon.lan:2026')
-        ->and($command->appUrl('192.168.1.20'))->toBe('http://falcon.lan:2026');
+        ->and($command->appUrl())->toBe('http://falcon.intranet:2026')
+        ->and($command->appUrl('192.168.1.20'))->toBe('http://falcon.intranet:2026');
 });
 
-test('lan:serve says which DNS entry the router needs while falcon.lan does not lead to the server', function () {
+test('lan:serve says which DNS entry the router needs while falcon.intranet does not lead to the server', function () {
     $unknown = lanServeWithDns([]);
     $unknown->banner();
 
     expect(lanOutput($unknown))
-        ->toContain('http://falcon.lan:2026')
+        ->toContain('http://falcon.intranet:2026')
         ->toContain('belum aktif')
-        ->toContain('Router belum mengenal falcon.lan. Tambahkan DNS statis di router: falcon.lan → 192.168.1.20')
+        ->toContain('Router belum mengenal falcon.intranet. Tambahkan DNS statis di router: falcon.intranet → 192.168.1.20')
         ->toContain('DHCP Reservation')
         ->toContain('php artisan lan:check')
         ->toContain('http://192.168.1.20:2026/cek-koneksi')
         ->and($unknown->appUrl())->toBe('http://192.168.1.20:2026');
 
     // The server got another address: the old DNS entry leads elsewhere.
-    $stale = lanServeWithDns(['falcon.lan' => '192.168.1.50']);
+    $stale = lanServeWithDns(['falcon.intranet' => '192.168.1.50']);
     $stale->banner();
 
     expect(lanOutput($stale))
-        ->toContain('falcon.lan masih mengarah ke 192.168.1.50, bukan ke server ini. Ubah DNS statisnya di router: falcon.lan → 192.168.1.20')
+        ->toContain('falcon.intranet masih mengarah ke 192.168.1.50, bukan ke server ini. Ubah DNS statisnya di router: falcon.intranet → 192.168.1.20')
         ->and($stale->appUrl())->toBe('http://192.168.1.20:2026');
 });
 
-test('after an ip change lan:serve tells to point falcon.lan at the new address', function () {
-    $command = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+test('after an ip change lan:serve tells to point falcon.intranet at the new address', function () {
+    $command = lanServeWithDns(['falcon.intranet' => '192.168.1.20']);
     $command->announce(['Wi-Fi (en0)' => '10.10.5.33']);
 
     expect(lanOutput($command))
         ->toContain('ALAMAT IP SERVER BERUBAH')
-        ->toContain('Ubah DNS statisnya di router: falcon.lan → 10.10.5.33')
+        ->toContain('Ubah DNS statisnya di router: falcon.intranet → 10.10.5.33')
         ->toContain('http://10.10.5.33:2026');
 });
 
@@ -584,7 +596,7 @@ test('another intranet name can be set with LAN_HOST, or none', function () {
     config(['app.lan_host' => 'ujian.sekolah.lan']);
     $command = lanServeWithDns(['ujian.sekolah.lan' => '192.168.1.20']);
     $command->banner();
-    expect(lanOutput($command))->toContain('http://ujian.sekolah.lan:2026')->not->toContain('falcon.lan');
+    expect(lanOutput($command))->toContain('http://ujian.sekolah.lan:2026')->not->toContain('falcon.intranet');
 
     config(['app.lan_host' => '']);
     $none = lanServeWithDns([]);
@@ -593,17 +605,18 @@ test('another intranet name can be set with LAN_HOST, or none', function () {
         ->and($none->appUrl())->toBe('http://192.168.1.20:2026');
 });
 
-test('lan:serve warns about session cookie settings that stop logins over http://falcon.lan', function () {
+test('lan:serve warns about session cookie settings that stop logins over http://falcon.intranet', function () {
     config(['session.domain' => 'alsenform.local', 'session.secure' => true]);
-    $command = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+    $command = lanServeWithDns(['falcon.intranet' => '192.168.1.20']);
     $command->banner();
 
     expect(lanOutput($command))
         ->toContain('SESSION_DOMAIN=alsenform.local di .env')
+        ->toContain('cookie login di alamat lain (falcon.intranet, alamat IP)')
         ->toContain('SESSION_SECURE_COOKIE=true di .env');
 
     config(['session.domain' => null, 'session.secure' => null]);
-    $fine = lanServeWithDns(['falcon.lan' => '192.168.1.20']);
+    $fine = lanServeWithDns(['falcon.intranet' => '192.168.1.20']);
     $fine->banner();
 
     expect(lanOutput($fine))->not->toContain('SESSION_');
