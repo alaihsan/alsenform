@@ -70,6 +70,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Intranet Address Behind Caddy
+    |--------------------------------------------------------------------------
+    |
+    | With Caddy (a reverse proxy) on this computer in front of several web
+    | apps, students open the name on Caddy's port: 80 gives
+    | http://falcon.intranet, 443 https://falcon.intranet. lan:serve keeps
+    | listening on 2026 for Caddy. "php artisan lan:caddy" writes the site.
+    | Leave it empty to open http://falcon.intranet:2026 directly.
+    |
+    */
+
+    'lan_public_port' => env('LAN_PUBLIC_PORT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Trusted Proxies
     |--------------------------------------------------------------------------
     |

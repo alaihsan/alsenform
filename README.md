@@ -193,6 +193,17 @@ Supaya halaman tetap cepat di jaringan yang padat:
 - **Cek Koneksi** (`/cek-koneksi`, juga ditautkan dari halaman login dan Bantuan): dibuka di perangkat yang terasa lambat, tes 10 detik mengukur waktu respons, permintaan yang gagal, dan kecepatan unduh, lalu memisahkan waktu di server dari waktu di jaringan. Hasilnya langsung menunjukkan apakah masalahnya di server, di Wi-Fi, atau di pengaturan perangkat (proxy, VPN, antivirus), beserta sarannya.
 - `php artisan exam:optimize` menurunkan `BCRYPT_ROUNDS` di `.env` menjadi 10 (bawaan PHP). Pemeriksaan password saat login turun dari sekitar 230 ms menjadi 60 ms waktu prosesor, sehingga satu kelas yang login bersamaan tidak membuat server sibuk. Password lama otomatis disimpan ulang dengan pengaturan baru saat pemiliknya login.
 
+### Jawaban aman dan galat terdata
+
+- **Bukti kirim**: setelah mengirim, siswa melihat kode seperti `7F3A-9C21`. Kode yang sama tampil di Rekapitulasi Nilai (dan bisa dicari di sana). Jawaban yang tersimpan disegel dengan kode itu: bila jawaban di database berubah di luar aplikasi, barisnya ditandai.
+- **Riwayat jawaban**: selama ujian server menyimpan salinan jawaban setiap ±5 menit. Tombol bukti kirim di Rekapitulasi Nilai membuka salinan-salinan itu beserta jawaban yang dikirim, jumlah percobaan kirim, dan jeda simpan terlama, untuk menjawab "jawaban saya hilang" dengan data.
+- **Peta Kelas** (tab Keamanan) menandai siswa yang **Belum tersimpan**: perangkatnya masih online, tetapi jawabannya lebih dari 2 menit belum sampai ke server. Setiap kartu siswa juga menulis kapan jawabannya terakhir tersimpan di server.
+- **Pengiriman Jawaban** (tab Jawaban): tiga angka per ujian untuk memperbaiki ujian berikutnya: persentase siswa yang jawabannya selalu tersimpan di server ≤ 30 detik, persentase pengiriman yang berhasil pada percobaan pertama, dan galat per 100 siswa.
+- **Galat Server** (admin: menu akun → Kesehatan Server → Galat Server): setiap kesalahan server dicatat sekali beserta jumlah kejadian, letaknya di kode, dan siapa/perangkat apa yang terkena. Halaman galat menampilkan **kode laporan** seperti `ERR-7K3QXA`; ketik kode itu di Galat Server untuk menemukan kejadiannya. Kode yang sama ada di baris log. Kata sandi dalam pesan galat disamarkan. Kejadiannya juga muncul di Laporan Aktivitas sebagai "Galat server".
+- **Kesehatan Server** (admin, menu akun): kecepatan dan ukuran database, siswa yang sedang mengerjakan, galat yang belum selesai, umur backup, sisa disk, pembaruan database yang tertunda, build tampilan, mode aplikasi, dan ukuran log, masing-masing dengan cara memperbaikinya. Diperbarui tiap 10 detik.
+- **Backup otomatis**: `php artisan db:backup` menyalin database ke `storage/app/backups` (14 salinan terbaru disimpan). `lan:serve` membuatnya sendiri saat menyala (bila backup terakhir lebih dari 12 jam) dan setiap hari selama berjalan; `lan:check` memberi tanda ✗ bila backup terakhir lebih dari 24 jam.
+- **Data lama dibersihkan sendiri**: Laporan Aktivitas disimpan satu tahun (`ACTIVITY_LOG_DAYS`), salinan jawaban selama ujian 90 hari (`DRAFT_SNAPSHOT_DAYS`), dan galat server yang sudah selesai 90 hari. Log dibagi per hari dan disimpan 14 hari (`LOG_STACK=daily`).
+
 ### Hal kecil yang membantu
 
 - **Pusat bantuan** di dalam aplikasi, dengan panduan terpisah untuk guru dan siswa, termasuk aturan lengkap impor Word.
@@ -258,7 +269,7 @@ Data ujian dan nilai siswa adalah data sensitif. Berikut perlindungan yang sudah
 - Ganti password akun admin awal segera setelah instalasi.
 - Pastikan `APP_ENV=production` dan `APP_DEBUG=false` di berkas `.env`. Perintah `php artisan exam:optimize --production` bisa mengaturnya.
 - Kalau server dibuka ke internet (bukan hanya jaringan sekolah), pasang HTTPS di depannya.
-- Cadangkan database secara berkala, misalnya dengan `pg_dump` (PostgreSQL) atau `mysqldump` (MySQL).
+- Backup database dibuat otomatis oleh `lan:serve` setiap hari (`php artisan db:backup` untuk membuatnya sekarang). Salin folder `storage/app/backups` secara berkala ke flashdisk atau komputer lain: backup di komputer yang sama ikut hilang bila disknya rusak. Berkas backup berisi data siswa; simpan di tempat yang aman.
 
 Kalau menemukan celah keamanan, mohon laporkan secara pribadi ke pengelola repositori lebih dulu, jangan lewat issue publik.
 
@@ -270,6 +281,8 @@ Kalau menemukan celah keamanan, mohon laporkan secara pribadi ke pengelola repos
 - PostgreSQL 14 atau lebih baru, atau MySQL 8
 - Node.js 20 atau lebih baru (hanya untuk build aset)
 - Composer 2
+- `pg_dump` (PostgreSQL) atau `mysqldump` (MySQL) untuk backup otomatis; biasanya ikut terpasang bersama database. Bila tidak ada di PATH (misalnya Herd atau Postgres.app), isi path lengkapnya di `BACKUP_PG_DUMP` / `BACKUP_MYSQLDUMP`.
+- Opsional: [Caddy](https://caddyserver.com) bila satu server dipakai bersama aplikasi web lain (lihat [Satu server untuk beberapa aplikasi](#satu-server-untuk-beberapa-aplikasi-caddy)).
 
 Sudah dipakai untuk ujian serentak sekitar 200 siswa dengan satu komputer server; kapasitas di lembaga lain bergantung pada komputer server dan jaringan Wi-Fi (Raspberry Pi 3 tidak disarankan untuk ujian serentak). Linux dan Windows juga bisa. Fitur anti-sleep khusus untuk macOS. Di macOS, [Laravel Herd](https://herd.laravel.com) adalah cara termudah untuk memasang PHP dan database sekaligus.
 
@@ -344,8 +357,40 @@ Di berkas `.env` server, isi `APP_URL=http://falcon.intranet:2026` dan biarkan `
 | `php artisan lan:status` | Melihat status dan alamat server latar belakang |
 | `php artisan lan:stop` | Menghentikan server |
 | `php artisan lan:check` | Memeriksa mengapa `http://falcon.intranet:2026` belum berfungsi, beserta cara memperbaikinya |
+| `php artisan lan:caddy` | Membuat situs Caddy untuk alamat tanpa port (`http://falcon.intranet`), lihat di bawah |
+| `php artisan db:backup` | Membuat backup database sekarang (`lan:serve` membuatnya otomatis setiap hari) |
 | `php artisan exam:optimize --production` | Menyiapkan cache dan mode produksi sebelum ujian besar |
 | `php artisan exam:submit-expired` | Mengirim jawaban ujian yang waktunya habis tetapi belum terkirim. `lan:serve` menjalankannya tiap menit, dan ujian yang dibuka guru selalu diperiksa dulu, jadi biasanya tidak perlu dijalankan manual |
+
+### Satu server untuk beberapa aplikasi (Caddy)
+
+Bila komputer server juga menjalankan aplikasi web lain (perpustakaan, absensi, dan sebagainya), pakai [Caddy](https://caddyserver.com) sebagai satu pintu masuk di port 80. Setiap aplikasi mendapat namanya sendiri tanpa nomor port (`http://falcon.intranet`, `http://perpus.intranet`), router cukup diberi satu DNS untuk semuanya, dan menambah aplikasi cukup menambah satu berkas situs.
+
+1. Pasang Caddy: macOS `brew install caddy`, Linux (Debian/Ubuntu) `sudo apt install caddy`.
+2. Caddyfile utama (macOS Homebrew: `/opt/homebrew/etc/Caddyfile`, Linux: `/etc/caddy/Caddyfile`) cukup berisi satu baris yang memuat situs semua aplikasi:
+
+   ```
+   import /etc/caddy/sites/*.caddy
+   ```
+
+   (macOS: `import /opt/homebrew/etc/caddy/sites/*.caddy`)
+3. Buat situs Falcon Forms. Di Linux, buat dulu folder situs yang boleh ditulis akun Anda (sekali saja): `sudo mkdir -p /etc/caddy/sites && sudo chown $USER /etc/caddy/sites`. Lalu (tanpa `--write` perintah ini hanya menampilkan isinya):
+
+   ```bash
+   php artisan lan:caddy --write=/etc/caddy/sites/falcon-forms.caddy
+   ```
+
+   (macOS: `--write=/opt/homebrew/etc/caddy/sites/falcon-forms.caddy`)
+
+   Isinya meneruskan `http://falcon.intranet` ke `lan:serve` di port 2026, dengan batas unggahan yang sama (80 MB). Situs aplikasi lain ditaruh di folder yang sama, misalnya `perpus.caddy`; `lan:caddy` tidak pernah menimpa berkas yang tidak dibuatnya.
+4. Muat ulang Caddy: `sudo systemctl reload caddy` (Linux) atau `caddy reload --config /opt/homebrew/etc/Caddyfile` (macOS); jalankan Caddy sebagai layanan agar menyala sendiri: `sudo brew services start caddy` / `sudo systemctl enable --now caddy`.
+5. Di `.env`: `LAN_PUBLIC_PORT=80` dan `APP_URL=http://falcon.intranet`, lalu jalankan ulang `php artisan lan:serve`. Layar `lan:serve` kini menulis `http://falcon.intranet`.
+6. Di router, satu DNS statis untuk semua aplikasi: `*.intranet` → IP server. MikroTik: `/ip dns static add regexp=".*\\.intranet\$" address=192.168.1.10`. Router yang tidak mendukung pola cukup diberi satu entri per nama aplikasi.
+7. Periksa dengan `php artisan lan:check`: baris "Caddy meneruskan http://falcon.intranet ke server Falcon Forms" berarti semuanya tersambung.
+
+Alamat IP server dengan port (`http://192.168.1.10:2026`) tetap bisa dipakai sebagai cadangan. Caddy berjalan di komputer yang sama, jadi alamat IP siswa di Laporan tetap benar (proxy di 127.0.0.1 selalu dipercaya; Caddy di komputer lain perlu dicantumkan di `TRUSTED_PROXIES`).
+
+HTTPS (`php artisan lan:caddy --https`, `LAN_PUBLIC_PORT=443`) memakai sertifikat lokal Caddy (`tls internal`), sehingga sertifikat akar Caddy harus dipasang di setiap perangkat siswa. Untuk perangkat milik siswa, HTTP biasanya lebih praktis.
 
 ### Bila alamat baru belum berfungsi
 
@@ -357,6 +402,8 @@ Jalankan `php artisan lan:check` di komputer server. Perintah ini memeriksa satu
 - **Server**: berjalan di port 2026, menjawab di alamat IP-nya, dan tidak ada server lama di port 8000.
 - **Firewall macOS**: tidak memblokir koneksi masuk ke PHP.
 - **Router**: ditanya langsung seperti perangkat siswa bertanya, apakah mengenal `falcon.intranet` dan mengarahkannya ke server ini; juga apakah DNS yang dibagikan DHCP mengenalnya.
+- **Backup database**: ada, dan tidak lebih tua dari 24 jam.
+- **Caddy** (bila `LAN_PUBLIC_PORT` diisi): berjalan di port itu dan meneruskan `http://falcon.intranet` ke server ini, bukan halaman kosong atau aplikasi lain.
 
 Yang tidak ikut diperbarui oleh `git pull` (dan harus diubah sendiri): berkas `.env`, hasil build (`npm run build`), `public/hot`, skrip atau pintasan lain yang menjalankan server dengan `--port=8000`, serta pengaturan DNS dan DHCP di router.
 

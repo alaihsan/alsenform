@@ -616,7 +616,7 @@ class ServeLanCommand extends Command
         $this->checkProblems = 0;
 
         $this->newLine();
-        $this->output->writeln(' <options=bold>🔎 PEMERIKSAAN ALAMAT INTRANET</> <fg=cyan;options=bold>'.($lanHost !== null ? $this->urlFor($lanHost, $port) : "port {$port}").'</>');
+        $this->output->writeln(' <options=bold>🔎 PEMERIKSAAN ALAMAT INTRANET</> <fg=cyan;options=bold>'.($lanHost !== null ? $this->intranetUrl($lanHost, $port) : "port {$port}").'</>');
         $this->newLine();
 
         $this->output->writeln(' <options=bold>Komputer server</>');
@@ -655,7 +655,7 @@ class ServeLanCommand extends Command
             $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.intranet']);
         }
 
-        $expectedUrl = $lanHost !== null ? $this->urlFor($lanHost, $port) : null;
+        $expectedUrl = $lanHost !== null ? $this->intranetUrl($lanHost, $port) : null;
         $appUrl = rtrim((string) config('app.url'), '/');
         if ($expectedUrl !== null && $appUrl !== $expectedUrl) {
             $this->checkLine(null, "APP_URL={$appUrl}: belum alamat baru.", ["Ubah di .env: APP_URL={$expectedUrl}"]);
@@ -694,6 +694,11 @@ class ServeLanCommand extends Command
                 : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat Laporan → Galat Server di aplikasi, terminal lan:serve, atau storage/logs/']);
         }
 
+        $publicPort = $this->publicPort();
+        if ($lanHost !== null && $publicPort !== null) {
+            $this->checkCaddy($lanHost, $publicPort, $port, $isServing);
+        }
+
         foreach ($this->firewallProblems() as [$problem, $fix]) {
             $this->checkLine(false, $problem, [$fix]);
         }
@@ -713,9 +718,9 @@ class ServeLanCommand extends Command
 
             $ownAddress = $this->resolveHost($lanHost);
             if ($ownAddress !== null && in_array($ownAddress, $interfaces, true)) {
-                $status = $isServing ? $this->httpStatus($this->urlFor($lanHost, $port).'/up') : null;
+                $status = $isServing ? $this->httpStatus($this->intranetUrl($lanHost, $port).'/up') : null;
                 $this->checkLine($isServing ? $status === 200 : null, $isServing && $status === 200
-                    ? $this->urlFor($lanHost, $port).' terbuka dari komputer server ini.'
+                    ? $this->intranetUrl($lanHost, $port).' terbuka dari komputer server ini.'
                     : "Komputer server mengenal {$lanHost} → {$ownAddress}, tetapi halamannya belum terbuka.");
             } elseif (! $routerKnows) {
                 $this->checkLine(null, "Komputer server juga belum mengenal {$lanHost}, karena router belum mengenalnya. Sampai router diatur, di komputer ini pakai http://localhost:{$port}.");
@@ -730,7 +735,9 @@ class ServeLanCommand extends Command
 
         $this->newLine();
         $this->output->writeln(' <options=bold>Di perangkat siswa</> <fg=gray>(tidak bisa diperiksa dari sini)</>');
-        $this->output->writeln('   • Ketik alamat lengkap: <fg=cyan>'.($expectedUrl ?? "http://IP-server:{$port}").'</> (dengan http:// dan port), lalu simpan sebagai bookmark.');
+        // Behind Caddy on 80/443 the address has no port to type.
+        $typed = $expectedUrl !== null && in_array($this->publicPort(), [80, 443], true) ? parse_url($expectedUrl, PHP_URL_SCHEME).'://' : 'http:// dan port';
+        $this->output->writeln('   • Ketik alamat lengkap: <fg=cyan>'.($expectedUrl ?? "http://IP-server:{$port}")."</> (dengan {$typed}), lalu simpan sebagai bookmark.");
         $this->output->writeln('   • Matikan "DNS Pribadi" (Android), "DNS aman" di Chrome, VPN, atau iCloud Private Relay: semuanya melewati DNS router.');
         $this->output->writeln('   • Setelah pengaturan router diubah, matikan lalu nyalakan Wi-Fi perangkat agar jawaban DNS lama terlupa.');
         if ($serverIp !== null) {
@@ -747,6 +754,39 @@ class ServeLanCommand extends Command
         $this->output->writeln(" <fg=red;options=bold>✗ {$this->checkProblems} masalah perlu diperbaiki (lihat tanda ✗ di atas).</>");
 
         return self::FAILURE;
+    }
+
+    /**
+     * Whether Caddy in front of the server (LAN_PUBLIC_PORT) answers the intranet name with the
+     * pages of this server, asked on this computer.
+     */
+    protected function checkCaddy(string $lanHost, int $publicPort, int $port, bool $isServing): void
+    {
+        $url = $this->urlFor($lanHost, $publicPort);
+        $writeSite = 'Buat situsnya: php artisan lan:caddy --write=<folder sites Caddy>/falcon-forms.caddy, lalu muat ulang Caddy (caddy reload --config <Caddyfile>).';
+
+        if (! $this->isPortInUse($publicPort)) {
+            $this->checkLine(false, "Caddy belum berjalan di port {$publicPort}: {$url} belum dapat dibuka.", [
+                PHP_OS_FAMILY === 'Darwin'
+                    ? 'Pasang dan jalankan Caddy: brew install caddy, lalu sudo brew services start caddy'
+                    : 'Pasang dan jalankan Caddy: sudo apt install caddy, lalu sudo systemctl enable --now caddy',
+                $writeSite,
+            ]);
+
+            return;
+        }
+
+        $status = $this->proxyStatus($lanHost, $publicPort);
+
+        match (true) {
+            $status === 200 => $this->checkLine(true, "Caddy meneruskan {$url} ke server Falcon Forms (port {$port})."),
+            in_array($status, [502, 503, 504], true) && ! $isServing => $this->checkLine(false, "Caddy berjalan, tetapi server Falcon Forms di port {$port} belum menjawab (HTTP {$status}).", ['Jalankan: php artisan lan:serve']),
+            default => $this->checkLine(false, "Port {$publicPort} menjawab, tetapi {$url} belum sampai ke Falcon Forms (".match ($status) {
+                null => 'tidak ada jawaban',
+                0 => 'halaman kosong',
+                default => "HTTP {$status}",
+            }."): situs Caddy untuk {$lanHost} belum ada atau salah.", [$writeSite]),
+        };
     }
 
     /**
@@ -1220,7 +1260,7 @@ class ServeLanCommand extends Command
         // The intranet name when the network's DNS leads it to the address the server listens on.
         $lanHost = $this->lanHost();
         if ($lanHost !== null && $this->lanHostPointsHere($host === '0.0.0.0' ? $interfaces : [$host])) {
-            return $this->urlFor($lanHost, $port);
+            return $this->intranetUrl($lanHost, $port);
         }
 
         return $address ? "http://{$address}:{$port}" : null;
@@ -1264,7 +1304,56 @@ class ServeLanCommand extends Command
 
     protected function urlFor(string $host, int $port): string
     {
-        return $port === 80 ? "http://{$host}" : "http://{$host}:{$port}";
+        return match ($port) {
+            80 => "http://{$host}",
+            443 => "https://{$host}",
+            default => "http://{$host}:{$port}",
+        };
+    }
+
+    /**
+     * The address students type: the intranet name on Caddy's port when the server is behind Caddy
+     * (LAN_PUBLIC_PORT), else on the port lan:serve listens on.
+     */
+    protected function intranetUrl(string $lanHost, int $port): string
+    {
+        return $this->urlFor($lanHost, $this->publicPort() ?? $port);
+    }
+
+    /**
+     * The port of Caddy in front of this server (LAN_PUBLIC_PORT), or null when students reach
+     * lan:serve directly.
+     */
+    protected function publicPort(): ?int
+    {
+        $port = config('app.lan_public_port');
+
+        return is_numeric($port) && (int) $port >= 1 && (int) $port <= 65535 ? (int) $port : null;
+    }
+
+    /**
+     * What Caddy answers for the intranet name on its port, asked on this computer: the HTTP status
+     * of this application's health page, 0 when Caddy answers with an empty page (it has no site
+     * for the name), or null when nothing answers.
+     */
+    protected function proxyStatus(string $lanHost, int $publicPort): ?int
+    {
+        $scheme = $publicPort === 443 ? 'https' : 'http';
+        $context = stream_context_create([
+            'http' => ['timeout' => 5, 'ignore_errors' => true, 'header' => "Host: {$lanHost}\r\nConnection: close\r\n"],
+            // Caddy's own certificate (tls internal) for the name: not checked, only whether it answers.
+            'ssl' => ['peer_name' => $lanHost, 'verify_peer' => false, 'verify_peer_name' => false],
+        ]);
+        $http_response_header = null;
+        $body = @file_get_contents("{$scheme}://127.0.0.1:{$publicPort}/up", false, $context);
+        $headers = function_exists('http_get_last_response_headers') ? http_get_last_response_headers() : $http_response_header;
+
+        if (! is_array($headers) || ! isset($headers[0]) || ! preg_match('/^HTTP\/\S+\s+(\d{3})/', $headers[0], $matches)) {
+            return null;
+        }
+
+        // Caddy answers a name it has no site for with an empty "200 OK".
+        return (int) $matches[1] === 200 && ! str_contains((string) $body, 'Application up') ? 0 : (int) $matches[1];
     }
 
     /**
@@ -1279,12 +1368,18 @@ class ServeLanCommand extends Command
             return;
         }
 
-        $url = $this->urlFor($lanHost, $port);
+        $url = $this->intranetUrl($lanHost, $port);
         $address = $this->resolveHost($lanHost);
         $serverIp = $interfaces !== [] ? reset($interfaces) : 'IP server ini';
 
+        $publicPort = $this->publicPort();
+
         if ($address !== null && in_array($address, $interfaces, true)) {
-            $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address})</>");
+            $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address}".($publicPort !== null ? ', lewat Caddy' : '').')</>');
+
+            if ($publicPort !== null && ! $this->isPortInUse($publicPort)) {
+                $this->output->writeln("{$indent}      <fg=yellow>⚠️  Caddy belum berjalan di port {$publicPort}, jadi {$url} belum terbuka. Pemeriksaan dan cara memperbaikinya:</> <fg=yellow>php artisan lan:check</>");
+            }
 
             return;
         }
@@ -1588,7 +1683,7 @@ class ServeLanCommand extends Command
     {
         $lanHost = $this->lanHost();
         $baseUrl = $lanHost !== null && $this->lanHostPointsHere($interfaces)
-            ? $this->urlFor($lanHost, $port)
+            ? $this->intranetUrl($lanHost, $port)
             : 'http://'.($interfaces !== [] ? reset($interfaces) : 'localhost').":{$port}";
         $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>{$baseUrl}/cek-koneksi</> di perangkat itu.");
 

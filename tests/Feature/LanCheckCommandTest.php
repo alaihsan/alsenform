@@ -169,6 +169,11 @@ function runLanCheck(array $probes = []): array
             return $this->probes['outdated'] ?? false;
         }
 
+        protected function proxyStatus(string $lanHost, int $publicPort): ?int
+        {
+            return array_key_exists('proxy', $this->probes) ? $this->probes['proxy'] : 200;
+        }
+
         protected function latestBackup(): ?array
         {
             return array_key_exists('backup', $this->probes)
@@ -379,4 +384,32 @@ test('lan:check counts a missing or stale database backup as a problem', functio
 
     [, $stale] = runLanCheck(['backup' => ['path' => '/tmp/a.dump', 'name' => 'falcon-forms-20261020-010000.dump', 'size' => 1024, 'created_at' => CarbonImmutable::now()->subDays(2)]]);
     expect($stale)->toContain('✗ Backup database terakhir 2 hari yang lalu (falcon-forms-20261020-010000.dump), lebih dari 24 jam.');
+});
+
+test('behind Caddy, lan:check expects the address without a port and checks that Caddy leads it here', function () {
+    config(['app.lan_public_port' => 80, 'app.url' => 'http://falcon.intranet']);
+
+    [$exitCode, $output] = runLanCheck(['listening' => [2026, 80]]);
+
+    expect($exitCode)->toBe(0)
+        ->and($output)->toContain('PEMERIKSAAN ALAMAT INTRANET http://falcon.intranet')
+        ->toContain('✓ APP_URL=http://falcon.intranet')
+        ->toContain('✓ Caddy meneruskan http://falcon.intranet ke server Falcon Forms (port 2026).')
+        ->toContain('✓ http://falcon.intranet terbuka dari komputer server ini.')
+        ->toContain('Ketik alamat lengkap: http://falcon.intranet (dengan http://)');
+
+    [, $notRunning] = runLanCheck(['listening' => [2026]]);
+    expect($notRunning)->toContain('✗ Caddy belum berjalan di port 80: http://falcon.intranet belum dapat dibuka.')
+        ->toContain('php artisan lan:caddy --write=');
+
+    [, $noSite] = runLanCheck(['listening' => [2026, 80], 'proxy' => 0]);
+    expect($noSite)->toContain('✗ Port 80 menjawab, tetapi http://falcon.intranet belum sampai ke Falcon Forms (halaman kosong): situs Caddy untuk falcon.intranet belum ada atau salah.');
+
+    [, $serverOff] = runLanCheck(['listening' => [80], 'proxy' => 502]);
+    expect($serverOff)->toContain('✗ Caddy berjalan, tetapi server Falcon Forms di port 2026 belum menjawab (HTTP 502).');
+
+    // The old address with the port is not the one to put in .env any more.
+    config(['app.url' => 'http://falcon.intranet:2026']);
+    [, $oldUrl] = runLanCheck(['listening' => [2026, 80]]);
+    expect($oldUrl)->toContain('Ubah di .env: APP_URL=http://falcon.intranet');
 });
