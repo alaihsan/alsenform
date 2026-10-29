@@ -13,13 +13,21 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: linter-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    # See tests.yml: repository variable CI_RUNNER picks the runner, GitHub's own when not set.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup PHP
+        if: runner.environment == 'github-hosted'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'

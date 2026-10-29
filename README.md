@@ -534,6 +534,30 @@ Beberapa bagian kode yang menarik untuk dibaca:
 
 ---
 
+### Menjalankan CI di komputer sendiri
+
+Workflow di `.github/workflows` (`tests.yml`: seluruh test dan build, `lint.yml`: Pint, Prettier, ESLint) berjalan **otomatis di GitHub** setiap ada push atau pull request ke `main`/`develop`. Tanpa pengaturan apa pun, workflow memakai runner milik GitHub. Untuk memakai komputer sendiri (misalnya Mac server), cukup tambahkan runner dan satu variabel; berkas workflow tidak perlu diubah.
+
+1. **Akun macOS khusus.** Buat pengguna standar (bukan admin), misalnya `ci-runner`, dan jalankan runner dari akun itu. Kode dari PR berjalan dengan hak akun ini, jadi akun ini tidak boleh membaca folder aplikasi ujian (`.env`, `storage/app/backups`).
+2. **Role PostgreSQL terbatas.** Role ini hanya boleh membuat database; tiap run memakai database sementara yang dihapus lagi, dan database ujian tidak tersentuh:
+
+   ```sql
+   CREATE ROLE ci LOGIN CREATEDB PASSWORD 'ganti-dengan-password-acak';
+   ```
+3. **Pasang runner.** GitHub → Settings → Actions → Runners → New self-hosted runner → macOS. Ikuti perintah unduh dan `./config.sh` dari halaman itu, tambahkan `--labels falcon-ci`, lalu `./svc.sh install` dan `./svc.sh start` agar menyala sendiri.
+4. **Alat di komputer runner** (di PATH akun runner; bila belum, tulis folder-foldernya di berkas `.path` di folder runner): PHP 8.4 dengan `pdo_pgsql` (PHP milik Herd bisa dipakai), Composer 2, Node 22, dan `psql`. Workflow tidak memakai `setup-php` di runner sendiri supaya PHP Herd tidak berubah.
+5. **Variabel dan secret** di GitHub → Settings → Secrets and variables → Actions:
+
+   | Nama | Jenis | Isi |
+   | --- | --- | --- |
+   | `CI_RUNNER` | Variable | `falcon-ci` (label runner). Hapus variabel ini untuk kembali ke runner GitHub |
+   | `CI_DB_USERNAME` | Variable | `ci` |
+   | `CI_DB_PASSWORD` | Secret | password role `ci` |
+   | `CI_PSQL` | Variable (bila perlu) | path lengkap `psql` bila tidak ada di PATH |
+6. **Wajib untuk repositori publik:** Settings → Actions → General → Fork pull request workflows → **Require approval for all outside collaborators**. Tanpa ini, orang asing bisa mengirim PR yang menjalankan kode apa pun di komputer runner.
+
+Jangan biarkan CI berjalan di komputer server ujian saat ujian berlangsung: test dan build memakai CPU dan database, dan bisa memperlambat halaman siswa. Bila runner terpaksa di server yang sama, hentikan sementara dengan `./svc.sh stop`. Workflow `laravel.yml` adalah templat lama (PHP 8.0, SQLite) yang sudah tidak cocok dengan proyek ini dan akan selalu gagal; sebaiknya dihapus.
+
 ## Kontribusi
 
 Laporan bug, usulan fitur, dan pull request sangat diterima. Beberapa hal yang membantu:
