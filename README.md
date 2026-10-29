@@ -556,7 +556,7 @@ Workflow di `.github/workflows` (`tests.yml`: seluruh test dan build, `lint.yml`
    | `CI_PSQL` | Variable (bila perlu) | path lengkap `psql` bila tidak ada di PATH |
 6. **Wajib untuk repositori publik:** Settings → Actions → General → Fork pull request workflows → **Require approval for all outside collaborators**. Tanpa ini, orang asing bisa mengirim PR yang menjalankan kode apa pun di komputer runner.
 
-Jangan biarkan CI berjalan di komputer server ujian saat ujian berlangsung: test dan build memakai CPU dan database, dan bisa memperlambat halaman siswa. Bila runner terpaksa di server yang sama, hentikan sementara dengan `./svc.sh stop`. Workflow `laravel.yml` adalah templat lama (PHP 8.0, SQLite) yang sudah tidak cocok dengan proyek ini dan akan selalu gagal; sebaiknya dihapus.
+Jangan biarkan CI berjalan di komputer server ujian saat ujian berlangsung: test dan build memakai CPU dan database, dan bisa memperlambat halaman siswa. Bila runner terpaksa di server yang sama, hentikan sementara dengan `./svc.sh stop`.
 
 ## Kontribusi
 
