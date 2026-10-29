@@ -18,7 +18,7 @@ class CheckLanCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Periksa mengapa alamat intranet (http://falcon.lan:2026) belum berfungsi, beserta cara memperbaikinya';
+    protected $description = 'Periksa mengapa alamat intranet (http://falcon.intranet:2026) belum berfungsi, beserta cara memperbaikinya';
 
     /**
      * Execute the console command.

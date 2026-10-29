@@ -15,6 +15,7 @@ import {
     RefreshCw,
     Search,
     SendHorizontal,
+    ServerCrash,
     Smartphone,
     Tablet,
     TriangleAlert,
@@ -24,7 +25,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 
 interface Activity {
     id: number;
-    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted' | 'page_failed';
+    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted' | 'page_failed' | 'server_error';
     eventLabel: string;
     date: string;
     time: string;
@@ -157,6 +158,7 @@ const eventStyles: Record<Activity['event'], { icon: Component; badge: string }>
     exam_started: { icon: CirclePlay, badge: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
     exam_submitted: { icon: SendHorizontal, badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
     page_failed: { icon: TriangleAlert, badge: 'bg-rose-50 text-rose-700 ring-rose-200' },
+    server_error: { icon: ServerCrash, badge: 'bg-rose-100 text-rose-800 ring-rose-300' },
 };
 
 const deviceIcons: Record<Activity['deviceType'], Component> = {

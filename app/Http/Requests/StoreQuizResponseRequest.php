@@ -39,6 +39,8 @@ class StoreQuizResponseRequest extends FormRequest
             'answers.*' => ['nullable'],
             // The questions marked "Ragu-ragu".
             'doubts' => ['sometimes', 'nullable', 'array', 'max:500'],
+            // The how-many-th try of the page to hand in.
+            'submit_attempts' => ['nullable', 'integer', 'min:1', 'max:10000'],
             // A guest's name, class and email (the fields the teacher picked). Not required again
             // when the exam session holds them already, nor when the time ran out.
             ...($quizForm ? app(RespondentIdentity::class)->rules($quizForm, $this->user(), $this->examSession($quizForm), required: ! $this->boolean('is_timeout')) : []),

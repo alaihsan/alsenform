@@ -110,7 +110,7 @@ class ErrorPage
         500 => [
             'title' => 'Terjadi Kesalahan di Server',
             'message' => 'Maaf, server mengalami kendala saat memproses permintaan Anda.',
-            'hint' => 'Coba lagi beberapa saat lagi. Jika terus terjadi, beri tahu guru atau administrator beserta waktu kejadian di bawah.',
+            'hint' => 'Coba lagi beberapa saat lagi. Jika terus terjadi, beri tahu guru atau administrator beserta kode laporan di bawah.',
             'icon' => 'server-crash',
             'tone' => 'rose',
             'action' => 'retry',
@@ -147,7 +147,7 @@ class ErrorPage
     protected const SERVER_ERROR = [
         'title' => 'Server Sedang Bermasalah',
         'message' => 'Server tidak dapat menyelesaikan permintaan Anda saat ini.',
-        'hint' => 'Coba lagi beberapa saat lagi. Jika terus terjadi, beri tahu guru atau administrator beserta waktu kejadian di bawah.',
+        'hint' => 'Coba lagi beberapa saat lagi. Jika terus terjadi, beri tahu guru atau administrator beserta kode laporan di bawah.',
         'icon' => 'server-crash',
         'tone' => 'rose',
         'action' => 'retry',
@@ -175,6 +175,7 @@ class ErrorPage
      *     primaryAction: array{label: string, href: string, icon: string},
      *     secondaryAction: array{label: string, href: string|null, icon: string},
      *     occurredAt: string|null,
+     *     reference: string|null,
      * }
      */
     public function props(int $status, ?Throwable $exception, Request $request): array
@@ -183,6 +184,7 @@ class ErrorPage
         $retryAfter = $this->retryAfterSeconds($exception);
         $databaseHint = $status === 500 ? $this->databaseUpdateHint($exception) : null;
         [$primaryAction, $secondaryAction] = $this->actions($page, $request);
+        $isServerFault = $status >= 500 && $status !== 503;
 
         return [
             'status' => $status,
@@ -199,7 +201,9 @@ class ErrorPage
             'primaryAction' => $primaryAction,
             'secondaryAction' => $secondaryAction,
             // Lets the operator find the matching entry in storage/logs/laravel.log (same time zone).
-            'occurredAt' => $status >= 500 && $status !== 503 ? now()->format('d/m/Y H:i:s T') : null,
+            'occurredAt' => $isServerFault ? now()->format('d/m/Y H:i:s T') : null,
+            // The code of this error in Laporan → Galat Server and in laravel.log.
+            'reference' => $isServerFault ? app(ServerErrorRecorder::class)->lastReference() : null,
         ];
     }
 

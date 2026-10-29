@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 class QuizSession extends Model
 {
@@ -32,6 +34,8 @@ class QuizSession extends Model
         'draft_answers',
         'doubtful_question_ids',
         'draft_saved_at',
+        'unsynced_since',
+        'max_sync_delay_seconds',
         'layout',
         'last_seen_at',
         'left_at',
@@ -57,7 +61,85 @@ class QuizSession extends Model
             'last_seen_at' => 'datetime',
             'left_at' => 'datetime',
             'draft_saved_at' => 'datetime',
+            'unsynced_since' => 'datetime',
+            'max_sync_delay_seconds' => 'integer',
         ];
+    }
+
+    /**
+     * Peta Kelas flags an attempt whose newest answers have been on the device only for this long.
+     */
+    public const UNSAVED_AFTER_SECONDS = 120;
+
+    /**
+     * Note since when the exam page holds answers the server does not have yet, as the page tells
+     * with its status checks: a time in milliseconds of the server's clock, or 0 when it holds none.
+     * Kept within the attempt (a device clock far off says nothing) and written only when it changes.
+     */
+    public function noteUnsyncedSince(int $milliseconds): void
+    {
+        $since = null;
+
+        if ($milliseconds > 0) {
+            $since = Carbon::createFromTimestampMs($milliseconds);
+            $since = $since->min(now())->max($this->started_at ?? $since);
+        }
+
+        $isSame = $since === null ? $this->unsynced_since === null : $this->unsynced_since?->getTimestamp() === $since->getTimestamp();
+
+        if (! $isSame) {
+            $this->forceFill(['unsynced_since' => $since])->saveQuietly();
+        }
+    }
+
+    /**
+     * The server now has the answers the page sent. $pendingSince (milliseconds of the server's
+     * clock) is when the oldest of them was given: the longest such wait of the attempt is kept.
+     *
+     * @return array<string, mixed> The attributes to store with the draft.
+     */
+    public function arrivedDraftAttributes(?int $pendingSince): array
+    {
+        $attributes = ['unsynced_since' => null];
+
+        if ($pendingSince !== null && $pendingSince > 0) {
+            $delay = (int) max(0, min(6 * 3600, (now()->getTimestampMs() - $pendingSince) / 1000));
+            $attributes['max_sync_delay_seconds'] = max($delay, (int) $this->max_sync_delay_seconds);
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * Keep a copy of the answers on the server, at most every few minutes, so what the server had
+     * during the exam can be shown when a student says their answers are gone.
+     *
+     * @param  array<int|string, mixed>  $answers
+     */
+    public function takeSnapshot(array $answers): void
+    {
+        $hasRecentCopy = $this->snapshots()
+            ->where('created_at', '>', now()->subMinutes(QuizSessionSnapshot::EVERY_MINUTES))
+            ->exists();
+
+        if (! $hasRecentCopy && $answers !== []) {
+            $this->snapshots()->create(['answers' => $answers, 'answered' => self::countAnswered($answers)]);
+        }
+    }
+
+    /**
+     * How many questions of saved answers are answered (an empty text or no choice is not).
+     */
+    public static function countAnswered(mixed $answers): int
+    {
+        return is_array($answers)
+            ? count(array_filter($answers, fn (mixed $answer): bool => $answer !== null && $answer !== '' && $answer !== []))
+            : 0;
+    }
+
+    public function snapshots(): HasMany
+    {
+        return $this->hasMany(QuizSessionSnapshot::class);
     }
 
     public function recordBlurEvent(?string $ip = null): void

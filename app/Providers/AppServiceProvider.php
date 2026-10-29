@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Addons;
 use App\Support\ActivityRecorder;
 use App\Support\ErrorPage;
+use App\Support\ServerErrorRecorder;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -28,6 +29,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Which add-ons are installed is looked up once per request.
         $this->app->scoped(Addons::class);
+
+        // The reference code of a server error, from its report to its error page.
+        $this->app->scoped(ServerErrorRecorder::class);
     }
 
     /**

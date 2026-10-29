@@ -1,6 +1,6 @@
 /**
  * Copies text, also where navigator.clipboard is missing: browsers only offer it on HTTPS and
- * localhost, so on the intranet address (http://falcon.lan:2026 or an IP) the copy buttons need
+ * localhost, so on the intranet address (http://falcon.intranet:2026 or an IP) the copy buttons need
  * the older way of copying a selected text. Resolves to whether the text was copied.
  */
 export async function copyText(text: string): Promise<boolean> {

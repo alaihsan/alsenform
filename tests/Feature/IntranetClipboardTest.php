@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\File;
 
 /*
  * Browsers offer navigator.clipboard only on HTTPS and localhost, so on the intranet address
- * (http://falcon.lan:2026 or an IP) a direct call throws and the copy button does nothing. Every
+ * (http://falcon.intranet:2026 or an IP) a direct call throws and the copy button does nothing. Every
  * copy goes through lib/clipboard.ts, which falls back to the older way of copying.
  */
 test('only the shared copy helper calls navigator.clipboard', function () {

@@ -4,6 +4,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Models\User;
+use App\Services\ClassMap;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -84,4 +85,48 @@ test('a student who took the exam again shows once, with the latest attempt', fu
 test('only the exam\'s teachers see the map', function () {
     $this->actingAs(User::factory()->create(['role' => 'siswa']))->getJson(route('forms.class-map', $this->exam))->assertForbidden();
     $this->actingAs(User::factory()->create(['role' => 'guru']))->getJson(route('forms.class-map', $this->exam))->assertForbidden();
+});
+
+test('a student whose answers have not reached the server for two minutes shows as unsaved', function () {
+    $stuck = mapAttempt($this->exam, 'Dodi', ['draft_answers' => [1 => 'a'], 'draft_saved_at' => now()->subMinutes(4)]);
+    $fine = mapAttempt($this->exam, 'Eka');
+
+    // The pages tell with their status checks since when they hold answers the server has not got.
+    $this->getJson(route('forms.responses.status', ['quizForm' => $this->exam->slug, 'session_token' => $stuck->session_token, 'unsynced_since' => now()->subMinutes(3)->getTimestampMs()]))->assertOk();
+    $this->getJson(route('forms.responses.status', ['quizForm' => $this->exam->slug, 'session_token' => $fine->session_token, 'unsynced_since' => now()->subSeconds(20)->getTimestampMs()]))->assertOk();
+
+    $map = $this->actingAs($this->teacher)->getJson(route('forms.class-map', $this->exam))->assertOk();
+    $students = collect($map->json('students'))->keyBy('name');
+
+    expect($students['Dodi']['status'])->toBe('unsaved')
+        ->and($students['Dodi']['unsavedSeconds'])->toBe(180)
+        ->and($students['Dodi']['savedSeconds'])->toBe(240)
+        ->and($students['Eka']['status'])->toBe('working')
+        ->and($map->json('counts.unsaved'))->toBe(1);
+
+    // Once the draft gets through, the student is working again.
+    $this->app['auth']->forgetGuards();
+    $this->postJson(route('forms.responses.draft', $this->exam->slug), [
+        'session_token' => $stuck->session_token,
+        'answers' => [1 => 'a', 2 => 'b'],
+        'pending_since' => now()->subMinutes(3)->getTimestampMs(),
+    ])->assertOk();
+
+    expect($stuck->fresh()->unsynced_since)->toBeNull()
+        ->and($stuck->fresh()->max_sync_delay_seconds)->toBe(180)
+        ->and(app(ClassMap::class)->statusOf($this->exam, $stuck->fresh()))->toBe('working');
+
+    // "0": nothing waits on the device.
+    $this->getJson(route('forms.responses.status', ['quizForm' => $this->exam->slug, 'session_token' => $fine->session_token, 'unsynced_since' => 0]))->assertOk();
+    expect($fine->fresh()->unsynced_since)->toBeNull();
+});
+
+test('a device clock far off cannot put the unsaved time outside the attempt', function () {
+    $attempt = mapAttempt($this->exam, 'Fani');
+
+    $this->getJson(route('forms.responses.status', ['quizForm' => $this->exam->slug, 'session_token' => $attempt->session_token, 'unsynced_since' => now()->subYear()->getTimestampMs()]))->assertOk();
+    expect($attempt->fresh()->unsynced_since->toDateTimeString())->toBe($attempt->started_at->toDateTimeString());
+
+    $this->getJson(route('forms.responses.status', ['quizForm' => $this->exam->slug, 'session_token' => $attempt->session_token, 'unsynced_since' => now()->addDay()->getTimestampMs()]))->assertOk();
+    expect($attempt->fresh()->unsynced_since->toDateTimeString())->toBe(now()->toDateTimeString());
 });

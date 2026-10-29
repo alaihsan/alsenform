@@ -7,6 +7,7 @@ use App\Http\Middleware\RequestClientHints;
 use App\Http\Middleware\StaticAssetCacheMiddleware;
 use App\Http\Middleware\TrustLocalProxies;
 use App\Support\ErrorPage;
+use App\Support\ServerErrorRecorder;
 use App\Support\StaleFrameworkCaches;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Bootstrap\LoadConfiguration;
@@ -36,6 +37,12 @@ $app = Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Server errors are kept for the admin (Galat Server), each with the reference code that
+        // its error page shows and its line in laravel.log carries.
+        $exceptions->dontReportDuplicates();
+        $exceptions->report(fn (Throwable $exception) => app(ServerErrorRecorder::class)->record($exception));
+        $exceptions->context(fn (Throwable $exception): array => ['reference' => app(ServerErrorRecorder::class)->referenceFor($exception)]);
+
         $exceptions->respond(fn (Response $response, Throwable $exception, Request $request): Response => app(ErrorPage::class)->respond($response, $exception, $request));
     })->create();
 

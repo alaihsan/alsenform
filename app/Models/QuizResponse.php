@@ -30,9 +30,57 @@ class QuizResponse extends Model
         'is_timeout',
         'is_auto_submitted',
         'late_seconds',
+        'submit_attempts',
+        'receipt_hash',
         'ip_address',
         'user_agent',
     ];
+
+    /**
+     * Whenever the application stores answers, their receipt is sealed with them: a receipt that no
+     * longer matches tells the answers were changed outside the application (in the database).
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (QuizResponse $response): void {
+            if ($response->isDirty('answers') || $response->receipt_hash === null) {
+                $response->receipt_hash = $response->computeReceiptHash();
+            }
+        });
+    }
+
+    /**
+     * The hash of the handed-in answers with the attempt and student they belong to.
+     */
+    public function computeReceiptHash(): string
+    {
+        $answers = is_array($this->answers) ? $this->answers : [];
+        ksort($answers, SORT_STRING);
+
+        return hash('sha256', (string) json_encode([
+            (int) $this->quiz_form_id,
+            $this->quiz_session_id !== null ? (int) $this->quiz_session_id : null,
+            (string) ($this->user_id ?? $this->respondent_identifier),
+            $answers,
+        ]));
+    }
+
+    /**
+     * The receipt the student gets after handing in, as "7F3A-9C21": the beginning of the hash.
+     */
+    public function receiptCode(): ?string
+    {
+        return $this->receipt_hash !== null ? strtoupper(substr($this->receipt_hash, 0, 4).'-'.substr($this->receipt_hash, 4, 4)) : null;
+    }
+
+    /**
+     * Whether the answers kept are still the ones the receipt was given for (null: no receipt,
+     * handed in before receipts existed).
+     */
+    public function hasIntactReceipt(): ?bool
+    {
+        return $this->receipt_hash !== null ? hash_equals($this->receipt_hash, $this->computeReceiptHash()) : null;
+    }
 
     /**
      * @return array<string, string>
@@ -46,6 +94,7 @@ class QuizResponse extends Model
             'feedback' => 'array',
             'question_ids' => 'array',
             'late_seconds' => 'integer',
+            'submit_attempts' => 'integer',
             'score' => 'integer',
             'is_timeout' => 'boolean',
             'is_auto_submitted' => 'boolean',

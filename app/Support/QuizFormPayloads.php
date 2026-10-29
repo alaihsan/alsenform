@@ -8,6 +8,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
 use App\Services\Addons;
+use App\Services\ExamDelivery;
 use App\Services\ItemAnalysis;
 use App\Services\Misconceptions;
 use App\Services\QuestionBank;
@@ -207,7 +208,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'quiz_session_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'submit_attempts', 'receipt_hash', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect(QuizItems::questions($quizForm->questions)), $responses);
 
@@ -259,6 +260,10 @@ class QuizFormPayloads
                 'formattedDate' => $response->created_at->format('d/m/Y H:i'),
                 // For sorting by the moment of handing in.
                 'submittedAtTimestamp' => $response->created_at->getTimestamp(),
+                // The receipt the student got, and whether the answers kept are still the ones handed in.
+                'receipt' => $response->receiptCode(),
+                'receiptIntact' => $response->hasIntactReceipt(),
+                'historyUrl' => route('forms.responses.history', [$response->quiz_form_id, $response->id]),
             ];
         })->values()->all();
 
@@ -275,6 +280,8 @@ class QuizFormPayloads
                 'submittedAt' => DisplayTime::ago($response->created_at),
             ])->values()->all(),
             'gradebook' => $gradebook,
+            // Whether the answers got to the server: saved in time, handed in at the first try, errors.
+            'delivery' => app(ExamDelivery::class)->of($quizForm),
             'questions' => $questions,
             // Analisis butir soal: difficulty, discrimination and distractors of each question.
             // Only with the Analisis Butir Soal add-on on for this exam (not even computed otherwise).
@@ -375,7 +382,7 @@ class QuizFormPayloads
      * @param  array<string, mixed>  $question
      * @return list<string>
      */
-    private function answerLabels(array $question, mixed $answer): array
+    public function answerLabels(array $question, mixed $answer): array
     {
         $labels = [];
 

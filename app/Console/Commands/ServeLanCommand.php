@@ -3,21 +3,22 @@
 namespace App\Console\Commands;
 
 use App\Actions\SubmitExpiredAttempts;
+use App\Services\DatabaseBackup;
+use App\Support\AssetBuild;
+use App\Support\DisplayTime;
 use App\Support\DnsLookup;
 use App\Support\PendingMigrations;
-use FilesystemIterator;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
 use Symfony\Component\Process\Process;
 use Throwable;
 
 class ServeLanCommand extends Command
 {
     /**
-     * The port of the intranet address, http://falcon.lan:2026.
+     * The port of the intranet address, http://falcon.intranet:2026.
      */
     public const DEFAULT_PORT = 2026;
 
@@ -41,7 +42,7 @@ class ServeLanCommand extends Command
                             {--d|daemon : Jalankan server di latar belakang (background mode)}
                             {--stop : Hentikan server yang sedang berjalan di latar belakang}
                             {--status : Periksa status server yang sedang berjalan di latar belakang}
-                            {--check : Periksa semua yang dibutuhkan alamat intranet (http://falcon.lan:2026) beserta cara memperbaikinya}
+                            {--check : Periksa semua yang dibutuhkan alamat intranet (http://falcon.intranet:2026) beserta cara memperbaikinya}
                             {--no-caffeinate : Jangan aktifkan proteksi anti-sleep macOS}';
 
     /**
@@ -60,6 +61,11 @@ class ServeLanCommand extends Command
      * How often (in seconds) the server hands in the exams whose time ran out.
      */
     protected float $autoSubmitIntervalSeconds = 60.0;
+
+    /**
+     * How often (in seconds) the server checks whether today's backup and clean-up are due.
+     */
+    protected float $maintenanceCheckIntervalSeconds = 3600.0;
 
     /**
      * What the network's DNS answered for each name, looked up once per network.
@@ -111,6 +117,7 @@ class ServeLanCommand extends Command
         }
 
         $this->syncWithCurrentCode();
+        $this->runDailyMaintenance((float) config('maintenance.backup.fresh_hours'));
 
         if ($this->option('optimize')) {
             $this->call('exam:optimize');
@@ -232,6 +239,8 @@ class ServeLanCommand extends Command
         $lastCheckedAt = microtime(true);
         // Right away first: exams may have run out while the server was off.
         $lastAutoSubmitAt = 0.0;
+        // Done when the server started.
+        $lastMaintenanceCheckAt = microtime(true);
 
         while ($process->isRunning()) {
             usleep((int) (min(0.5, $this->networkCheckIntervalSeconds) * 1_000_000));
@@ -239,6 +248,11 @@ class ServeLanCommand extends Command
             if (microtime(true) - $lastAutoSubmitAt >= $this->autoSubmitIntervalSeconds) {
                 $lastAutoSubmitAt = microtime(true);
                 $this->submitExpiredExams();
+            }
+
+            if (microtime(true) - $lastMaintenanceCheckAt >= $this->maintenanceCheckIntervalSeconds) {
+                $lastMaintenanceCheckAt = microtime(true);
+                $this->runDailyMaintenance((float) config('maintenance.backup.max_age_hours'));
             }
 
             if (microtime(true) - $lastCheckedAt < $this->networkCheckIntervalSeconds) {
@@ -253,6 +267,26 @@ class ServeLanCommand extends Command
                 $knownAddresses = $currentAddresses;
                 $this->announceNetworkChange($currentInterfaces, $host, $port);
             }
+        }
+    }
+
+    /**
+     * A copy of the database when the latest is older than the given hours, then records past
+     * their retention removed (config/maintenance.php). A failed backup never stops the server: it
+     * is shown here and recorded in Galat Server.
+     */
+    protected function runDailyMaintenance(float $backupOlderThanHours): void
+    {
+        if (! app(DatabaseBackup::class)->isOlderThan($backupOlderThanHours)) {
+            return;
+        }
+
+        Artisan::call('db:backup', [], $this->output);
+
+        try {
+            Artisan::call('model:prune');
+        } catch (Throwable $exception) {
+            report($exception);
         }
     }
 
@@ -373,7 +407,7 @@ class ServeLanCommand extends Command
 
     protected function manifestPath(): string
     {
-        return public_path('build/manifest.json');
+        return app(AssetBuild::class)->manifestPath();
     }
 
     /**
@@ -383,39 +417,15 @@ class ServeLanCommand extends Command
      */
     protected function assetSourcePaths(): array
     {
-        return array_map(fn (string $path): string => base_path($path), ['resources/js', 'resources/css', 'vite.config.ts', 'tailwind.config.js', 'package.json']);
+        return app(AssetBuild::class)->sourcePaths();
     }
 
     /**
-     * Whether the bundle is older than its sources: after "git pull" or a merge without "npm run
-     * build", browsers would still get the previous pages, whose new buttons do nothing.
+     * Whether the bundle is older than its sources (see App\Support\AssetBuild).
      */
     protected function assetsAreOutdated(): bool
     {
-        $builtAt = @filemtime($this->manifestPath());
-
-        if ($builtAt === false) {
-            return true;
-        }
-
-        foreach ($this->assetSourcePaths() as $path) {
-            if (is_file($path) && filemtime($path) > $builtAt) {
-                return true;
-            }
-
-            if (! is_dir($path)) {
-                continue;
-            }
-
-            /** @var SplFileInfo $file */
-            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)) as $file) {
-                if ($file->isFile() && $file->getMTime() > $builtAt) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return app(AssetBuild::class)->isOutdated($this->manifestPath(), $this->assetSourcePaths());
     }
 
     /**
@@ -606,7 +616,7 @@ class ServeLanCommand extends Command
         $this->checkProblems = 0;
 
         $this->newLine();
-        $this->output->writeln(' <options=bold>🔎 PEMERIKSAAN ALAMAT INTRANET</> <fg=cyan;options=bold>'.($lanHost !== null ? $this->urlFor($lanHost, $port) : "port {$port}").'</>');
+        $this->output->writeln(' <options=bold>🔎 PEMERIKSAAN ALAMAT INTRANET</> <fg=cyan;options=bold>'.($lanHost !== null ? $this->intranetUrl($lanHost, $port) : "port {$port}").'</>');
         $this->newLine();
 
         $this->output->writeln(' <options=bold>Komputer server</>');
@@ -631,11 +641,21 @@ class ServeLanCommand extends Command
                 : $this->checkLine(false, "Berkas public/hot tertinggal dari npm run dev: halaman mencari tampilan di {$hotUrl} yang sudah mati, jadi tampil putih atau FF-201.", ['Hapus berkas public/hot (php artisan lan:serve kini menghapusnya otomatis).']);
         }
 
-        if ($lanHost === null) {
-            $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.lan']);
+        $latestBackup = $this->latestBackup();
+        $maxBackupAgeHours = (int) config('maintenance.backup.max_age_hours');
+        if ($latestBackup === null) {
+            $this->checkLine(false, 'Belum ada backup database: bila komputer server rusak, ujian, jawaban, dan nilai hilang.', ['Jalankan: php artisan db:backup (lan:serve juga membuatnya otomatis setiap hari)']);
+        } elseif ($latestBackup['created_at']->lt(now()->subHours($maxBackupAgeHours))) {
+            $this->checkLine(false, 'Backup database terakhir '.DisplayTime::ago($latestBackup['created_at'])." ({$latestBackup['name']}), lebih dari {$maxBackupAgeHours} jam.", ['Jalankan: php artisan db:backup']);
+        } else {
+            $this->checkLine(true, 'Backup database terakhir '.DisplayTime::ago($latestBackup['created_at'])." ({$latestBackup['name']}).");
         }
 
-        $expectedUrl = $lanHost !== null ? $this->urlFor($lanHost, $port) : null;
+        if ($lanHost === null) {
+            $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.intranet']);
+        }
+
+        $expectedUrl = $lanHost !== null ? $this->intranetUrl($lanHost, $port) : null;
         $appUrl = rtrim((string) config('app.url'), '/');
         if ($expectedUrl !== null && $appUrl !== $expectedUrl) {
             $this->checkLine(null, "APP_URL={$appUrl}: belum alamat baru.", ["Ubah di .env: APP_URL={$expectedUrl}"]);
@@ -671,7 +691,15 @@ class ServeLanCommand extends Command
             $status = $this->httpStatus("http://{$serverIp}:{$port}/up");
             $status === 200
                 ? $this->checkLine(true, "Server menjawab di http://{$serverIp}:{$port}")
-                : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat pesan galat di terminal lan:serve atau storage/logs/laravel.log']);
+                : $this->checkLine(false, "Server tidak menjawab dengan benar di http://{$serverIp}:{$port} (".($status !== null ? "HTTP {$status}" : 'tidak ada jawaban').').', ['Lihat Laporan → Galat Server di aplikasi, terminal lan:serve, atau storage/logs/']);
+        }
+
+        $publicPort = $this->publicPort();
+        if ($lanHost !== null && $publicPort !== null) {
+            // Where students reach Caddy: the address the name leads to when it is this server's.
+            $ownAddress = $this->resolveHost($lanHost);
+            $caddyAddress = $ownAddress !== null && in_array($ownAddress, $interfaces, true) ? $ownAddress : ($serverIp ?? '127.0.0.1');
+            $this->checkCaddy($lanHost, $caddyAddress, $publicPort, $port, $isServing);
         }
 
         foreach ($this->firewallProblems() as [$problem, $fix]) {
@@ -693,9 +721,9 @@ class ServeLanCommand extends Command
 
             $ownAddress = $this->resolveHost($lanHost);
             if ($ownAddress !== null && in_array($ownAddress, $interfaces, true)) {
-                $status = $isServing ? $this->httpStatus($this->urlFor($lanHost, $port).'/up') : null;
+                $status = $isServing ? $this->httpStatus($this->intranetUrl($lanHost, $port).'/up') : null;
                 $this->checkLine($isServing ? $status === 200 : null, $isServing && $status === 200
-                    ? $this->urlFor($lanHost, $port).' terbuka dari komputer server ini.'
+                    ? $this->intranetUrl($lanHost, $port).' terbuka dari komputer server ini.'
                     : "Komputer server mengenal {$lanHost} → {$ownAddress}, tetapi halamannya belum terbuka.");
             } elseif (! $routerKnows) {
                 $this->checkLine(null, "Komputer server juga belum mengenal {$lanHost}, karena router belum mengenalnya. Sampai router diatur, di komputer ini pakai http://localhost:{$port}.");
@@ -710,7 +738,9 @@ class ServeLanCommand extends Command
 
         $this->newLine();
         $this->output->writeln(' <options=bold>Di perangkat siswa</> <fg=gray>(tidak bisa diperiksa dari sini)</>');
-        $this->output->writeln('   • Ketik alamat lengkap: <fg=cyan>'.($expectedUrl ?? "http://IP-server:{$port}").'</> (dengan http:// dan port), lalu simpan sebagai bookmark.');
+        // Behind Caddy on 80/443 the address has no port to type.
+        $typed = $expectedUrl !== null && in_array($this->publicPort(), [80, 443], true) ? parse_url($expectedUrl, PHP_URL_SCHEME).'://' : 'http:// dan port';
+        $this->output->writeln('   • Ketik alamat lengkap: <fg=cyan>'.($expectedUrl ?? "http://IP-server:{$port}")."</> (dengan {$typed}), lalu simpan sebagai bookmark.");
         $this->output->writeln('   • Matikan "DNS Pribadi" (Android), "DNS aman" di Chrome, VPN, atau iCloud Private Relay: semuanya melewati DNS router.');
         $this->output->writeln('   • Setelah pengaturan router diubah, matikan lalu nyalakan Wi-Fi perangkat agar jawaban DNS lama terlupa.');
         if ($serverIp !== null) {
@@ -727,6 +757,56 @@ class ServeLanCommand extends Command
         $this->output->writeln(" <fg=red;options=bold>✗ {$this->checkProblems} masalah perlu diperbaiki (lihat tanda ✗ di atas).</>");
 
         return self::FAILURE;
+    }
+
+    /**
+     * Whether Caddy in front of the server (LAN_PUBLIC_PORT) answers the intranet name with the
+     * pages of this server, asked at the server's address on the school network, as students ask.
+     * (127.0.0.1 may belong to another server: on a Mac with Herd, nginx keeps 80 and 443 there.)
+     */
+    protected function checkCaddy(string $lanHost, string $address, int $publicPort, int $port, bool $isServing): void
+    {
+        $url = $this->urlFor($lanHost, $publicPort);
+        $writeSite = 'Buat situsnya: php artisan lan:caddy --write=<folder sites Caddy>/falcon-forms.caddy, lalu muat ulang Caddy.';
+
+        if (! $this->answersAt($address, $publicPort)) {
+            $fixes = [
+                PHP_OS_FAMILY === 'Darwin'
+                    ? 'Pasang dan jalankan Caddy: brew install caddy, lalu sudo brew services start caddy'
+                    : 'Pasang dan jalankan Caddy: sudo apt install caddy, lalu sudo systemctl enable --now caddy',
+                $writeSite,
+            ];
+
+            if ($address !== '127.0.0.1' && $this->answersAt('127.0.0.1', $publicPort)) {
+                array_unshift($fixes, "Port {$publicPort} di 127.0.0.1 dipakai program lain (di Mac biasanya nginx milik Herd). Caddy cukup memakai alamat jaringan: di awal Caddyfile utama tulis { default_bind {$address} }, lalu jalankan ulang Caddy (sudo brew services restart caddy).");
+            }
+
+            $this->checkLine(false, "Caddy belum menjawab di {$address}:{$publicPort}: {$url} belum dapat dibuka.", $fixes);
+
+            return;
+        }
+
+        $status = $this->proxyStatus($lanHost, $address, $publicPort);
+
+        match (true) {
+            $status === 200 => $this->checkLine(true, "Caddy meneruskan {$url} ke server Falcon Forms (port {$port})."),
+            in_array($status, [502, 503, 504], true) && ! $isServing => $this->checkLine(false, "Caddy berjalan, tetapi server Falcon Forms di port {$port} belum menjawab (HTTP {$status}).", ['Jalankan: php artisan lan:serve']),
+            default => $this->checkLine(false, "Port {$publicPort} menjawab, tetapi {$url} belum sampai ke Falcon Forms (".match ($status) {
+                null => 'tidak ada jawaban',
+                0 => 'halaman kosong',
+                default => "HTTP {$status}",
+            }."): situs Caddy untuk {$lanHost} belum ada atau salah.", [$writeSite]),
+        };
+    }
+
+    /**
+     * The newest copy of the database (see App\Services\DatabaseBackup), or null when there is none.
+     *
+     * @return array{path: string, name: string, size: int, created_at: CarbonImmutable}|null
+     */
+    protected function latestBackup(): ?array
+    {
+        return app(DatabaseBackup::class)->latest();
     }
 
     /**
@@ -1190,14 +1270,14 @@ class ServeLanCommand extends Command
         // The intranet name when the network's DNS leads it to the address the server listens on.
         $lanHost = $this->lanHost();
         if ($lanHost !== null && $this->lanHostPointsHere($host === '0.0.0.0' ? $interfaces : [$host])) {
-            return $this->urlFor($lanHost, $port);
+            return $this->intranetUrl($lanHost, $port);
         }
 
         return $address ? "http://{$address}:{$port}" : null;
     }
 
     /**
-     * The intranet name students type (LAN_HOST, falcon.lan by default), or null when there is none.
+     * The intranet name students type (LAN_HOST, falcon.intranet by default), or null when there is none.
      */
     protected function lanHost(): ?string
     {
@@ -1234,7 +1314,64 @@ class ServeLanCommand extends Command
 
     protected function urlFor(string $host, int $port): string
     {
-        return $port === 80 ? "http://{$host}" : "http://{$host}:{$port}";
+        return match ($port) {
+            80 => "http://{$host}",
+            443 => "https://{$host}",
+            default => "http://{$host}:{$port}",
+        };
+    }
+
+    /**
+     * The address students type: the intranet name on Caddy's port when the server is behind Caddy
+     * (LAN_PUBLIC_PORT), else on the port lan:serve listens on.
+     */
+    protected function intranetUrl(string $lanHost, int $port): string
+    {
+        return $this->urlFor($lanHost, $this->publicPort() ?? $port);
+    }
+
+    /**
+     * The port of Caddy in front of this server (LAN_PUBLIC_PORT), or null when students reach
+     * lan:serve directly.
+     */
+    protected function publicPort(): ?int
+    {
+        $port = config('app.lan_public_port');
+
+        return is_numeric($port) && (int) $port >= 1 && (int) $port <= 65535 ? (int) $port : null;
+    }
+
+    /**
+     * Whether something accepts connections at the address and port.
+     */
+    protected function answersAt(string $address, int $port): bool
+    {
+        return $this->isListening("http://{$address}:{$port}");
+    }
+
+    /**
+     * What Caddy answers for the intranet name on its port at the server's address: the HTTP status
+     * of this application's health page, 0 when Caddy answers with an empty page (it has no site
+     * for the name), or null when nothing answers.
+     */
+    protected function proxyStatus(string $lanHost, string $address, int $publicPort): ?int
+    {
+        $scheme = $publicPort === 443 ? 'https' : 'http';
+        $context = stream_context_create([
+            'http' => ['timeout' => 5, 'ignore_errors' => true, 'header' => "Host: {$lanHost}\r\nConnection: close\r\n"],
+            // Caddy's own certificate (tls internal) for the name: not checked, only whether it answers.
+            'ssl' => ['peer_name' => $lanHost, 'verify_peer' => false, 'verify_peer_name' => false],
+        ]);
+        $http_response_header = null;
+        $body = @file_get_contents("{$scheme}://{$address}:{$publicPort}/up", false, $context);
+        $headers = function_exists('http_get_last_response_headers') ? http_get_last_response_headers() : $http_response_header;
+
+        if (! is_array($headers) || ! isset($headers[0]) || ! preg_match('/^HTTP\/\S+\s+(\d{3})/', $headers[0], $matches)) {
+            return null;
+        }
+
+        // Caddy answers a name it has no site for with an empty "200 OK".
+        return (int) $matches[1] === 200 && ! str_contains((string) $body, 'Application up') ? 0 : (int) $matches[1];
     }
 
     /**
@@ -1249,12 +1386,18 @@ class ServeLanCommand extends Command
             return;
         }
 
-        $url = $this->urlFor($lanHost, $port);
+        $url = $this->intranetUrl($lanHost, $port);
         $address = $this->resolveHost($lanHost);
         $serverIp = $interfaces !== [] ? reset($interfaces) : 'IP server ini';
 
+        $publicPort = $this->publicPort();
+
         if ($address !== null && in_array($address, $interfaces, true)) {
-            $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address})</>");
+            $this->output->writeln("{$indent}   👉 <fg=green;options=bold>{$url}</> <fg=gray>(alamat intranet → {$address}".($publicPort !== null ? ', lewat Caddy' : '').')</>');
+
+            if ($publicPort !== null && ! $this->answersAt($address, $publicPort)) {
+                $this->output->writeln("{$indent}      <fg=yellow>⚠️  Caddy belum menjawab di {$address}:{$publicPort}, jadi {$url} belum terbuka. Pemeriksaan dan cara memperbaikinya:</> <fg=yellow>php artisan lan:check</>");
+            }
 
             return;
         }
@@ -1558,7 +1701,7 @@ class ServeLanCommand extends Command
     {
         $lanHost = $this->lanHost();
         $baseUrl = $lanHost !== null && $this->lanHostPointsHere($interfaces)
-            ? $this->urlFor($lanHost, $port)
+            ? $this->intranetUrl($lanHost, $port)
             : 'http://'.($interfaces !== [] ? reset($interfaces) : 'localhost').":{$port}";
         $this->output->writeln(" <fg=white;options=bold>🩺 Perangkat terasa lambat?</> buka <fg=cyan>{$baseUrl}/cek-koneksi</> di perangkat itu.");
 
@@ -1593,7 +1736,7 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * Session cookie settings that stop logins over http://falcon.lan:2026 and the IP addresses:
+     * Session cookie settings that stop logins over http://falcon.intranet:2026 and the IP addresses:
      * the browser drops the cookie, and every login or form ends in "419 Page Expired".
      *
      * @return list<string>
@@ -1604,7 +1747,8 @@ class ServeLanCommand extends Command
         $domain = trim((string) config('session.domain'));
 
         if ($domain !== '') {
-            $warnings[] = "SESSION_DOMAIN={$domain} di .env: browser menolak cookie login di alamat lain (falcon.lan, alamat IP), jadi login gagal (419). Kosongkan baris itu (SESSION_DOMAIN=null) lalu jalankan ulang server.";
+            $otherAddresses = implode(', ', array_filter([$this->lanHost(), 'alamat IP']));
+            $warnings[] = "SESSION_DOMAIN={$domain} di .env: browser menolak cookie login di alamat lain ({$otherAddresses}), jadi login gagal (419). Kosongkan baris itu (SESSION_DOMAIN=null) lalu jalankan ulang server.";
         }
 
         if (config('session.secure') === true) {

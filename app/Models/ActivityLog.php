@@ -3,17 +3,22 @@
 namespace App\Models;
 
 use Database\Factories\ActivityLogFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A login, logout, exam step or page that failed to load, with the device, browser and time it happened.
+ * A login, logout, exam step, page that failed to load or server error, with the device, browser and
+ * time it happened.
  */
 class ActivityLog extends Model
 {
     /** @use HasFactory<ActivityLogFactory> */
     use HasFactory;
+
+    use MassPrunable;
 
     public const LOGIN = 'login';
 
@@ -26,6 +31,9 @@ class ActivityLog extends Model
     /** A page the browser could not show, with its App\Support\PageFailure code in the meta. */
     public const PAGE_FAILED = 'page_failed';
 
+    /** An error of the server (HTTP 500) on a request of this person, with its reference code in the meta. */
+    public const SERVER_ERROR = 'server_error';
+
     /**
      * Labels of the events, in the order the report lists them.
      *
@@ -37,6 +45,7 @@ class ActivityLog extends Model
         self::EXAM_STARTED => 'Mulai ujian',
         self::EXAM_SUBMITTED => 'Kirim jawaban',
         self::PAGE_FAILED => 'Halaman gagal dimuat',
+        self::SERVER_ERROR => 'Galat server',
     ];
 
     /**
@@ -90,5 +99,15 @@ class ActivityLog extends Model
     public function quizForm(): BelongsTo
     {
         return $this->belongsTo(QuizForm::class)->withTrashed();
+    }
+
+    /**
+     * Activities older than the retention period (a school year by default) are removed.
+     *
+     * @return Builder<ActivityLog>
+     */
+    public function prunable(): Builder
+    {
+        return static::query()->where('created_at', '<', now()->subDays((int) config('maintenance.retention_days.activity_logs')));
     }
 }

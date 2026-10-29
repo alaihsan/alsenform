@@ -40,6 +40,8 @@ class SaveQuizDraftRequest extends FormRequest
             'answers' => ['present', 'array', 'max:500'],
             // The questions marked "Ragu-ragu".
             'doubts' => ['sometimes', 'nullable', 'array', 'max:500'],
+            // When the oldest answer of this draft was given (milliseconds of the server's clock).
+            'pending_since' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ];
     }
 

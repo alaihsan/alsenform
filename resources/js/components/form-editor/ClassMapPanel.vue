@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Flag, LayoutGrid, LockOpen } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-type Status = 'locked' | 'left' | 'offline' | 'idle' | 'working' | 'not_started' | 'submitted';
+type Status = 'locked' | 'left' | 'offline' | 'unsaved' | 'idle' | 'working' | 'not_started' | 'submitted';
 
 export type ClassMapStudent = {
     id: number;
@@ -17,11 +17,16 @@ export type ClassMapStudent = {
     remainingSeconds: number | null;
     lastSeenSeconds: number | null;
     idleMinutes: number | null;
+    /** Seconds since the server last got this student's answers. */
+    savedSeconds: number | null;
+    /** Seconds the newest answers have been on the device only. */
+    unsavedSeconds: number | null;
 };
 
 /*
  * Peta Kelas: every student of the exam at a glance while it runs, for the proctor. Students who
- * need a look (locked, left the exam page, lost the connection, no new answer for a while) come first.
+ * need a look (locked, left the exam page, lost the connection, answers that do not reach the server,
+ * no new answer for a while) come first.
  */
 const props = defineProps<{
     url: string;
@@ -37,12 +42,13 @@ const STATUS: Record<Status, { label: string; chip: string; edge: string; bar: s
     locked: { label: 'Terkunci', chip: 'bg-rose-100 text-rose-700', edge: 'border-l-rose-500', bar: 'bg-rose-400' },
     left: { label: 'Keluar halaman', chip: 'bg-orange-100 text-orange-700', edge: 'border-l-orange-500', bar: 'bg-orange-400' },
     offline: { label: 'Terputus', chip: 'bg-slate-200 text-slate-700', edge: 'border-l-slate-500', bar: 'bg-slate-400' },
+    unsaved: { label: 'Belum tersimpan', chip: 'bg-rose-50 text-rose-700', edge: 'border-l-rose-400', bar: 'bg-rose-300' },
     idle: { label: 'Diam', chip: 'bg-amber-100 text-amber-800', edge: 'border-l-amber-400', bar: 'bg-amber-400' },
     working: { label: 'Mengerjakan', chip: 'bg-indigo-50 text-indigo-700', edge: 'border-l-indigo-500', bar: 'bg-indigo-500' },
     not_started: { label: 'Belum mulai', chip: 'bg-slate-100 text-slate-500', edge: 'border-l-slate-300', bar: 'bg-slate-300' },
     submitted: { label: 'Selesai', chip: 'bg-emerald-50 text-emerald-700', edge: 'border-l-emerald-500', bar: 'bg-emerald-500' },
 };
-const ORDER: Status[] = ['locked', 'left', 'offline', 'idle', 'working', 'not_started', 'submitted'];
+const ORDER: Status[] = ['locked', 'left', 'offline', 'unsaved', 'idle', 'working', 'not_started', 'submitted'];
 
 const students = ref<ClassMapStudent[]>([]);
 const counts = ref<Partial<Record<Status, number>>>({});
@@ -83,6 +89,8 @@ const presentStatuses = computed(() => ORDER.filter((status) => (counts.value[st
 const statusLabel = (student: ClassMapStudent) =>
     student.status === 'idle' && student.idleMinutes !== null ? `Diam ${student.idleMinutes} mnt` : STATUS[student.status].label;
 const remaining = (seconds: number) => (seconds >= 60 ? `sisa ${Math.floor(seconds / 60)} mnt` : `sisa ${seconds} dtk`);
+const ago = (seconds: number) => (seconds >= 60 ? `${Math.floor(seconds / 60)} mnt lalu` : `${seconds} dtk lalu`);
+const unsavedCount = computed(() => counts.value.unsaved ?? 0);
 </script>
 
 <template>
@@ -128,6 +136,10 @@ const remaining = (seconds: number) => (seconds >= 60 ? `sisa ${Math.floor(secon
             </button>
         </div>
 
+        <p v-if="unsavedCount" class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800" role="status">
+            {{ unsavedCount }} siswa punya jawaban yang lebih dari 2 menit belum sampai ke server (masih aman di perangkatnya). Minta siswa tetap di
+            halaman ujian dan periksa Wi-Fi-nya; jawaban terkirim sendiri begitu tersambung.
+        </p>
         <p v-if="loadError" class="mt-3 text-xs font-semibold text-rose-700" role="alert">{{ loadError }}</p>
         <p
             v-if="hasLoaded && !students.length"
@@ -168,6 +180,14 @@ const remaining = (seconds: number) => (seconds >= 60 ? `sisa ${Math.floor(secon
                     <span v-if="student.blurCount" class="text-rose-700">{{ student.blurCount }}x pindah tab</span>
                     <span v-if="student.status === 'offline' && student.lastSeenSeconds !== null" class="text-slate-500"
                         >terakhir {{ Math.round(student.lastSeenSeconds / 60) || 1 }} mnt lalu</span
+                    >
+                    <span v-if="student.status === 'unsaved' && student.unsavedSeconds !== null" class="font-semibold text-rose-700"
+                        >{{ Math.floor(student.unsavedSeconds / 60) }} mnt hanya di perangkat</span
+                    >
+                    <span
+                        v-if="['working', 'idle', 'offline', 'unsaved', 'left'].includes(student.status) && student.savedSeconds !== null"
+                        class="text-slate-500"
+                        >tersimpan di server {{ ago(student.savedSeconds) }}</span
                     >
                     <button
                         v-if="student.status === 'locked'"

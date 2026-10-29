@@ -60,13 +60,28 @@ return [
     |--------------------------------------------------------------------------
     |
     | The name students and teachers type on the school network, served by
-    | "php artisan lan:serve" on port 2026: http://falcon.lan:2026. The
-    | router's DNS must point this name at the server (a static DNS entry).
-    | Leave it empty to only announce the server's IP addresses.
+    | "php artisan lan:serve" on port 2026: http://falcon.intranet:2026.
+    | The router's DNS must point this name at the server (a static DNS
+    | entry). Leave it empty to only announce the server's IP addresses.
     |
     */
 
-    'lan_host' => env('LAN_HOST', 'falcon.lan'),
+    'lan_host' => env('LAN_HOST', 'falcon.intranet'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Intranet Address Behind Caddy
+    |--------------------------------------------------------------------------
+    |
+    | With Caddy (a reverse proxy) on this computer in front of several web
+    | apps, students open the name on Caddy's port: 80 gives
+    | http://falcon.intranet, 443 https://falcon.intranet. lan:serve keeps
+    | listening on 2026 for Caddy. "php artisan lan:caddy" writes the site.
+    | Leave it empty to open http://falcon.intranet:2026 directly.
+    |
+    */
+
+    'lan_public_port' => env('LAN_PUBLIC_PORT'),
 
     /*
     |--------------------------------------------------------------------------
