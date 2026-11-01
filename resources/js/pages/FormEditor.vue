@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AccountMenu from '@/components/AccountMenu.vue';
+import CollapsibleContent from '@/components/CollapsibleContent.vue';
 import RichContent from '@/components/RichContent.vue';
 import AddonExamSwitches from '@/components/addons/AddonExamSwitches.vue';
 import AddonGallery, { type AddonEntry } from '@/components/addons/AddonGallery.vue';
@@ -24,6 +25,7 @@ import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-ed
 import {
     backgroundPatterns,
     colorThemes,
+    DESCRIPTION_MAX_CHARACTERS,
     fonts,
     gridQuestionTypes,
     noOptionQuestionTypes,
@@ -43,8 +45,9 @@ import { copyText } from '@/lib/clipboard';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import { FORMULA_PALETTES } from '@/lib/formulas';
 import { CONTENT_ITEM_TYPES, type PreviewAnswer, type Question, type QuestionType, type QuizFormPayload, type SectionTarget } from '@/types/quiz';
-import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting } from '@/utils/rich-content';
+import { hasMathOrArabic, isPredominantlyArabic, stripRichFormatting, visibleLength } from '@/utils/rich-content';
 import { BRANCHING_TYPES, FIRST_SECTION, NEXT_SECTION, SUBMIT_FORM, flowSections } from '@/utils/section-flow';
+import { downloadFile } from '@/utils/download';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
@@ -61,6 +64,7 @@ import {
     Download,
     ExternalLink,
     Eye,
+    FileDown,
     FileText,
     FileUp,
     History,
@@ -134,8 +138,10 @@ const form = reactive({
                 return kept;
             }),
             points: q.points ?? 1,
-            // Kept, or every save would drop it.
+            // Kept, or every save would drop them.
             ...(q.explanation ? { explanation: q.explanation } : {}),
+            ...(q.optionScores ? { optionScores: [...q.optionScores] } : {}),
+            ...(q.columnScores ? { columnScores: [...q.columnScores] } : {}),
         })) ?? [
             {
                 id: 1,
@@ -163,6 +169,9 @@ const form = reactive({
             perDifficulty: { mudah: 0, sedang: 0, sulit: 0, ...(props.quizForm?.settings?.questionDraw?.perDifficulty ?? {}) },
         } as QuestionDraw,
         isQuiz: props.quizForm?.settings?.isQuiz ?? true,
+        optionScoring: props.quizForm?.settings?.optionScoring ?? false,
+        interviewMode: props.quizForm?.settings?.interviewMode ?? false,
+        listedForStudents: props.quizForm?.settings?.listedForStudents ?? true,
         // "verified" was never verified: it asks the email like "responder".
         emailCollectionMode: (props.quizForm?.settings?.emailCollectionMode ?? (props.quizForm?.settings?.collectEmail ? 'responder' : 'none')) === 'none' ? 'none' : 'responder',
         limitOneResponse: props.quizForm?.settings?.limitOneResponse ?? false,
@@ -498,6 +507,8 @@ const formDesignerAddon = computed(() => addonCatalog.value.find((addon) => addo
 const formulaPalettes = computed(() => FORMULA_PALETTES.filter((palette) => addonCatalog.value.some((addon) => addon.key === palette.key && addon.installed)));
 // Teks Arab (RTL): the RTL button in each question's toolbar while the teacher editing has the add-on installed.
 const hasRtlButton = computed(() => addonCatalog.value.some((addon) => addon.key === 'arabic-rtl' && addon.installed));
+// Ekspor Soal ke Word: "Ekspor ke Word" in the More menu while the teacher editing has the add-on installed.
+const hasDocxExport = computed(() => addonCatalog.value.some((addon) => addon.key === 'docx-export' && addon.installed));
 
 // Filter Cerdas: the results in a full-screen Excel mode, loaded (code and data) only when it is opened.
 const isSmartFilterOpen = ref(false);
@@ -527,6 +538,7 @@ const isDesignerOn = computed(() => Boolean(formDesignerAddon.value && isAddonOn
 const activeDesign = computed<FormDesign | null>(() => (isDesignerOn.value && form.settings.design ? withDesignDefaults(form.settings.design) : null));
 const activeDesignVariables = computed(() => (activeDesign.value ? designVariables(activeDesign.value) : undefined));
 const themeClass = computed(() => (activeDesign.value ? 'af-accent-bg' : (form.settings.themeColorClass ?? 'bg-indigo-600')));
+const descriptionLength = computed(() => visibleLength(form.description));
 const showFormDesigner = ref(false);
 useDesignCss(activeDesign);
 
@@ -1080,6 +1092,8 @@ const duplicateQuestion = (question: Question) => {
         options: [...question.options],
         rows: question.rows ? [...question.rows] : [],
         columns: question.columns ? [...question.columns] : [],
+        optionScores: question.optionScores ? [...question.optionScores] : undefined,
+        columnScores: question.columnScores ? [...question.columnScores] : undefined,
         answer:
             typeof question.answer === 'object' && question.answer !== null
                 ? Array.isArray(question.answer)
@@ -1119,6 +1133,47 @@ const deleteQuestion = (question: Question) => {
     markChanged('Pertanyaan dihapus');
 };
 
+/*
+ * Angket berskor: each choice carries its own score (the options, or the columns of a grid), kept
+ * beside them in their order, and an answer earns the score of what was chosen (App\Support\QuizScoring).
+ */
+const isOptionScoring = computed(() => Boolean(form.settings.isQuiz && form.settings.optionScoring));
+/** Mode pewawancara: an interviewer fills the scored questionnaire for one candidate after another. */
+const isInterview = computed(() => isOptionScoring.value && Boolean(form.settings.interviewMode));
+const canScoreChoices = (question: Question) =>
+    isOptionScoring.value && (optionQuestionTypes.includes(question.type) || question.type === 'Multiple-choice grid');
+const scoresKeyOf = (question: Question): 'optionScores' | 'columnScores' => (question.type === 'Multiple-choice grid' ? 'columnScores' : 'optionScores');
+const choicesOf = (question: Question): string[] => (question.type === 'Multiple-choice grid' ? (question.columns ?? []) : question.options);
+const choiceScore = (question: Question, index: number): number | null => question[scoresKeyOf(question)]?.[index] ?? null;
+
+const setChoiceScore = (question: Question, index: number, value: string) => {
+    const key = scoresKeyOf(question);
+    const scores = choicesOf(question).map((_, at) => question[key]?.[at] ?? null);
+    const score = value.trim() === '' ? null : Math.round(Number(value));
+    scores[index] = score === null || !Number.isFinite(score) ? null : Math.max(0, Math.min(100, score));
+    question[key] = scores;
+    markChanged('Skor jawaban diperbarui');
+};
+
+/** The highest score an answer can earn, as the server counts it: the best option, all ticked options, the best column in every row. */
+const maxChoiceScore = (question: Question): number => {
+    const scores = choicesOf(question).map((_, at) => Math.max(0, choiceScore(question, at) ?? 0));
+    if (scores.length === 0) {
+        return 0;
+    }
+    if (question.type === 'Checkboxes') {
+        return scores.reduce((sum, score) => sum + score, 0);
+    }
+
+    return Math.max(...scores) * (question.type === 'Multiple-choice grid' ? (question.rows?.length ?? 0) : 1);
+};
+
+const removeGridColumn = (question: Question, columnIndex: number) => {
+    question.columns?.splice(columnIndex, 1);
+    question.columnScores?.splice(columnIndex, 1);
+    markChanged('Kolom dihapus');
+};
+
 const addOption = (question: Question, label = `Opsi ${question.options.length + 1}`) => {
     question.options.push(label);
     markChanged('Pilihan ditambahkan');
@@ -1146,6 +1201,7 @@ const handleOptionEnter = (event: KeyboardEvent, question: Question) => {
 const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
     question.optionGoTo?.splice(optionIndex, 1);
+    question.optionScores?.splice(optionIndex, 1);
     if (question.options.length === 0 && !noOptionQuestionTypes.includes(question.type)) {
         question.options.push('Opsi 1');
     }
@@ -1255,9 +1311,17 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
     question.type = type;
     openTypeMenuQuestionId.value = null;
 
+    if (!optionQuestionTypes.includes(type)) {
+        delete question.optionScores;
+    }
+    if (type !== 'Multiple-choice grid') {
+        delete question.columnScores;
+    }
+
     if (optionQuestionTypes.includes(type)) {
         if (question.options.length === 0 || gridQuestionTypes.includes(previousType)) {
             question.options = ['Opsi 1'];
+            delete question.optionScores;
         }
         normalizeCorrectAnswer(question);
         normalizeChoiceAnswer(question);
@@ -1598,6 +1662,29 @@ const downloadImportTemplate = () => {
     link.download = 'template_import_soal_falcon_forms.docx';
     link.click();
     markChanged('Templat DOCX diunduh');
+};
+
+/** Ekspor Soal ke Word: the exam as saved, in the import template's format. */
+const isExportingDocx = ref(false);
+const exportDocx = async () => {
+    showMoreMenu.value = false;
+    if (!props.quizForm || isExportingDocx.value) {
+        return;
+    }
+    isExportingDocx.value = true;
+    statusMessage.value = 'Menyiapkan berkas Word...';
+    try {
+        // The file is made from the saved exam: flush a pending autosave first.
+        if (hasUnsavedChanges.value || isSaving.value) {
+            await new Promise<void>((resolve) => saveDraft(false, resolve));
+        }
+        await downloadFile(route('forms.docx-export', props.quizForm.id), { fallbackName: 'soal.docx' });
+        statusMessage.value = 'Soal diekspor ke Word (.docx)';
+    } catch (error) {
+        statusMessage.value = (error as Error).message;
+    } finally {
+        isExportingDocx.value = false;
+    }
 };
 
 const handleImportDocxFile = async (event: Event) => {
@@ -2202,6 +2289,16 @@ watch(
                                 Buka pratinjau
                             </button>
                             <button
+                                v-if="hasDocxExport"
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50 disabled:opacity-60"
+                                :disabled="isExportingDocx"
+                                @click="exportDocx"
+                            >
+                                <FileDown class="h-4 w-4 text-indigo-600" />
+                                {{ isExportingDocx ? 'Menyiapkan berkas...' : 'Ekspor ke Word' }}
+                            </button>
+                            <button
                                 type="button"
                                 class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left hover:bg-slate-50 lg:hidden"
                                 @click="
@@ -2363,14 +2460,32 @@ watch(
                                 @change="handleTitleBlur"
                                 @keydown.enter.prevent="handleTitleBlur"
                             />
-                            <RichTextInput
-                                v-model="form.description"
-                                :dir="isPredominantlyArabic(form.description) ? 'rtl' : 'auto'"
-                                class="af-description w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 transition focus:border-indigo-500 sm:text-lg"
-                                :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
-                                placeholder="Deskripsi ujian"
-                                @update:model-value="markChanged('Deskripsi diperbarui')"
-                            />
+                            <!-- Up to 2000 characters: a long one folds, and unfolds again to be written in -->
+                            <CollapsibleContent expand-on-focus :collapsed-height="140" data-testid="form-description">
+                                <RichTextInput
+                                    v-model="form.description"
+                                    :dir="isPredominantlyArabic(form.description) ? 'rtl' : 'auto'"
+                                    class="af-description w-full border-0 border-b border-transparent bg-transparent p-0 text-base text-slate-500 transition focus:border-indigo-500 sm:text-lg"
+                                    :style="{ fontFamily: form.settings.answerFont ?? 'inherit' }"
+                                    placeholder="Deskripsi ujian"
+                                    label="Deskripsi ujian"
+                                    :max-length="DESCRIPTION_MAX_CHARACTERS"
+                                    numbering
+                                    @update:model-value="markChanged('Deskripsi diperbarui')"
+                                />
+                                <template #footer>
+                                    <span
+                                        :class="[
+                                            'text-xs tabular-nums',
+                                            descriptionLength >= DESCRIPTION_MAX_CHARACTERS ? 'font-semibold text-rose-600' : 'text-slate-400',
+                                        ]"
+                                        aria-live="polite"
+                                        data-testid="description-counter"
+                                    >
+                                        {{ descriptionLength }}/{{ DESCRIPTION_MAX_CHARACTERS }} karakter
+                                    </span>
+                                </template>
+                            </CollapsibleContent>
                         </div>
                     </section>
 
@@ -3200,10 +3315,29 @@ watch(
                                                             class="min-w-0 flex-1 border-b border-slate-200 bg-transparent py-0.5 text-xs focus:border-indigo-500"
                                                             @update:model-value="markChanged('Label kolom diperbarui')"
                                                         />
+                                                        <label
+                                                            v-if="canScoreChoices(question)"
+                                                            class="flex shrink-0 items-center gap-1 text-[11px] font-bold text-slate-500"
+                                                            data-testid="column-score"
+                                                        >
+                                                            Skor
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                inputmode="numeric"
+                                                                :value="choiceScore(question, cIndex) ?? ''"
+                                                                :aria-label="`Skor kolom ${cIndex + 1}`"
+                                                                placeholder="0"
+                                                                class="h-7 w-14 rounded-md border border-slate-300 px-1.5 text-center text-xs font-bold text-slate-800 focus:border-indigo-500 focus:ring-indigo-500"
+                                                                @click.stop
+                                                                @input="setChoiceScore(question, cIndex, ($event.target as HTMLInputElement).value)"
+                                                            />
+                                                        </label>
                                                         <button
                                                             type="button"
                                                             class="px-1 text-xs font-bold text-slate-400 hover:text-red-500"
-                                                            @click="question.columns.splice(cIndex, 1)"
+                                                            @click="removeGridColumn(question, cIndex)"
                                                         >
                                                             x
                                                         </button>
@@ -3217,9 +3351,17 @@ watch(
                                                     </button>
                                                 </div>
                                             </div>
+                                            <div
+                                                v-if="canScoreChoices(question)"
+                                                class="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-indigo-900"
+                                                data-testid="choice-score-summary"
+                                            >
+                                                <span class="font-bold">Angket berskor:</span> tiap baris mendapat skor kolom yang dipilih; skor tertinggi
+                                                {{ maxChoiceScore(question) }}.
+                                            </div>
                                             <!-- Preview of correct answers in Grid -->
                                             <div
-                                                v-if="form.settings.isQuiz && question.answer && Object.keys(question.answer).length"
+                                                v-else-if="form.settings.isQuiz && question.answer && Object.keys(question.answer).length"
                                                 class="space-y-1 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-800"
                                             >
                                                 <span class="block font-bold">Kunci jawaban benar:</span>
@@ -3254,13 +3396,13 @@ watch(
                                                     :class="[
                                                         'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border-2 transition',
                                                         question.type === 'Checkboxes' ? 'rounded' : 'rounded-full',
-                                                        form.settings.isQuiz && isCorrectAnswer(question, optionIndex)
+                                                        form.settings.isQuiz && !canScoreChoices(question) && isCorrectAnswer(question, optionIndex)
                                                             ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                                                             : 'border-slate-300 bg-white',
                                                     ]"
                                                 >
                                                     <Check
-                                                        v-if="form.settings.isQuiz && isCorrectAnswer(question, optionIndex)"
+                                                        v-if="form.settings.isQuiz && !canScoreChoices(question) && isCorrectAnswer(question, optionIndex)"
                                                         class="h-3.5 w-3.5 text-white"
                                                     />
                                                 </span>
@@ -3304,6 +3446,25 @@ watch(
                                                         />
                                                     </div>
                                                 </div>
+                                                <label
+                                                    v-if="canScoreChoices(question)"
+                                                    class="flex shrink-0 items-center gap-1.5 text-xs font-bold text-slate-500"
+                                                    data-testid="option-score"
+                                                >
+                                                    Skor
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        inputmode="numeric"
+                                                        :value="choiceScore(question, optionIndex) ?? ''"
+                                                        :aria-label="`Skor pilihan ${optionIndex + 1}`"
+                                                        placeholder="0"
+                                                        class="h-9 w-16 rounded-lg border border-slate-300 px-2 text-center text-sm font-bold text-slate-800 focus:border-indigo-500 focus:ring-indigo-500"
+                                                        @click.stop
+                                                        @input="setChoiceScore(question, optionIndex, ($event.target as HTMLInputElement).value)"
+                                                    />
+                                                </label>
                                                 <button
                                                     type="button"
                                                     class="mt-0.5 rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
@@ -3313,7 +3474,15 @@ watch(
                                                 </button>
                                             </div>
                                             <div
-                                                v-if="form.settings.isQuiz && optionQuestionTypes.includes(question.type)"
+                                                v-if="canScoreChoices(question)"
+                                                class="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900"
+                                                data-testid="choice-score-summary"
+                                            >
+                                                <span class="font-bold">Angket berskor:</span> skor tertinggi {{ maxChoiceScore(question) }}. Tidak ada
+                                                jawaban benar atau salah; pilihan tanpa skor bernilai 0.
+                                            </div>
+                                            <div
+                                                v-else-if="form.settings.isQuiz && optionQuestionTypes.includes(question.type)"
                                                 class="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-800"
                                             >
                                                 <span class="font-bold">Jawaban benar:</span>
@@ -3479,7 +3648,7 @@ watch(
                                             </button>
                                             <span class="hidden h-8 border-l border-slate-200 sm:block"></span>
                                             <button
-                                                v-if="form.settings.isQuiz"
+                                                v-if="form.settings.isQuiz && !canScoreChoices(question)"
                                                 type="button"
                                                 class="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-100"
                                                 @click.stop="editingAnswerKeyQuestionId = question.id"
@@ -3487,7 +3656,7 @@ watch(
                                                 <Key class="h-3.5 w-3.5" />
                                                 Kunci<span class="hidden sm:inline">Jawaban</span>
                                             </button>
-                                            <span v-if="form.settings.isQuiz" class="hidden h-8 border-l border-slate-200 sm:block"></span>
+                                            <span v-if="form.settings.isQuiz && !canScoreChoices(question)" class="hidden h-8 border-l border-slate-200 sm:block"></span>
                                             <span class="flex items-center gap-2">
                                                 <span class="text-sm font-medium">Wajib</span>
                                                 <button
@@ -3719,7 +3888,12 @@ watch(
                         <DeliveryQualityCard v-if="quizForm?.responses?.delivery?.attempts" :delivery="quizForm.responses.delivery" />
 
                         <!-- Rekapitulasi Nilai Siswa: every column sortable, A–Z initials like Moodle -->
-                        <GradebookTable :rows="gradebook" :max-score="maxScore" :export-url="exportResponsesUrl" />
+                        <GradebookTable
+                            :rows="gradebook"
+                            :max-score="maxScore"
+                            :scored-questionnaire="isOptionScoring"
+                            :interview="isInterview"
+                        />
 
                         <ItemAnalysisPanel
                             v-if="itemAnalysis"
@@ -3730,7 +3904,7 @@ watch(
                         />
                         <!-- The analysis is an add-on: a quiet pointer when it is not on for this exam -->
                         <div
-                            v-else-if="responseCount && itemAnalysisAddon"
+                            v-else-if="responseCount && itemAnalysisAddon && !isOptionScoring"
                             class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
                         >
                             <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
@@ -3752,7 +3926,7 @@ watch(
 
                         <MisconceptionPanel v-if="misconceptionMap && responseCount" :map="misconceptionMap" />
                         <div
-                            v-else-if="responseCount && misconceptionAddon && form.settings.isQuiz !== false"
+                            v-else-if="responseCount && misconceptionAddon && form.settings.isQuiz !== false && !isOptionScoring"
                             class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
                         >
                             <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
@@ -3774,7 +3948,7 @@ watch(
 
                         <RemedialPanel v-if="remedialOverview && responseCount" :overview="remedialOverview" />
                         <div
-                            v-else-if="responseCount && remedialAddon"
+                            v-else-if="responseCount && remedialAddon && !isOptionScoring"
                             class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3"
                         >
                             <Puzzle class="h-5 w-5 shrink-0 text-indigo-500" />
@@ -3888,6 +4062,66 @@ watch(
                                         :class="[
                                             'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
                                             form.settings.isQuiz ? 'left-5' : '-left-1',
+                                        ]"
+                                    ></span>
+                                </button>
+                            </div>
+
+                            <!-- Angket berskor: like an interview sheet, each answer has its own score -->
+                            <div
+                                v-if="form.settings.isQuiz"
+                                class="-mt-4 flex items-center justify-between gap-4 pb-8 sm:-mt-8 sm:gap-6 sm:px-11 sm:pb-16"
+                                data-testid="option-scoring-setting"
+                            >
+                                <div>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Angket berskor</h3>
+                                    <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
+                                        Tiap pilihan jawaban diberi skor sendiri (misalnya A = 3, B = 2, C = 1) dan hasilnya dijumlahkan. Tidak ada jawaban
+                                        benar atau salah, cocok untuk angket dan wawancara.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-label="Angket berskor"
+                                    :aria-checked="Boolean(form.settings.optionScoring)"
+                                    :class="['relative h-5 w-11 shrink-0 rounded-full transition', form.settings.optionScoring ? 'bg-indigo-500' : 'bg-slate-300']"
+                                    @click="toggleSetting('optionScoring')"
+                                >
+                                    <span
+                                        :class="[
+                                            'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                            form.settings.optionScoring ? 'left-5' : '-left-1',
+                                        ]"
+                                    ></span>
+                                </button>
+                            </div>
+
+                            <!-- Mode pewawancara: one questionnaire filled for every candidate in turn -->
+                            <div
+                                v-if="isOptionScoring"
+                                class="-mt-4 flex items-center justify-between gap-4 pb-8 sm:-mt-8 sm:gap-6 sm:px-11 sm:pb-16"
+                                data-testid="interview-mode-setting"
+                            >
+                                <div>
+                                    <h3 class="text-base font-normal text-slate-950 sm:text-xl">Mode pewawancara</h3>
+                                    <p class="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-lg">
+                                        Penguji mengisi angket untuk setiap calon secara bergantian. Sebelum mulai, penguji menulis nama calon, nomor pendaftaran dan
+                                        asal sekolah. Satu akun bisa mengisi berkali-kali; setiap isian tercatat atas nama calonnya.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-label="Mode pewawancara"
+                                    :aria-checked="Boolean(form.settings.interviewMode)"
+                                    :class="['relative h-5 w-11 shrink-0 rounded-full transition', form.settings.interviewMode ? 'bg-indigo-500' : 'bg-slate-300']"
+                                    @click="toggleSetting('interviewMode')"
+                                >
+                                    <span
+                                        :class="[
+                                            'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                            form.settings.interviewMode ? 'left-5' : '-left-1',
                                         ]"
                                     ></span>
                                 </button>
@@ -4027,6 +4261,39 @@ watch(
                                                 >
                                             </div>
                                         </label>
+                                    </div>
+
+                                    <!-- Public: on the students' Beranda, or opened by its link only -->
+                                    <div
+                                        v-if="!isCohortRestricted"
+                                        class="mt-5 flex max-w-xl items-center justify-between gap-4 rounded-2xl border border-slate-200 p-4"
+                                        data-testid="listed-for-students-setting"
+                                    >
+                                        <div>
+                                            <p class="text-base font-bold text-slate-900">Tampilkan di Beranda siswa</p>
+                                            <p class="mt-0.5 text-sm text-slate-500">
+                                                {{
+                                                    form.settings.listedForStudents
+                                                        ? 'Siswa melihat formulir ini di daftar ujian Beranda mereka.'
+                                                        : 'Tersembunyi dari Beranda siswa: hanya bisa dibuka lewat tautan, misalnya untuk tes wawancara.'
+                                                }}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-label="Tampilkan di Beranda siswa"
+                                            :aria-checked="Boolean(form.settings.listedForStudents)"
+                                            :class="['relative h-5 w-11 shrink-0 rounded-full transition', form.settings.listedForStudents ? 'bg-indigo-500' : 'bg-slate-300']"
+                                            @click="toggleSetting('listedForStudents')"
+                                        >
+                                            <span
+                                                :class="[
+                                                    'absolute top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-white shadow-md transition',
+                                                    form.settings.listedForStudents ? 'left-5' : '-left-1',
+                                                ]"
+                                            ></span>
+                                        </button>
                                     </div>
 
                                     <!-- Guests' identity when public -->
@@ -4572,7 +4839,9 @@ watch(
                     <img :src="activeDesign.logo" alt="Logo" class="af-logo" />
                 </div>
                 <h3 :class="['text-3xl font-semibold', activeDesign ? 'af-title' : '']"><RichContent :content="form.title" /></h3>
-                <RichContent v-if="form.description" :content="form.description" as="p" class="mt-2 text-slate-500" />
+                <CollapsibleContent v-if="form.description" class="mt-2">
+                    <RichContent :content="form.description" as="p" lists class="text-slate-500" />
+                </CollapsibleContent>
                 <div class="mt-6 space-y-5">
                     <div
                         v-for="question in form.questions"
@@ -4586,10 +4855,10 @@ watch(
                             <RichContent :content="question.title" class="flex-1" />
                             <span v-if="question.required" class="ml-1 text-red-500">*</span>
                             <span
-                                v-if="form.settings.isQuiz && question.points"
+                                v-if="form.settings.isQuiz && (canScoreChoices(question) ? maxChoiceScore(question) : question.points)"
                                 class="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
                             >
-                                {{ question.points }} Poin
+                                {{ canScoreChoices(question) ? `Skor maks. ${maxChoiceScore(question)}` : `${question.points} Poin` }}
                             </span>
                         </p>
                         <RichContent v-if="question.description" :content="question.description" as="p" class="mt-1 text-sm text-slate-500" />

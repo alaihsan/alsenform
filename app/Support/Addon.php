@@ -6,7 +6,7 @@ namespace App\Support;
  * The add-ons a teacher can install, like add-ons in Google Workspace. Installed for one teacher
  * (or by an admin for every teacher), an add-on is then switched on or off per exam; its effects
  * (panels, Excel sheets, actions) only exist while it is on. An add-on that is not per exam
- * (Rekap Kuis, the formula palettes, the RTL button) is simply there while installed.
+ * (Rekap Kuis, the formula palettes, the RTL button, the Word export) is simply there while installed.
  */
 enum Addon: string
 {
@@ -20,6 +20,7 @@ enum Addon: string
     case ScienceFormulas = 'science-formulas';
     case ArabicRtl = 'arabic-rtl';
     case SmartFilter = 'smart-filter';
+    case DocxExport = 'docx-export';
 
     public function label(): string
     {
@@ -34,6 +35,7 @@ enum Addon: string
             self::ScienceFormulas => 'Rumus IPA',
             self::ArabicRtl => 'Teks Arab (RTL)',
             self::SmartFilter => 'Filter Cerdas',
+            self::DocxExport => 'Ekspor Soal ke Word',
         };
     }
 
@@ -50,6 +52,7 @@ enum Addon: string
             self::ScienceFormulas => 'Katalog rumus LaTeX untuk Fisika, Kimia dan Biologi, lengkap dengan keterangan simbol dan satuannya; persamaan reaksi kimia ditulis rapi dengan \\ce{...}.',
             self::ArabicRtl => 'Tombol RTL di bilah alat soal: tulis soal berbahasa Arab dan ayat Al-Qur\'an dari kanan ke kiri.',
             self::SmartFilter => 'Mode Excel untuk hasil ujian: cari, saring, dan urutkan kolom apa saja, termasuk jawaban setiap soal, langsung di aplikasi.',
+            self::DocxExport => 'Unduh soal ujian, atau soal pilihan dari Bank Soal, sebagai berkas Word (.docx) berformat templat Import Soal, lengkap dengan kunci jawaban dan poin.',
         };
     }
 
@@ -66,6 +69,7 @@ enum Addon: string
             self::ScienceFormulas => 'Tombol Rumus IPA (ikon atom) di bilah alat setiap soal membuka katalog rumus Fisika (besaran dan satuan, gerak lurus, gerak parabola dan melingkar, dinamika, usaha dan energi, momentum, elastisitas, rotasi dan kesetimbangan, gravitasi, fluida, suhu dan kalor, termodinamika, getaran dan gelombang, bunyi, optik, listrik statis dan dinamis, medan magnet, induksi dan arus bolak-balik, fisika modern, fisika inti), Kimia (penulisan rumus dan persamaan reaksi, struktur atom, stoikiometri, konsentrasi larutan, sifat koligatif, termokimia, laju reaksi, kesetimbangan, asam basa, penyangga dan hidrolisis, Ksp, redoks dan elektrokimia, kimia organik, kimia unsur dan industri) dan Biologi (fotosintesis dan respirasi, enzim dan pencernaan, genetika dan persilangan Mendel, Hardy-Weinberg, ekologi dan pertumbuhan populasi, fisiologi manusia, sel dan pertumbuhan). Setiap rumus disertai keterangan simbol dan satuannya. Persamaan reaksi memakai \\ce{...} (mhchem), jadi indeks, muatan ion, wujud zat dan panah kesetimbangan tertulis benar. Rumus yang sudah ada di soal tetap tampil untuk guru dan siswa walaupun add-on dilepas.',
             self::ArabicRtl => 'Tombol RTL di bilah alat setiap soal membalik arah kolom pertanyaan menjadi kanan ke kiri selama Anda menyunting, sehingga kalimat Arab, harakat dan tanda waqaf diketik dan disunting dengan urutan yang benar, juga bila soal bercampur huruf Latin. Tekan sekali lagi untuk kembali ke kiri ke kanan. Tanpa add-on ini, kolom yang isinya sebagian besar huruf Arab tetap otomatis menjadi kanan ke kiri, dan teks Arab tetap tampil dengan font Mushaf Madinah untuk guru dan siswa.',
             self::SmartFilter => 'Tombol Filter Cerdas di tab Jawaban membuka hasil ujian dalam satu tabel layar penuh seperti Excel, dengan kolom yang sama dengan berkas Excel: No, nama, NIS, kelas, email, nilai, skor, keterangan tuntas, status, waktu selesai, percobaan, lalu jawaban setiap soal yang diwarnai hijau (benar), merah (salah), atau abu-abu (tidak dinilai otomatis). Cari kata di semua sel, saring setiap kolom (berisi teks, centang nilai tertentu, rentang angka atau tanggal, jawaban benar/salah), urutkan kolom mana pun, sembunyikan kolom yang tidak perlu, dan unduh hasil saringan sebagai CSV. Kolom nomor dan nama tetap terlihat saat tabel digeser; bilah bawah menghitung rata-rata, nilai tertinggi dan terendah dari baris yang tampil. Data baru dimuat saat tabel dibuka dan hanya baris yang terlihat yang digambar, jadi tetap ringan untuk ratusan siswa. Saringan dan urutan diingat di perangkat ini untuk setiap ujian.',
+            self::DocxExport => 'Soal ditulis persis seperti templat Import Soal: nomor dan teks soal, baris Tipe, Poin dan Wajib, pilihan A, B, C, dan seterusnya, tabel untuk Benar/Salah, Menjodohkan dan soal kisi, lalu baris Jawaban berisi kuncinya. Keterangan soal dan pembahasan ikut sebagai baris "Keterangan:" dan "Pembahasan:". Huruf tebal, miring, garis bawah dan warna spidol tetap seperti di editor, rumus LaTeX ($...$) ditulis apa adanya, teks Arab ditulis kanan ke kiri, dan gambar yang diunggah ke server sekolah ikut disisipkan. Karena formatnya sama dengan templat, berkas hasil ekspor dapat diimpor kembali lewat Import Soal → Word (.docx) menjadi soal yang sama, misalnya untuk dipakai di server lain, dibagikan ke guru lain, atau disimpan sebagai cadangan. Bagian, judul, video dan soal Unggah Berkas tidak ada di templat, jadi ditulis sebagai catatan (baris yang diawali //) yang tidak ikut diimpor.',
         };
     }
 
@@ -85,6 +89,7 @@ enum Addon: string
             self::ScienceFormulas => 'atom',
             self::ArabicRtl => 'languages',
             self::SmartFilter => 'list-filter',
+            self::DocxExport => 'file-down',
         };
     }
 
@@ -141,6 +146,10 @@ enum Addon: string
                 'Tab Jawaban: tombol "Buka Filter Cerdas" yang membuka hasil ujian dalam mode Excel layar penuh.',
                 'Cari di semua sel, saringan per kolom, urutan per kolom, sembunyikan kolom, dan unduh hasil saringan (CSV).',
             ],
+            self::DocxExport => [
+                'Editor: menu ⋮ → "Ekspor ke Word" untuk mengunduh semua soal ujian sebagai berkas .docx.',
+                'Bank Soal: tombol "Ekspor Word" untuk soal yang dicentang.',
+            ],
         };
     }
 
@@ -181,6 +190,9 @@ enum Addon: string
             self::SmartFilter => [
                 'Jawaban, nilai, nama, NIS, kelas dan email siswa di ujian Anda, sama dengan isi berkas Excel (tidak dikirim ke mana pun).',
             ],
+            self::DocxExport => [
+                'Soal, kunci jawaban dan gambar soal di ujian dan Bank Soal Anda; berkas Word dibuat di server sekolah dan tidak dikirim ke mana pun. Tidak membaca jawaban siswa.',
+            ],
         };
     }
 
@@ -190,7 +202,7 @@ enum Addon: string
     public function onByDefault(): bool
     {
         return match ($this) {
-            self::ItemAnalysis, self::Remedial, self::Misconception, self::FormDesigner, self::QuizRecap, self::MathFormulas, self::ScienceFormulas, self::ArabicRtl, self::SmartFilter => true,
+            self::ItemAnalysis, self::Remedial, self::Misconception, self::FormDesigner, self::QuizRecap, self::MathFormulas, self::ScienceFormulas, self::ArabicRtl, self::SmartFilter, self::DocxExport => true,
             // Students could not start an exam without a token: switched on per exam by the teacher.
             self::ExamToken => false,
         };
@@ -212,6 +224,7 @@ enum Addon: string
         return match ($this) {
             self::QuizRecap => 'menu Aplikasi di Beranda',
             self::MathFormulas, self::ScienceFormulas, self::ArabicRtl => 'bilah alat setiap soal di editor',
+            self::DocxExport => 'menu ⋮ editor dan Bank Soal',
             default => null,
         };
     }

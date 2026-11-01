@@ -30,6 +30,11 @@ class QuizForm extends Model
      */
     public const DEFAULT_KKM = 75;
 
+    /**
+     * The most characters of text a form description holds, its formatting not counted.
+     */
+    public const DESCRIPTION_MAX_CHARACTERS = 2000;
+
     public const FOLLOW_UP_REMEDIAL = 'remedial';
 
     public const FOLLOW_UP_ENRICHMENT = 'pengayaan';
@@ -265,10 +270,49 @@ class QuizForm extends Model
 
     /**
      * Whether an add-on is on for this exam: installed for its owner and not switched off here.
+     * A scored questionnaire has no right or wrong answers, so the add-ons built on them are off.
      */
     public function usesAddon(Addon $addon): bool
     {
+        if ($this->isScoredQuestionnaire() && in_array($addon, [Addon::ItemAnalysis, Addon::Remedial, Addon::Misconception], true)) {
+            return false;
+        }
+
         return app(Addons::class)->isActiveFor($this, $addon);
+    }
+
+    /**
+     * Whether the quiz is a scored questionnaire (Angket berskor), like an interview: each choice
+     * carries its own score and the result is their sum, with no right or wrong answer.
+     */
+    public function isScoredQuestionnaire(): bool
+    {
+        $settings = is_array($this->settings) ? $this->settings : [];
+
+        return ($settings['isQuiz'] ?? true) !== false && ! empty($settings['optionScoring']);
+    }
+
+    /**
+     * Whether a form open to everyone is listed on the students' Beranda. Switched off, it is
+     * opened by its link only (an interview the students need not see); forms for chosen cohorts
+     * or students are listed for them as before.
+     */
+    public function isListedForStudents(): bool
+    {
+        $settings = is_array($this->settings) ? $this->settings : [];
+
+        return ($settings['listedForStudents'] ?? true) !== false;
+    }
+
+    /**
+     * Mode pewawancara: an interviewer fills the scored questionnaire for one candidate after
+     * another, naming each candidate, so every response is a candidate of its own.
+     */
+    public function isInterview(): bool
+    {
+        $settings = is_array($this->settings) ? $this->settings : [];
+
+        return $this->isScoredQuestionnaire() && ! empty($settings['interviewMode']);
     }
 
     /**
@@ -304,6 +348,11 @@ class QuizForm extends Model
      */
     public function maxAttempts(): ?int
     {
+        // An interviewer fills the questionnaire once for every candidate.
+        if ($this->isInterview()) {
+            return null;
+        }
+
         $settings = is_array($this->settings) ? $this->settings : [];
         $maxAttempts = $settings['maxAttempts'] ?? null;
 
@@ -355,9 +404,13 @@ class QuizForm extends Model
      */
     public function submittedStudentCount(): int
     {
-        return $this->responses()->whereNotNull('user_id')->distinct()->count('user_id')
-            + $this->responses()->whereNull('user_id')->whereNotNull('respondent_identifier')->distinct()->count('respondent_identifier')
-            + $this->responses()->whereNull('user_id')->whereNull('respondent_identifier')->count();
+        // Every candidate an interviewer filled the questionnaire for counts once (see QuizResponse::studentKey).
+        $own = fn () => $this->responses()->where('filled_for_respondent', false);
+
+        return $this->responses()->where('filled_for_respondent', true)->count()
+            + $own()->whereNotNull('user_id')->distinct()->count('user_id')
+            + $own()->whereNull('user_id')->whereNotNull('respondent_identifier')->distinct()->count('respondent_identifier')
+            + $own()->whereNull('user_id')->whereNull('respondent_identifier')->count();
     }
 
     /**

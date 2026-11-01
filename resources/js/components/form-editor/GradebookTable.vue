@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AnswerHistoryModal from '@/components/form-editor/AnswerHistoryModal.vue';
 import type { QuizFormPayload } from '@/types/quiz';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Download, History, ListFilter, ShieldAlert, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, ChevronsUpDown, History, ListFilter, ShieldAlert, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 type GradebookRow = NonNullable<NonNullable<QuizFormPayload['responses']>['gradebook']>[number];
@@ -11,7 +11,10 @@ type SortDirection = 'asc' | 'desc';
 const props = defineProps<{
     rows: GradebookRow[];
     maxScore: number;
-    exportUrl: string;
+    /** Angket berskor: a total score, with no pass or fail. */
+    scoredQuestionnaire?: boolean;
+    /** Mode pewawancara: candidates, with their registration number and school. */
+    interview?: boolean;
 }>();
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -157,17 +160,27 @@ const resetFilters = () => {
 };
 
 const gradeTone = (percentage: number) =>
-    percentage >= 75 ? 'bg-emerald-100 text-emerald-800' : percentage >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800';
+    props.scoredQuestionnaire
+        ? 'bg-indigo-50 text-indigo-800'
+        : percentage >= 75
+          ? 'bg-emerald-100 text-emerald-800'
+          : percentage >= 60
+            ? 'bg-amber-100 text-amber-800'
+            : 'bg-rose-100 text-rose-800';
 
-const COLUMNS: { key: SortKey; label: string; align?: 'center'; title?: string }[] = [
-    { key: 'nis', label: 'NIS' },
-    { key: 'kelas', label: 'Kelas / Kelompok' },
-    { key: 'score', label: 'Poin Benar', align: 'center' },
-    { key: 'percentage', label: 'Nilai (0-100)', align: 'center', title: 'Poin benar ÷ total poin soal berkunci × 100' },
+const COLUMNS = computed<{ key: SortKey; label: string; align?: 'center'; title?: string }[]>(() => [
+    { key: 'nis', label: props.interview ? 'No. Pendaftaran' : 'NIS' },
+    { key: 'kelas', label: props.interview ? 'Asal Sekolah' : 'Kelas / Kelompok' },
+    props.scoredQuestionnaire
+        ? { key: 'score', label: 'Total Skor', align: 'center', title: 'Jumlah skor jawaban yang dipilih ÷ skor tertinggi yang bisa didapat' }
+        : { key: 'score', label: 'Poin Benar', align: 'center' },
+    props.scoredQuestionnaire
+        ? { key: 'percentage', label: 'Persentase', align: 'center', title: 'Total skor ÷ skor tertinggi × 100' }
+        : { key: 'percentage', label: 'Nilai (0-100)', align: 'center', title: 'Poin benar ÷ total poin soal berkunci × 100' },
     { key: 'status', label: 'Status' },
     { key: 'submittedAt', label: 'Waktu Selesai' },
-];
-const column = (key: SortKey) => COLUMNS.find((entry) => entry.key === key)!;
+]);
+const column = (key: SortKey) => COLUMNS.value.find((entry) => entry.key === key)!;
 // Sortable columns after the name column.
 const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status', 'submittedAt'];
 </script>
@@ -183,7 +196,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                 <input
                     v-model="search"
                     type="text"
-                    placeholder="Cari siswa / NIS / kelas..."
+                    :placeholder="interview ? 'Cari calon / no. pendaftaran / sekolah...' : 'Cari siswa / NIS / kelas...'"
                     aria-label="Cari siswa"
                     class="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none sm:w-auto sm:py-1.5"
                 />
@@ -207,14 +220,6 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         >{{ activeInitialsCount }}</span
                     >
                 </button>
-                <a
-                    v-if="rows.length"
-                    :href="exportUrl"
-                    class="hidden shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 sm:inline-flex"
-                >
-                    <Download class="h-3.5 w-3.5" />
-                    Unduh Excel
-                </a>
             </div>
         </div>
 
@@ -319,10 +324,13 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                 </div>
                 <div class="shrink-0 text-right">
                     <span :class="['inline-block rounded-full px-2.5 py-0.5 text-xs font-bold', gradeTone(row.percentage)]">{{
-                        row.percentage
+                        scoredQuestionnaire ? `${row.percentage}%` : row.percentage
                     }}</span>
                     <p v-if="row.ungraded" class="text-[10px] font-bold text-amber-700">sementara · {{ row.ungraded }} belum dinilai</p>
-                    <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">{{ row.score }} / {{ row.maxScore ?? maxScore }} poin</p>
+                    <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">
+                        {{ scoredQuestionnaire ? 'Skor' : '' }} {{ row.score }} / {{ row.maxScore ?? maxScore }}
+                        {{ scoredQuestionnaire ? '' : 'poin' }}
+                    </p>
                     <p
                         :class="['text-[10px] font-extrabold uppercase', row.is_timeout ? 'text-rose-600' : 'text-emerald-600']"
                         :title="row.is_auto_submitted ? autoSubmittedHint : undefined"
@@ -357,7 +365,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         <th class="px-4 py-3">No</th>
                         <th class="px-4 py-3" :aria-sort="ariaSort('nis')">
                             <button type="button" class="inline-flex items-center gap-1 uppercase hover:text-indigo-700" @click="sortBy('nis')">
-                                NIS
+                                {{ column('nis').label }}
                                 <ArrowUp v-if="sortKey === 'nis' && sortDirection === 'asc'" class="h-3 w-3 text-indigo-600" />
                                 <ArrowDown v-else-if="sortKey === 'nis'" class="h-3 w-3 text-indigo-600" />
                                 <ChevronsUpDown v-else class="h-3 w-3 opacity-40" />
@@ -416,6 +424,9 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         <td class="px-4 py-3 font-bold text-slate-900">
                             {{ row.name }}
                             <span v-if="row.isGuest" class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">Tamu</span>
+                            <span v-if="row.interviewer" class="mt-0.5 block text-[11px] font-medium text-slate-500"
+                                >diisi oleh {{ row.interviewer }}</span
+                            >
                             <span
                                 v-if="row.duplicateName"
                                 class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
@@ -435,7 +446,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ row.score }} / {{ row.maxScore ?? maxScore }}</td>
                         <td class="px-4 py-3 text-center">
                             <span :class="['inline-block rounded-full px-2.5 py-0.5 font-bold', gradeTone(row.percentage)]">{{
-                                row.percentage
+                                scoredQuestionnaire ? `${row.percentage}%` : row.percentage
                             }}</span>
                             <span
                                 v-if="row.ungraded"

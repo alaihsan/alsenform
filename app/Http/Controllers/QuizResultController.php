@@ -36,6 +36,8 @@ class QuizResultController extends Controller
         $responses = $this->responsesOf($request, $quizForm);
         $questions = QuizItems::questions($quizForm->questions);
         $kkm = $quizForm->kkm();
+        $isQuestionnaire = $quizForm->isScoredQuestionnaire();
+        $items = is_array($quizForm->questions) ? $quizForm->questions : [];
 
         return Inertia::render('QuizResult', [
             'quiz' => [
@@ -47,8 +49,21 @@ class QuizResultController extends Controller
             'isShown' => $isShown,
             'isFull' => $isFull,
             'kkm' => $kkm,
+            // Angket berskor: a total score and a subtotal per section, with no pass or fail.
+            'isScoredQuestionnaire' => $isQuestionnaire,
             'attempts' => $isShown
-                ? $responses->values()->map(fn (QuizResponse $response, int $index): array => $this->attempt($response, $index + 1, $questions, $kkm, $isFull))->all()
+                ? $responses->values()->map(fn (QuizResponse $response, int $index): array => [
+                    ...$this->attempt($response, $index + 1, $questions, $kkm, $isFull),
+                    'sections' => $isQuestionnaire
+                        ? $this->scoring->sectionScores($items, is_array($response->answers) ? $response->answers : [], $response->question_ids)
+                        : [],
+                    // Mode pewawancara: the candidate the interviewer filled it for.
+                    'candidate' => $response->filled_for_respondent ? [
+                        'name' => $response->respondentDisplayName(),
+                        'number' => $response->respondent_number,
+                        'school' => $response->respondent_school,
+                    ] : null,
+                ])->all()
                 : [],
             'hasAttempts' => $responses->isNotEmpty(),
         ]);
@@ -130,7 +145,7 @@ class QuizResultController extends Controller
                 'answer' => $this->report->answerText($question, $answer),
                 'correctAnswer' => $this->scoring->isAutoScored($question) ? $this->report->answerKeyText($question) : null,
                 'isCorrect' => $isCorrect,
-                'earned' => $graded ? (float) $manual[$id] : ($this->scoring->isAutoScored($question) ? ($isCorrect ? $points : 0) : null),
+                'earned' => $graded ? (float) $manual[$id] : ($this->scoring->isAutoScored($question) || $this->scoring->isOptionScored($question) ? $this->scoring->earned($question, $answer) : null),
                 'points' => $points,
                 // Essays and files not graded yet.
                 'waiting' => ! $graded && $this->scoring->needsGrading($question),

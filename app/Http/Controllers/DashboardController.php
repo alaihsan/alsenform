@@ -28,8 +28,10 @@ class DashboardController extends Controller
                 ->whereNotNull('published_at')
                 ->whereNull('deleted_at')
                 ->where(function ($query) use ($userCohortIds, $user): void {
-                    // Open to everyone, or to the student's cohorts, or chosen for them (remedial / enrichment).
-                    $query->where(fn ($open) => $open->whereDoesntHave('cohorts')->whereDoesntHave('participants'));
+                    // Open to everyone (unless opened by its link only, see QuizForm::isListedForStudents),
+                    // or to the student's cohorts, or chosen for them (remedial / enrichment).
+                    $query->where(fn ($open) => $open->whereDoesntHave('cohorts')->whereDoesntHave('participants')
+                        ->where(fn ($listed) => $listed->whereNull('settings->listedForStudents')->orWhere('settings->listedForStudents', true)));
                     if (! empty($userCohortIds)) {
                         $query->orWhereHas('cohorts', function ($q) use ($userCohortIds): void {
                             $q->whereIn('cohorts.id', $userCohortIds);
@@ -111,6 +113,8 @@ class DashboardController extends Controller
         $recentForms = QuizForm::query()
             ->withTrashed()
             ->with(['quizFolder', 'user:id,name,email'])
+            // Whether a published form is open to everyone, for its "Hanya lewat tautan" label.
+            ->withExists(['cohorts', 'participants'])
             ->where(function ($query) use ($user): void {
                 $query->whereBelongsTo($user)
                     ->orWhereHas('collaborators', fn ($q) => $q->where('users.id', $user->id));

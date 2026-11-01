@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Support\Addon;
 use App\Support\DisplayTime;
+use App\Support\PageFailure;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
@@ -18,9 +20,9 @@ use Illuminate\Support\Str;
  */
 class QuizResultsReport
 {
-    protected const SCORE_COLUMNS = 12;
+    protected const SCORE_COLUMNS = 16;
 
-    public function __construct(protected QuizScoring $scoring) {}
+    public function __construct(protected QuizScoring $scoring, protected ExamDelivery $delivery) {}
 
     public function filename(QuizForm $quizForm): string
     {
@@ -46,6 +48,11 @@ class QuizResultsReport
             ->addSheet('Rekap Nilai', ...$this->scoreSheet($quizForm, $students, $maxScore, $kkm))
             ->addSheet('Jawaban Siswa', ...$this->answerSheet($quizForm, $questions, $students));
 
+        // Angket berskor: the subtotal of every section, like every number of an interview sheet.
+        if ($quizForm->isScoredQuestionnaire()) {
+            $workbook->addSheet('Skor per Bagian', ...$this->sectionSheet($quizForm, $students));
+        }
+
         // Sheets of the add-ons that are on for this exam.
         if ($quizForm->usesAddon(Addon::ItemAnalysis)) {
             $workbook->addSheet('Analisis Butir Soal', ...$this->analysisSheet($quizForm));
@@ -56,6 +63,9 @@ class QuizResultsReport
         if ($quizForm->usesAddon(Addon::Misconception)) {
             $workbook->addSheet('Peta Miskonsepsi', ...$this->misconceptionSheet($quizForm));
         }
+
+        // Whether the answers got to the server, and every error the students met, as on the page.
+        $workbook->addSheet('Pengiriman & Galat', ...$this->deliverySheet($quizForm));
 
         $workbook->save($path, 'Hasil Jawaban - '.$this->plainText((string) $quizForm->title));
     }
@@ -69,6 +79,8 @@ class QuizResultsReport
         $lastColumn = XlsxWriter::columnLetter(self::SCORE_COLUMNS);
         $passed = $students->filter(fn (array $student) => $student['grade'] >= $kkm)->count();
         $average = $students->isEmpty() ? 0 : round($students->avg('grade'), 1);
+        // A scored questionnaire has a total score, with no pass or fail.
+        $isQuestionnaire = $quizForm->isScoredQuestionnaire();
 
         $rows = [
             [XlsxWriter::cell('Rekap Nilai: '.$this->plainText((string) $quizForm->title), 'title')],
@@ -78,13 +90,20 @@ class QuizResultsReport
                 $students->contains(fn (array $student): bool => $student['questionIds'] !== null)
                     ? 'Soal diacak per siswa, skor maksimal mengikuti soal yang didapat'
                     : 'Skor maksimal '.$maxScore,
-                'Rata-rata nilai '.$this->decimal($average),
-                'KKM '.$this->decimal($kkm),
-                "Tuntas {$passed} dari {$students->count()}",
+                ...($isQuestionnaire ? [
+                    'Angket berskor: skor tiap jawaban dijumlahkan',
+                    'Rata-rata skor '.$this->decimal($students->isEmpty() ? 0 : round($students->avg('score'), 1)),
+                ] : [
+                    'Rata-rata nilai '.$this->decimal($average),
+                    'KKM '.$this->decimal($kkm),
+                    "Tuntas {$passed} dari {$students->count()}",
+                ]),
             ]), 'subtitle')],
             null,
             array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), [
-                'No', 'NIS', 'Nama Lengkap', 'Kelas', 'Email', 'Skor', 'Skor Maksimal', 'Nilai (0-100)', 'Keterangan', 'Status', 'Waktu Selesai', 'Percobaan',
+                'No', $this->identityLabels($quizForm)[0], 'Nama Lengkap', $this->identityLabels($quizForm)[1], 'Email',
+                $isQuestionnaire ? 'Total Skor' : 'Skor', 'Skor Maksimal', $isQuestionnaire ? 'Persentase' : 'Nilai (0-100)',
+                'Keterangan', 'Status', 'Waktu Selesai', 'Percobaan', 'Waktu Mulai', 'Lama (menit)', 'Pindah Tab', 'Tanda Terima',
             ]),
         ];
 
@@ -99,19 +118,124 @@ class QuizResultsReport
                 XlsxWriter::cell($student['score'], floor($student['score']) === (float) $student['score'] ? 'integer' : 'decimal'),
                 XlsxWriter::cell($student['maxScore'], 'integer'),
                 XlsxWriter::cell($student['grade'], 'decimal'),
-                XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
+                $isQuestionnaire ? XlsxWriter::cell('-', 'textCenter') : XlsxWriter::cell($isPassed ? 'Tuntas' : 'Belum Tuntas', $isPassed ? 'pass' : 'fail'),
                 XlsxWriter::cell($this->statusText($student), 'textCenter'),
                 XlsxWriter::cell($student['submittedAt'], 'datetime'),
                 XlsxWriter::cell("{$student['attempt']} dari {$student['attempts']}", 'textCenter'),
+                $student['startedAt'] !== null ? XlsxWriter::cell($student['startedAt'], 'datetime') : XlsxWriter::cell('-', 'textCenter'),
+                $student['durationMinutes'] !== null ? XlsxWriter::cell($student['durationMinutes'], 'integer') : XlsxWriter::cell('-', 'textCenter'),
+                $student['tabSwitches'] !== null ? XlsxWriter::cell($student['tabSwitches'], 'integer') : XlsxWriter::cell('-', 'textCenter'),
+                XlsxWriter::cell($student['receipt'] ?? '-', 'textCenter'),
             ];
         }
 
         $lastRow = max(4, count($rows));
 
         return [$rows, [
-            'columns' => [5, 14, 30, 12, 28, 8, 10, 13, 14, 13, 17, 11],
+            'columns' => [5, 14, 30, 12, 28, 8, 10, 13, 14, 13, 17, 11, 17, 10, 10, 13],
             'freeze' => 'A5',
             'autoFilter' => "A4:{$lastColumn}{$lastRow}",
+            'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
+            'rowHeights' => [1 => 28, 2 => 20],
+            'repeatRows' => [4, 4],
+        ]];
+    }
+
+    /**
+     * Pengiriman Jawaban: the three figures of the results page, then every error the students met
+     * (when, who, on what device and why), newest first.
+     *
+     * @return array{0: list<list<mixed>|null>, 1: array<string, mixed>}
+     */
+    protected function deliverySheet(QuizForm $quizForm): array
+    {
+        $figures = $this->delivery->of($quizForm);
+        $percent = fn (?float $value): array => $value === null ? XlsxWriter::cell('-', 'textCenter') : XlsxWriter::cell($value / 100, 'summaryPercent');
+        $headers = ['No', 'Waktu', 'Jenis', 'Nama', 'Kelas / Kelompok', 'Perangkat', 'Penyebab', 'Keterangan Teknis'];
+        $lastColumn = XlsxWriter::columnLetter(count($headers));
+
+        $rows = [
+            [XlsxWriter::cell('Pengiriman & Galat: '.$this->plainText((string) $quizForm->title), 'title')],
+            [XlsxWriter::cell("Seberapa lancar jawaban {$figures['attempts']} pengerjaan sampai ke server, dan galat yang dialami siswa (bukan saat guru menyunting ujian)", 'subtitle')],
+            null,
+            [XlsxWriter::cell('Tersimpan di server ≤ '.ExamDelivery::SAVED_WITHIN_SECONDS.' detik', 'summaryLabel'), $percent($figures['savedInTime']), XlsxWriter::cell("dari {$figures['savedInTimeOf']} siswa, terlama ".($figures['slowestSaveSeconds'] ?? 0).' detik', 'text')],
+            [XlsxWriter::cell('Terkirim pada percobaan pertama', 'summaryLabel'), $percent($figures['firstTry']), XlsxWriter::cell("dari {$figures['firstTryOf']} pengiriman, {$figures['autoSubmitted']} dikirim otomatis oleh server", 'text')],
+            [XlsxWriter::cell('Galat per 100 siswa', 'summaryLabel'), $figures['errorsPer100'] === null ? XlsxWriter::cell('-', 'textCenter') : XlsxWriter::cell($figures['errorsPer100'], 'decimal'), XlsxWriter::cell("{$figures['errors']} halaman gagal dimuat atau galat server", 'text')],
+            null,
+            array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $headers),
+        ];
+        $headerRow = count($rows);
+
+        $timezone = DisplayTime::timezone();
+        $this->delivery->errors($quizForm)->with('user:id,name,kelas')->latest()->limit(1000)->get()
+            ->each(function (ActivityLog $log, int $index) use (&$rows, $timezone): void {
+                $rows[] = [
+                    XlsxWriter::cell($index + 1, 'integer'),
+                    XlsxWriter::cell($log->created_at?->copy()->setTimezone($timezone), 'datetime'),
+                    XlsxWriter::cell(ActivityLog::EVENT_LABELS[$log->event] ?? $log->event, 'textCenter'),
+                    XlsxWriter::cell($log->user?->name ?? ($log->respondent_name ?: 'Peserta tamu'), 'text'),
+                    XlsxWriter::cell($log->user?->kelas ?? $log->respondent_class ?? '-', 'textCenter'),
+                    XlsxWriter::cell(implode(' · ', array_filter([$log->device, $log->os, $log->browser])) ?: '-', 'text'),
+                    XlsxWriter::cell($log->event === ActivityLog::PAGE_FAILED
+                        ? (PageFailure::tryFrom((string) ($log->meta['code'] ?? ''))?->title() ?? 'Halaman gagal dimuat').' ('.($log->meta['code'] ?? '?').')'
+                        : 'Galat server '.($log->meta['reference'] ?? '').' (HTTP '.($log->meta['status'] ?? 500).')', 'text'),
+                    XlsxWriter::cell(implode(' · ', array_filter([$log->meta['path'] ?? null, $log->meta['message'] ?? null, $log->meta['asset'] ?? null])) ?: '-', 'text'),
+                ];
+            });
+
+        if (count($rows) === $headerRow) {
+            $rows[] = [XlsxWriter::cell('Tidak ada galat yang dialami siswa.', 'text')];
+        }
+
+        return [$rows, [
+            'columns' => [34, 17, 20, 26, 16, 30, 34, 60],
+            'freeze' => 'A'.($headerRow + 1),
+            'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
+            'rowHeights' => [1 => 28, 2 => 20],
+            'repeatRows' => [$headerRow, $headerRow],
+        ]];
+    }
+
+    /**
+     * Angket berskor: every student's score in each section, and the total.
+     *
+     * @param  Collection<int, array<string, mixed>>  $students
+     * @return array{0: list<list<mixed>|null>, 1: array<string, mixed>}
+     */
+    protected function sectionSheet(QuizForm $quizForm, Collection $students): array
+    {
+        $items = is_array($quizForm->questions) ? $quizForm->questions : [];
+        $sections = $this->scoring->sectionScores($items, []);
+        $fixedColumns = ['No', $this->identityLabels($quizForm)[0], 'Nama Lengkap', $this->identityLabels($quizForm)[1]];
+        $lastColumn = XlsxWriter::columnLetter(count($fixedColumns) + count($sections) + 1);
+
+        $rows = [
+            [XlsxWriter::cell('Skor per Bagian: '.$this->plainText((string) $quizForm->title), 'title')],
+            [XlsxWriter::cell('Jumlah skor jawaban yang dipilih di setiap bagian, dan totalnya', 'subtitle')],
+            null,
+            [
+                ...array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $fixedColumns),
+                ...array_map(fn (array $section) => XlsxWriter::cell($this->plainText($section['title'])." (maks. {$section['max']})", 'header'), $sections),
+                XlsxWriter::cell('Total Skor (maks. '.array_sum(array_column($sections, 'max')).')', 'header'),
+            ],
+        ];
+
+        foreach ($students->values() as $index => $student) {
+            $scores = array_column($this->scoring->sectionScores($items, $student['answers'], $student['questionIds']), 'score', 'index');
+            $rows[] = [
+                XlsxWriter::cell($index + 1, 'integer'),
+                XlsxWriter::cell($student['nis'], 'textCenter'),
+                XlsxWriter::cell($student['attempts'] > 1 ? "{$student['name']} (percobaan {$student['attempt']})" : $student['name'], 'text'),
+                XlsxWriter::cell($student['kelas'], 'textCenter'),
+                ...array_map(fn (array $section) => isset($scores[$section['index']]) ? XlsxWriter::cell($scores[$section['index']], 'integer') : XlsxWriter::cell('-', 'textCenter'), $sections),
+                XlsxWriter::cell($student['score'], floor($student['score']) === (float) $student['score'] ? 'integer' : 'decimal'),
+            ];
+        }
+
+        return [$rows, [
+            'columns' => [5, 14, 30, 12, ...array_fill(0, count($sections), 18), 16],
+            'freeze' => 'E5',
+            'autoFilter' => "A4:{$lastColumn}".max(4, count($rows)),
             'merge' => ["A1:{$lastColumn}1", "A2:{$lastColumn}2"],
             'rowHeights' => [1 => 28, 2 => 20],
             'repeatRows' => [4, 4],
@@ -125,7 +249,7 @@ class QuizResultsReport
      */
     protected function answerSheet(QuizForm $quizForm, array $questions, Collection $students): array
     {
-        $fixedColumns = ['No', 'NIS', 'Nama Lengkap', 'Kelas', 'Nilai'];
+        $fixedColumns = ['No', $this->identityLabels($quizForm)[0], 'Nama Lengkap', $this->identityLabels($quizForm)[1], 'Nilai'];
         $lastColumn = XlsxWriter::columnLetter(count($fixedColumns) + max(1, count($questions)));
 
         $header = array_map(fn (string $title) => XlsxWriter::cell($title, 'header'), $fixedColumns);
@@ -135,7 +259,9 @@ class QuizResultsReport
 
         $rows = [
             [XlsxWriter::cell('Jawaban Siswa: '.$this->plainText((string) $quizForm->title), 'title')],
-            [XlsxWriter::cell('Hijau = benar   •   Merah = salah atau tidak dijawab   •   Abu-abu = tidak dinilai otomatis (esai / tanpa kunci jawaban)', 'subtitle')],
+            [XlsxWriter::cell($quizForm->isScoredQuestionnaire()
+                ? 'Angket berskor: setiap jawaban tertulis bersama skornya, tanpa benar atau salah'
+                : 'Hijau = benar   •   Merah = salah atau tidak dijawab   •   Abu-abu = tidak dinilai otomatis (esai / tanpa kunci jawaban)', 'subtitle')],
             null,
             $header,
         ];
@@ -174,7 +300,8 @@ class QuizResultsReport
         $lastStudentRow = max(4, count($rows));
 
         // Share of students who answered each automatically scored question correctly.
-        if ($students->isNotEmpty() && $questions !== []) {
+        $hasSummary = $students->isNotEmpty() && $questions !== [] && ! $quizForm->isScoredQuestionnaire();
+        if ($hasSummary) {
             $rows[] = null;
             $summary = [XlsxWriter::cell('Persentase jawaban benar', 'summaryLabel')];
             for ($column = 1; $column < count($fixedColumns); $column++) {
@@ -189,7 +316,7 @@ class QuizResultsReport
         }
 
         $merge = ["A1:{$lastColumn}1", "A2:{$lastColumn}2"];
-        if ($students->isNotEmpty() && $questions !== []) {
+        if ($hasSummary) {
             $merge[] = 'A'.count($rows).':'.XlsxWriter::columnLetter(count($fixedColumns)).count($rows);
         }
 
@@ -406,8 +533,8 @@ class QuizResultsReport
         $timezone = DisplayTime::timezone();
 
         $responses = $quizForm->responses()
-            ->with(['user:id,name,email,nis,kelas'])
-            ->get(['id', 'quiz_form_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'manual_scores', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
+            ->with(['user:id,name,email,nis,kelas', 'quizSession:id,started_at,blur_count'])
+            ->get(['id', 'quiz_form_id', 'quiz_session_id', 'receipt_hash', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'respondent_number', 'respondent_school', 'filled_for_respondent', 'email', 'score', 'manual_scores', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
 
         // Every attempt of a student is listed, numbered in the order they were handed in.
         $attemptNumbers = QuizResponse::attemptNumbers($responses);
@@ -423,11 +550,12 @@ class QuizResultsReport
 
                 return [
                     'id' => $response->id,
-                    'nis' => $response->user?->nis ?: '-',
-                    // Guests on a public quiz: the name and class they gave before starting.
-                    'name' => $response->user?->name ?: ($response->respondent_name ?: 'Anonim'),
-                    'kelas' => $response->user?->kelas ?: ($response->respondent_class ?: '-'),
-                    'email' => $response->email ?: ($response->user?->email ?: '-'),
+                    // Guests on a public quiz: the name and class they gave before starting. Mode
+                    // pewawancara: the candidate's name, registration number and school.
+                    'nis' => $response->respondentDisplayNumber(),
+                    'name' => $response->respondentDisplayName(),
+                    'kelas' => $response->respondentDisplayGroup(),
+                    'email' => $response->email ?: (($response->filled_for_respondent ? null : $response->user?->email) ?: '-'),
                     'score' => $score,
                     'maxScore' => $studentMax,
                     'grade' => $this->scoring->grade($score, $studentMax),
@@ -436,6 +564,16 @@ class QuizResultsReport
                     'isAutoSubmitted' => (bool) $response->is_auto_submitted,
                     'lateMinutes' => $response->late_seconds !== null ? (int) ceil($response->late_seconds / 60) : null,
                     'submittedAt' => $response->created_at?->copy()->setTimezone($timezone),
+                    'startedAt' => $response->quizSession?->started_at?->copy()->setTimezone($timezone),
+                    'durationMinutes' => $response->quizSession?->started_at !== null && $response->created_at !== null
+                        ? max(0, (int) round($response->quizSession->started_at->diffInSeconds($response->created_at) / 60))
+                        : null,
+                    // How often the student left the exam page (another tab or app).
+                    'tabSwitches' => $response->quizSession?->blur_count,
+                    // The code the student got after handing in; marked when the answers kept no longer match it.
+                    'receipt' => $response->receiptCode() !== null
+                        ? $response->receiptCode().($response->hasIntactReceipt() === false ? ' (tidak cocok)' : '')
+                        : null,
                     'answers' => is_array($response->answers) ? $response->answers : [],
                     'manualScores' => is_array($response->manual_scores) ? $response->manual_scores : [],
                     'ungraded' => $result['ungraded'],
@@ -466,8 +604,8 @@ class QuizResultsReport
         $columns = [
             ['key' => 'no', 'label' => 'No', 'type' => 'number'],
             ['key' => 'name', 'label' => 'Nama Lengkap', 'type' => 'text'],
-            ['key' => 'nis', 'label' => 'NIS', 'type' => 'text'],
-            ['key' => 'kelas', 'label' => 'Kelas', 'type' => 'text'],
+            ['key' => 'nis', 'label' => $this->identityLabels($quizForm)[0], 'type' => 'text'],
+            ['key' => 'kelas', 'label' => $this->identityLabels($quizForm)[1], 'type' => 'text'],
             ['key' => 'email', 'label' => 'Email', 'type' => 'text'],
             ['key' => 'grade', 'label' => 'Nilai (0-100)', 'type' => 'number'],
             ['key' => 'score', 'label' => 'Skor', 'type' => 'number'],
@@ -483,7 +621,7 @@ class QuizResultsReport
             $columns[] = ['key' => 'q:'.$question['id'], 'label' => $label, 'type' => 'answer', 'hint' => $hint];
         }
 
-        $rows = $students->values()->map(function (array $student, int $index) use ($questions, $kkm): array {
+        $rows = $students->values()->map(function (array $student, int $index) use ($questions, $kkm, $quizForm): array {
             $answers = array_map(fn (array $question): array => $this->answerCell($question, $student), $questions);
 
             return [
@@ -497,7 +635,7 @@ class QuizResultsReport
                     $student['grade'],
                     $student['score'],
                     $student['maxScore'],
-                    $student['grade'] >= $kkm ? 'Tuntas' : 'Belum Tuntas',
+                    $quizForm->isScoredQuestionnaire() ? '-' : ($student['grade'] >= $kkm ? 'Tuntas' : 'Belum Tuntas'),
                     $this->statusText($student),
                     $student['submittedAt']?->format('Y-m-d H:i'),
                     "{$student['attempt']} dari {$student['attempts']}",
@@ -526,6 +664,15 @@ class QuizResultsReport
 
         $answer = $student['answers'][$question['id']] ?? null;
         $text = $this->answerText($question, $answer);
+
+        // A scored questionnaire: no right or wrong, the score the answer earned.
+        if ($this->scoring->isOptionScored($question)) {
+            return [
+                'text' => $text === '' ? '(tidak dijawab)' : $text."\nSkor: ".$this->scoring->earned($question, $answer),
+                'mark' => 'ungraded',
+            ];
+        }
+
         $isCorrect = $this->scoring->isCorrect($question, $answer);
         $manual = $student['manualScores'][$question['id']] ?? null;
 
@@ -572,6 +719,10 @@ class QuizResultsReport
             return $header."\nEsai, dinilai guru";
         }
 
+        if ($this->scoring->isOptionScored($question)) {
+            return $header."\nSkor: ".Str::limit($this->choiceScoresText($question), 140);
+        }
+
         if (! $this->scoring->isAutoScored($question)) {
             return $header."\nTanpa kunci jawaban";
         }
@@ -600,6 +751,33 @@ class QuizResultsReport
         }
 
         return $this->answerText($question, $key);
+    }
+
+    /**
+     * The headers of the NIS and class columns: Mode pewawancara has the candidate's registration
+     * number and school there.
+     *
+     * @return array{0: string, 1: string}
+     */
+    protected function identityLabels(QuizForm $quizForm): array
+    {
+        return $quizForm->isInterview() ? ['No. Pendaftaran', 'Asal Sekolah'] : ['NIS', 'Kelas'];
+    }
+
+    /**
+     * The score of each choice of a scored questionnaire: "Kemauan sendiri = 3; Orang tua = 1".
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function choiceScoresText(array $question): string
+    {
+        $choices = array_values((array) ($question[($question['type'] ?? '') === 'Multiple-choice grid' ? 'columns' : 'options'] ?? []));
+
+        return implode('; ', array_map(
+            fn (int $score, int $index): string => $this->plainText((string) (is_scalar($choices[$index] ?? null) ? $choices[$index] : '')).' = '.$score,
+            $this->scoring->choiceScores($question),
+            array_keys($this->scoring->choiceScores($question)),
+        ));
     }
 
     /**

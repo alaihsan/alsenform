@@ -5,6 +5,7 @@ use App\Models\ServerError;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /*
@@ -14,7 +15,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin', 'is_admin' => true]);
     $this->backups = storage_path('framework/testing/health-backups-'.uniqid());
-    config(['maintenance.backup.path' => $this->backups]);
+    config(['maintenance.backup.path' => $this->backups, 'app.online_tunnel_metrics' => null]);
 });
 
 afterEach(fn () => File::deleteDirectory($this->backups));
@@ -67,4 +68,26 @@ test('open server errors, pending database updates and unsaved answers show up',
         ->and($checks['migrations'])->toMatchArray(['value' => '1 pembaruan tertunda', 'tone' => 'bad'])
         ->and($checks['exams'])->toMatchArray(['value' => '2', 'tone' => 'warn'])
         ->and($checks['exams']['detail'])->toContain('1 siswa');
+});
+
+test('the online address is read from the Cloudflare tunnel, and left out without one', function () {
+    expect(healthChecks())->not->toHaveKey('online');
+
+    config(['app.online_tunnel_metrics' => '127.0.0.1:20241']);
+    Http::fake(['127.0.0.1:20241/quicktunnel' => Http::response(['hostname' => 'patent-merry-inclusive-casa.trycloudflare.com'])]);
+
+    expect(healthChecks()['online'])->toMatchArray([
+        'label' => 'Akses online',
+        'value' => 'Menyala',
+        'detail' => 'https://patent-merry-inclusive-casa.trycloudflare.com',
+        'tone' => 'good',
+    ]);
+});
+
+test('a stopped tunnel is worth a look, without stopping the page', function () {
+    config(['app.online_tunnel_metrics' => '127.0.0.1:20241']);
+    Http::fake(['127.0.0.1:20241/quicktunnel' => Http::response('', 503)]);
+
+    expect(healthChecks()['online'])->toMatchArray(['value' => 'Tunnel mati', 'tone' => 'warn'])
+        ->and(healthChecks()['online']['hint'])->toContain('com.alsenform.tunnel');
 });

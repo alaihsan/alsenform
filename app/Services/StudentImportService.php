@@ -180,7 +180,6 @@ class StudentImportService
                     'kelas' => $kelas,
                     'email' => $email,
                     'password' => Hash::make($defaultPassword),
-                    'must_change_password' => true,
                     'role' => 'siswa',
                     'is_admin' => false,
                 ]);

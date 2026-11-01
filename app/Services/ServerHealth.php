@@ -9,6 +9,7 @@ use App\Support\AssetBuild;
 use App\Support\DisplayTime;
 use App\Support\PendingMigrations;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
@@ -33,8 +34,9 @@ class ServerHealth
      */
     public function checks(): array
     {
-        return [
+        return array_values(array_filter([
             $this->database(),
+            $this->online(),
             $this->exams(),
             $this->serverErrors(),
             $this->backup(),
@@ -43,7 +45,7 @@ class ServerHealth
             $this->build(),
             $this->environment(),
             $this->logs(),
-        ];
+        ]));
     }
 
     /**
@@ -80,6 +82,44 @@ class ServerHealth
             trim(config('database.default').($size !== null ? ' · '.$this->bytes($size, 1) : '')),
             $milliseconds < 50 ? 'good' : ($milliseconds < 300 ? 'warn' : 'bad'),
             $milliseconds < 50 ? null : 'Database lambat menjawab: tutup aplikasi berat di komputer server, atau periksa disk yang hampir penuh.',
+        );
+    }
+
+    /**
+     * The address of the server on the internet, through a Cloudflare quick tunnel: it changes
+     * whenever the tunnel starts again, so it is read from the tunnel itself. Left out when the
+     * server is only opened on the school network.
+     *
+     * @return array{key: string, label: string, value: string, detail: string|null, tone: 'good'|'warn'|'bad', hint: string|null}|null
+     */
+    protected function online(): ?array
+    {
+        $metrics = trim((string) config('app.online_tunnel_metrics'));
+
+        if ($metrics === '') {
+            return null;
+        }
+
+        $hostname = rescue(fn (): mixed => Http::timeout(1)->get("http://{$metrics}/quicktunnel")->json('hostname'), null, report: false);
+
+        if (! is_string($hostname) || ! preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i', $hostname)) {
+            return $this->check(
+                'online',
+                'Akses online',
+                'Tunnel mati',
+                'server hanya dapat dibuka di jaringan sekolah',
+                'warn',
+                'Di Terminal komputer server: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.alsenform.tunnel.plist (Cloudflare Tunnel). Alamat online akan berganti. Tidak dipakai lagi? Kosongkan ONLINE_TUNNEL_METRICS di .env.',
+            );
+        }
+
+        return $this->check(
+            'online',
+            'Akses online',
+            'Menyala',
+            "https://{$hostname}",
+            'good',
+            'Alamat ini berganti setiap kali tunnel atau komputer server dijalankan ulang: bagikan tautan dari sini.',
         );
     }
 

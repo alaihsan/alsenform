@@ -13,6 +13,9 @@ import {
 } from 'lucide-vue-next';
 import type { QuestionType, QuestionTypeOption } from '@/types/quiz';
 
+/** The most characters of a form description, its formatting not counted (App\Models\QuizForm::DESCRIPTION_MAX_CHARACTERS). */
+export const DESCRIPTION_MAX_CHARACTERS = 2000;
+
 /** The title of a new question until the teacher writes one. */
 export const UNTITLED_QUESTION = 'Pertanyaan tanpa judul';
 

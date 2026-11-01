@@ -161,7 +161,6 @@ class UserController extends Controller
             'nip' => $nip,
             'kelas' => $kelas,
             'password' => $password,
-            'must_change_password' => $role === 'siswa',
             'role' => $role,
             'is_admin' => $isAdmin,
         ]);
@@ -285,7 +284,6 @@ class UserController extends Controller
         $defaultPassword = User::defaultPasswordForNis($user->nis);
         $user->update([
             'password' => Hash::make($defaultPassword),
-            'must_change_password' => true,
         ]);
 
         return back()->with('success', "Password '{$user->name}' berhasil direset ke password default.");

@@ -8,6 +8,7 @@ use App\Http\Controllers\CohortController;
 use App\Http\Controllers\ConnectionCheckController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
+use App\Http\Controllers\DocxExportController;
 use App\Http\Controllers\ExamProgressController;
 use App\Http\Controllers\ExamTokenController;
 use App\Http\Controllers\FollowUpExamController;
@@ -128,6 +129,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         // Laporan: logins and exam participation with device, browser and time
         Route::get('reports', [ActivityReportController::class, 'index'])->name('reports.index');
         Route::get('reports/export', [ActivityReportController::class, 'export'])->name('reports.export');
+
+        // Ekspor Soal ke Word add-on: an exam, or questions chosen in the bank, in the import template's format
+        Route::get('forms/{quizForm}/ekspor-docx', [DocxExportController::class, 'form'])->name('forms.docx-export');
+        Route::post('bank-soal/ekspor-docx', [DocxExportController::class, 'bank'])->name('question-bank.docx-export');
 
         // Rekap Kuis add-on: every quiz of the teacher in one table, by class
         Route::get('rekap-kuis', [QuizRecapController::class, 'index'])->name('quiz-recap.index');

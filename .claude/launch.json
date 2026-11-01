@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "docx-export-check",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "APP_ENV=local",
+        "DB_CONNECTION=sqlite",
+        "DB_DATABASE=/private/tmp/claude-501/-Users-sansan-Herd-alsenform/42e03439-53a3-4380-aa40-feaa7c8f9b2e/scratchpad/check.sqlite",
+        "DB_HOST=127.0.0.2",
+        "DB_PORT=1",
+        "php",
+        "-S",
+        "127.0.0.1:8123",
+        "-t",
+        "public",
+        "server.php"
+      ],
+      "port": 8123
+    }
+  ]
+}

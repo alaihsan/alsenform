@@ -145,7 +145,8 @@ class QuizRecap
             ->orderBy('created_at')
             ->orderBy('id')
             ->get(['id', 'user_id', 'title', 'questions', 'settings', 'published_at', 'created_at'])
-            ->filter(fn (QuizForm $quiz): bool => ($quiz->settings['isQuiz'] ?? true) !== false)
+            // A scored questionnaire (Angket berskor) has a total score, not a grade to put beside quizzes.
+            ->filter(fn (QuizForm $quiz): bool => ($quiz->settings['isQuiz'] ?? true) !== false && ! $quiz->isScoredQuestionnaire())
             ->values();
     }
 

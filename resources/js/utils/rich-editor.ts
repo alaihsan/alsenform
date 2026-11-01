@@ -161,3 +161,125 @@ export function serializeEditor(root: HTMLElement): string {
     // The browser keeps a last <br> that shows no line of its own.
     return output.replace(/\n((?:<\/[a-z]+>)*)$/, '$1');
 }
+
+/** A text node as serializeEditor reads it: no-break spaces as spaces, zero-width spaces left out. */
+const cleanText = (text: string): string => text.replace(/ /g, ' ').replace(/​/g, '');
+
+/** A text node, or a line break (a <br>, or the start of a block), in the order serializeEditor reads them. */
+type Stop = { node: Node; length: number; isBreak: boolean };
+
+function stopsOf(root: HTMLElement): Stop[] {
+    const stops: Stop[] = [];
+    let endsWithNewline = true;
+
+    const walk = (node: Node) => {
+        node.childNodes.forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                const text = cleanText(child.textContent ?? '');
+                stops.push({ node: child, length: text.length, isBreak: false });
+                if (text) {
+                    endsWithNewline = text.endsWith('\n');
+                }
+
+                return;
+            }
+            if (!(child instanceof HTMLElement) || SKIPPED.has(child.tagName)) {
+                return;
+            }
+            if (child.tagName === 'BR' || (BLOCKS.has(child.tagName) && !endsWithNewline)) {
+                stops.push({ node: child, length: 1, isBreak: true });
+                endsWithNewline = true;
+            }
+            if (child.tagName !== 'BR') {
+                walk(child);
+            }
+        });
+    };
+    walk(root);
+
+    return stops;
+}
+
+/** Where a point of the field is in its text, formatting aside, line breaks counted. */
+function offsetOf(root: HTMLElement, container: Node, offset: number): number {
+    const point = document.createRange();
+    point.setStart(container, offset);
+    let total = 0;
+    for (const stop of stopsOf(root)) {
+        if (stop.node === container && !stop.isBreak) {
+            return total + cleanText((container.textContent ?? '').slice(0, offset)).length;
+        }
+        if (point.comparePoint(stop.node, 0) > 0) {
+            break;
+        }
+        total += stop.length;
+    }
+
+    return total;
+}
+
+/** The offset in a text node's own text of an offset in its text as serializeEditor reads it. */
+function nodeOffset(text: string, offset: number): number {
+    let seen = 0;
+    for (let index = 0; index < text.length; index++) {
+        if (seen === offset) {
+            return index;
+        }
+        if (text[index] !== '​') {
+            seen++;
+        }
+    }
+
+    return text.length;
+}
+
+/** The point of the field at an offset of its text (the reverse of offsetOf). */
+function pointAt(root: HTMLElement, offset: number): [Node, number] {
+    let remaining = Math.max(0, offset);
+    let afterBreak: [Node, number] = [root, 0];
+    for (const stop of stopsOf(root)) {
+        if (!stop.isBreak) {
+            if (remaining <= stop.length) {
+                return [stop.node, nodeOffset(stop.node.textContent ?? '', remaining)];
+            }
+            remaining -= stop.length;
+            continue;
+        }
+        const parent = stop.node.parentNode ?? root;
+        const index = Array.prototype.indexOf.call(parent.childNodes, stop.node);
+        if (remaining === 0) {
+            return [parent, index];
+        }
+        remaining--;
+        afterBreak = stop.node.nodeName === 'BR' ? [parent, index + 1] : [stop.node, 0];
+    }
+
+    return remaining === 0 ? afterBreak : [root, root.childNodes.length];
+}
+
+/** The selection in the field as offsets of its text (formatting aside), or null when it is elsewhere. */
+export function selectionOffsets(root: HTMLElement): { start: number; end: number } | null {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        return null;
+    }
+    const range = selection.getRangeAt(0);
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+        return null;
+    }
+
+    return { start: offsetOf(root, range.startContainer, range.startOffset), end: offsetOf(root, range.endContainer, range.endOffset) };
+}
+
+/** Selects the field's text between two offsets of its text, or puts the caret at one. */
+export function selectOffsets(root: HTMLElement, start: number, end: number = start): void {
+    const selection = window.getSelection();
+    if (!selection) {
+        return;
+    }
+    const range = document.createRange();
+    range.setStart(...pointAt(root, start));
+    range.setEnd(...pointAt(root, end));
+    selection.removeAllRanges();
+    selection.addRange(range);
+}

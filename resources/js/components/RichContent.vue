@@ -7,15 +7,18 @@ const props = withDefaults(
         content?: string | null;
         as?: string;
         dir?: 'auto' | 'ltr' | 'rtl';
+        /** Numbered lines as a list, a long one continuing under its text (a form description). */
+        lists?: boolean;
     }>(),
     {
         content: '',
         as: 'span',
         dir: 'auto',
+        lists: false,
     }
 );
 
-const formattedContent = computed(() => formatRichContent(props.content));
+const formattedContent = computed(() => formatRichContent(props.content, { lists: props.lists }));
 
 const isRtl = computed(() => {
     if (props.dir === 'rtl') return true;
@@ -72,6 +75,21 @@ mark.rich-mark-pink {
 }
 mark.rich-mark-orange {
     background-color: #fdba74;
+}
+
+/* A numbered line: the number in a column of its own, the text continuing under the text. */
+.rich-content .rich-list-item {
+    display: flex;
+    gap: 0.4em;
+}
+.rich-content .rich-list-number {
+    flex: none;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+.rich-content .rich-list-text {
+    flex: 1 1 0%;
+    min-width: 0;
 }
 
 /* Arabic words are inline blocks, which an underline around them does not reach by itself. */

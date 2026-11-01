@@ -19,6 +19,7 @@ use App\Support\SectionFlow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -84,7 +85,8 @@ class QuizFormController extends Controller
             }
 
             $wasLockingOnBlur = $current->locksOnBlur();
-            $flow = SectionFlow::normalize($mediaUrl->normalizeQuestions($validated['questions']), $this->settingsToStore($validated['settings']));
+            $questions = $this->choiceScoresToStore($validated['questions'], $validated['settings']);
+            $flow = SectionFlow::normalize($mediaUrl->normalizeQuestions($questions), $this->settingsToStore($validated['settings']));
 
             $current->update([
                 'title' => $validated['title'],
@@ -136,6 +138,26 @@ class QuizFormController extends Controller
         }
 
         return $settings;
+    }
+
+    /**
+     * The score of each choice is kept only while the quiz is a scored questionnaire (Angket
+     * berskor): switched back to answer keys, its questions are scored by their keys again.
+     *
+     * @param  array<int, mixed>  $questions
+     * @param  array<string, mixed>  $settings
+     * @return array<int, mixed>
+     */
+    protected function choiceScoresToStore(array $questions, array $settings): array
+    {
+        if (($settings['isQuiz'] ?? true) !== false && ! empty($settings['optionScoring'])) {
+            return $questions;
+        }
+
+        return array_map(
+            fn (mixed $question): mixed => is_array($question) ? Arr::except($question, ['optionScores', 'columnScores']) : $question,
+            $questions,
+        );
     }
 
     public function duplicate(QuizForm $quizForm, DuplicateQuizForm $duplicateQuizForm): RedirectResponse

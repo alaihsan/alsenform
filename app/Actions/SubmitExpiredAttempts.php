@@ -116,15 +116,21 @@ class SubmitExpiredAttempts
             // A form that sends students past sections keeps only what is on their way.
             ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($attempt->savedAnswersFor($quizForm, $assignedIds), $assignedIds);
             $isAccount = $attempt->user_id !== null;
+            // Mode pewawancara: the candidate the interviewer named, also for an account.
+            $isInterview = $quizForm->isInterview();
+            $keepsIdentity = ! $isAccount || $isInterview;
 
             $response = new QuizResponse([
                 'quiz_form_id' => $quizForm->id,
                 'quiz_session_id' => $attempt->id,
                 'user_id' => $attempt->user_id,
                 'respondent_identifier' => $attempt->respondent_identifier,
-                'respondent_name' => $isAccount ? null : $attempt->respondent_name,
-                'respondent_class' => $isAccount ? null : $attempt->respondent_class,
-                'email' => $attempt->respondent_email ?? $session->user?->email,
+                'respondent_name' => $keepsIdentity ? $attempt->respondent_name : null,
+                'respondent_class' => $keepsIdentity ? $attempt->respondent_class : null,
+                'respondent_number' => $keepsIdentity ? $attempt->respondent_number : null,
+                'respondent_school' => $keepsIdentity ? $attempt->respondent_school : null,
+                'filled_for_respondent' => $isInterview,
+                'email' => $attempt->respondent_email ?? ($isInterview ? null : $session->user?->email),
                 'answers' => $answers,
                 'doubtful_question_ids' => $quizForm->onlyGiven($attempt->doubtful_question_ids, $givenIds),
                 'question_ids' => $givenIds,

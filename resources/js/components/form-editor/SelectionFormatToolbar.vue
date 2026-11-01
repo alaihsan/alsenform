@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { HIGHLIGHT_COLORS, type HighlightColor } from '@/utils/rich-content';
-import { Bold, Eraser, Highlighter, Italic, RemoveFormatting, Underline } from 'lucide-vue-next';
+import { Bold, Eraser, Highlighter, Italic, ListOrdered, RemoveFormatting, Underline } from 'lucide-vue-next';
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 
 /*
  * The toolbar that pops up over text selected in a field of the editor (RichTextInput): bold,
- * italic, underline and a highlighter in five colours, like Google Docs. It works the same on
- * Arabic text. The buttons keep the selection, so several formats can be given in a row.
+ * italic, underline and a highlighter in five colours, like Google Docs, and numbering in a field
+ * that has it. It works the same on Arabic text. The buttons keep the selection, so several
+ * formats can be given in a row.
  */
 const isShown = ref(false);
+/** The field the selection is in, when it numbers lines. */
+const numberedField = ref<HTMLElement | null>(null);
 const toolbar = ref<HTMLElement | null>(null);
 /** The toolbar's width, measured once it shows, to keep it inside the screen. */
 let width = 340;
@@ -62,6 +65,7 @@ const update = () => {
     active.bold = queryState('bold');
     active.italic = queryState('italic');
     active.underline = queryState('underline');
+    numberedField.value = field.dataset.numbering !== undefined ? field : null;
     isShown.value = true;
     nextTick(() => {
         if (toolbar.value && toolbar.value.offsetWidth !== width) {
@@ -82,6 +86,12 @@ const run = (command: string, value?: string) => {
     document.execCommand('styleWithCSS', false, command === 'hiliteColor' ? 'true' : 'false');
     document.execCommand(command, false, value);
     document.execCommand('styleWithCSS', false, 'false');
+    scheduleUpdate();
+};
+
+/** The field numbers the selected lines itself (RichTextInput), as its numbers live in its text. */
+const toggleNumbering = () => {
+    numberedField.value?.dispatchEvent(new CustomEvent('rich-numbering'));
     scheduleUpdate();
 };
 
@@ -150,6 +160,20 @@ onBeforeUnmount(() => {
             >
                 <component :is="format.icon" class="h-4 w-4" :stroke-width="2.5" />
             </button>
+            <template v-if="numberedField">
+                <span class="mx-1 h-6 w-px bg-slate-200" aria-hidden="true"></span>
+                <button
+                    type="button"
+                    aria-label="Penomoran (Ctrl+Shift+7)"
+                    title="Penomoran (Ctrl+Shift+7)"
+                    data-testid="toolbar-numbering"
+                    class="flex h-8 w-8 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100 sm:h-9 sm:w-9"
+                    @mousedown.prevent
+                    @click="toggleNumbering"
+                >
+                    <ListOrdered class="h-4 w-4" :stroke-width="2.5" />
+                </button>
+            </template>
 
             <span class="mx-1 h-6 w-px bg-slate-200" aria-hidden="true"></span>
             <Highlighter class="mx-1 hidden h-4 w-4 text-slate-400 sm:block" aria-hidden="true" />

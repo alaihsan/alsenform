@@ -2,6 +2,7 @@
 import { questionTypeLabel } from '@/constants/form-editor';
 import RichContent from '@/components/RichContent.vue';
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
+import { downloadFile } from '@/utils/download';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import axios from 'axios';
@@ -11,6 +12,7 @@ import {
     ArrowLeft,
     ChevronDown,
     ExternalLink,
+    FileDown,
     FilePlus2,
     Image as ImageIcon,
     KeyRound,
@@ -21,6 +23,11 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+
+const props = defineProps<{
+    /** Ekspor Soal ke Word add-on: the ticked questions as a Word file; null without the add-on. */
+    docxExportUrl: string | null;
+}>();
 
 type Labels = { subject: string | null; grade: string | null; topic: string | null; difficulty: string | null };
 
@@ -240,6 +247,32 @@ const createExam = () => {
 };
 
 const selectedItems = computed(() => [...selected.value.values()]);
+
+/* Ekspor Soal ke Word: the ticked questions in the order they were ticked. */
+const EXPORT_LIMIT = 500;
+const isExportingDocx = ref(false);
+const exportDocx = async () => {
+    if (!props.docxExportUrl || isExportingDocx.value) {
+        return;
+    }
+    if (selected.value.size > EXPORT_LIMIT) {
+        notice.value = `Pilih paling banyak ${EXPORT_LIMIT} soal untuk diekspor sekaligus.`;
+        return;
+    }
+    isExportingDocx.value = true;
+    try {
+        const headers = await downloadFile(props.docxExportUrl, { data: { ids: [...selected.value.keys()] }, fallbackName: 'soal_bank_soal.docx' });
+        const written = Number(headers['x-exported-questions'] ?? selected.value.size);
+        notice.value =
+            written < selected.value.size
+                ? `${written} dari ${selected.value.size} soal diekspor ke Word (.docx). Soal Unggah Berkas tidak ada di templat Import Soal, jadi hanya dicatat di berkas.`
+                : `${written} soal diekspor ke Word (.docx).`;
+    } catch (error) {
+        notice.value = (error as Error).message;
+    } finally {
+        isExportingDocx.value = false;
+    }
+};
 
 /* The answer key in words, for the preview. */
 const isKeyOption = (item: BankItem, option: string, index: number): boolean => {
@@ -561,6 +594,17 @@ onMounted(reload);
                 >
                     <component :is="filters.archived ? ArchiveRestore : Archive" class="h-3.5 w-3.5" />
                     {{ filters.archived ? 'Kembalikan dari arsip' : 'Arsipkan' }}
+                </button>
+                <button
+                    v-if="docxExportUrl"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    :disabled="isExportingDocx"
+                    @click="exportDocx"
+                >
+                    <Loader2 v-if="isExportingDocx" class="h-3.5 w-3.5 animate-spin" />
+                    <FileDown v-else class="h-3.5 w-3.5" />
+                    Ekspor Word
                 </button>
                 <button
                     type="button"

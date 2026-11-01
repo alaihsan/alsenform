@@ -32,7 +32,16 @@ export type Question = {
     columns?: string[];
     answer: any;
     required: boolean;
-    media: { type: 'image' | 'video'; url: string; sourceType?: 'upload' | 'link'; isUploading?: boolean; uploadError?: string; width?: string; align?: 'left' | 'center' | 'right'; caption?: string }[];
+    media: {
+        type: 'image' | 'video';
+        url: string;
+        sourceType?: 'upload' | 'link';
+        isUploading?: boolean;
+        uploadError?: string;
+        width?: string;
+        align?: 'left' | 'center' | 'right';
+        caption?: string;
+    }[];
     points: number;
     /** Pembahasan: why the answer is right, shown to students with their results. */
     explanation?: string;
@@ -42,6 +51,10 @@ export type Question = {
     branching?: boolean;
     /** With branching: where each option sends the student, in the order of the options. */
     optionGoTo?: SectionTarget[];
+    /** Angket berskor: the score of each option, in the order of the options (App\\Support\\QuizScoring). */
+    optionScores?: (number | null)[];
+    /** Angket berskor, a multiple-choice grid: the score of each column, in every row. */
+    columnScores?: (number | null)[];
     /** Editor only, not saved: the question's field written right to left (the RTL button of Teks Arab (RTL)). */
     isRtl?: boolean;
 };
@@ -64,6 +77,21 @@ export type ExamDelivery = {
     autoSubmitted: number;
     errors: number;
     errorsPer100: number | null;
+    /** The latest errors the students met (App\Services\ExamDelivery::recentErrors). */
+    recentErrors?: ExamDeliveryError[];
+    /** Laporan, filtered to this exam: every activity with its device. */
+    reportUrl?: string;
+};
+
+export type ExamDeliveryError = {
+    id: number;
+    time: string;
+    kind: string;
+    person: string;
+    group: string | null;
+    device: string;
+    cause: string;
+    detail: string | null;
 };
 
 export type QuizFormPayload = {
@@ -108,6 +136,12 @@ export type QuizFormPayload = {
             perDifficulty: { mudah: number; sedang: number; sulit: number };
         };
         isQuiz?: boolean;
+        /** Angket berskor: each choice carries its own score and the result is their sum, with no answer key. */
+        optionScoring?: boolean;
+        /** Mode pewawancara (with Angket berskor): filled for one named candidate after another. */
+        interviewMode?: boolean;
+        /** Off: open to everyone but not on the students' Beranda, opened by its link only. */
+        listedForStudents?: boolean;
         emailCollectionMode?: 'none' | 'verified' | 'responder';
         sendResponseCopy?: 'off' | 'request' | 'always';
         allowResponseEditing?: boolean;
@@ -169,8 +203,11 @@ export type QuizFormPayload = {
             isGuest?: boolean;
             /** A guest name (and class) that appears on more than one response. */
             duplicateName?: boolean;
+            /** Mode pewawancara: nis is the registration number, kelas the school. */
             nis: string;
             kelas: string;
+            /** Mode pewawancara: the account that filled the questionnaire for the candidate. */
+            interviewer?: string | null;
             email: string;
             score: number;
             /** The points this student could earn: their own when questions are drawn per student. */
@@ -277,6 +314,8 @@ export type RecentForm = {
     firstQuestion?: PreviewQuestion | null;
     isPublished: boolean;
     isTrashed: boolean;
+    /** Open to everyone but not on the students' Beranda: opened by its link only. */
+    linkOnly?: boolean;
     isCollaborator?: boolean;
     ownerName?: string;
     hasSubmitted?: boolean;

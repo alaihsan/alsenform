@@ -5,9 +5,24 @@ namespace App\Support;
 /**
  * Automatic scoring of quiz answers against the answer keys stored in the questions.
  * Used when a response is submitted and when the results report marks answers right or wrong.
+ *
+ * A scored questionnaire (Angket berskor) has no answer key: each choice carries its own score
+ * (optionScores, or columnScores for a grid), and an answer earns the score of what was chosen.
  */
 class QuizScoring
 {
+    /**
+     * The question types whose choices can carry their own score.
+     *
+     * @var list<string>
+     */
+    public const OPTION_SCORED_TYPES = ['Multiple choice', 'Drop-down', 'Dropdown', 'Checkboxes', 'Multiple-choice grid'];
+
+    /**
+     * The highest score one choice can carry.
+     */
+    public const MAX_OPTION_SCORE = 100;
+
     /**
      * Total points earned by a set of answers keyed by question id.
      *
@@ -24,8 +39,94 @@ class QuizScoring
                 continue;
             }
 
-            if ($this->isCorrect($question, $answers[$id]) === true) {
-                $total += $this->points($question);
+            $total += $this->earned($question, $answers[$id]);
+        }
+
+        return $total;
+    }
+
+    /**
+     * The points an answer earns without the teacher: the score of the chosen choices on a scored
+     * questionnaire, otherwise all of the question's points when it is correct.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function earned(array $question, mixed $answer): int
+    {
+        if ($this->isOptionScored($question)) {
+            return $this->optionScore($question, $answer);
+        }
+
+        return $this->isCorrect($question, $answer) === true ? $this->points($question) : 0;
+    }
+
+    /**
+     * Whether the question is scored by the score of each choice (a scored questionnaire).
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function isOptionScored(array $question): bool
+    {
+        $type = $question['type'] ?? '';
+        if (! in_array($type, self::OPTION_SCORED_TYPES, true)) {
+            return false;
+        }
+
+        return $this->choiceScores($question) !== [];
+    }
+
+    /**
+     * The score of each choice by its position (an option, or a grid column); a choice without
+     * a score counts 0.
+     *
+     * @param  array<string, mixed>  $question
+     * @return array<int, int>
+     */
+    public function choiceScores(array $question): array
+    {
+        $isGrid = ($question['type'] ?? '') === 'Multiple-choice grid';
+        $scores = $question[$isGrid ? 'columnScores' : 'optionScores'] ?? null;
+        $choices = $question[$isGrid ? 'columns' : 'options'] ?? null;
+        if (! is_array($scores) || ! is_array($choices) || ! array_filter($scores, 'is_numeric')) {
+            return [];
+        }
+
+        $byChoice = [];
+        foreach (array_keys(array_values($choices)) as $index) {
+            $score = $scores[$index] ?? null;
+            $byChoice[$index] = is_numeric($score) ? max(0, min(self::MAX_OPTION_SCORE, (int) round((float) $score))) : 0;
+        }
+
+        return $byChoice;
+    }
+
+    /**
+     * The score of the choices an answer made: one option, the ticked options, or one column per row.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    protected function optionScore(array $question, mixed $answer): int
+    {
+        $scores = $this->choiceScores($question);
+
+        if (($question['type'] ?? '') === 'Multiple-choice grid') {
+            $total = 0;
+            foreach (is_array($answer) ? $answer : [] as $column) {
+                if (is_numeric($column)) {
+                    $total += $scores[(int) $column] ?? 0;
+                }
+            }
+
+            return $total;
+        }
+
+        $options = array_map(fn (mixed $option): string => is_scalar($option) ? (string) $option : '', array_values((array) ($question['options'] ?? [])));
+        $chosen = ($question['type'] ?? '') === 'Checkboxes' ? (is_array($answer) ? $answer : []) : [$answer];
+        $total = 0;
+        foreach (array_unique(array_map(fn (mixed $choice): string => is_scalar($choice) ? (string) $choice : '', $chosen)) as $choice) {
+            $index = array_search($choice, $options, true);
+            if ($choice !== '' && $index !== false) {
+                $total += $scores[$index] ?? 0;
             }
         }
 
@@ -62,10 +163,10 @@ class QuizScoring
             if (is_numeric($manual)) {
                 $score += min($points, max(0, (float) $manual));
                 $max += $points;
-            } elseif ($this->isAutoScored($question)) {
+            } elseif ($this->isAutoScored($question) || $this->isOptionScored($question)) {
                 $max += $points;
-                if (array_key_exists($id, $answers) && $this->isCorrect($question, $answers[$id]) === true) {
-                    $score += $points;
+                if (array_key_exists($id, $answers)) {
+                    $score += $this->earned($question, $answers[$id]);
                 }
             } elseif ($this->needsGrading($question)) {
                 $ungraded++;
@@ -100,18 +201,30 @@ class QuizScoring
     }
 
     /**
-     * Points a question is worth (1 when not set).
+     * Points a question is worth (1 when not set). On a scored questionnaire: the highest score an
+     * answer can earn (the best option, all ticked options, or the best column in every row).
      *
      * @param  array<string, mixed>  $question
      */
     public function points(array $question): int
     {
+        if ($this->isOptionScored($question)) {
+            $scores = $this->choiceScores($question);
+
+            return match ($question['type'] ?? '') {
+                'Checkboxes' => array_sum($scores),
+                'Multiple-choice grid' => max($scores) * count(is_array($question['rows'] ?? null) ? $question['rows'] : []),
+                default => max($scores),
+            };
+        }
+
         return isset($question['points']) ? (int) $question['points'] : 1;
     }
 
     /**
-     * Points that can be earned automatically: every question with an answer key. Essays and
-     * questions without a key are left out, so a student who answers everything correctly gets 100.
+     * Points that can be earned automatically: every question with an answer key, or with a score
+     * for each choice. Essays and questions without a key are left out, so a student who answers
+     * everything correctly gets 100.
      *
      * @param  array<int, mixed>  $questions
      */
@@ -119,7 +232,7 @@ class QuizScoring
     {
         $total = 0;
         foreach ($questions as $question) {
-            if (is_array($question) && $this->isAutoScored($question)) {
+            if (is_array($question) && ($this->isAutoScored($question) || $this->isOptionScored($question))) {
                 $total += max(0, $this->points($question));
             }
         }
@@ -161,8 +274,9 @@ class QuizScoring
     }
 
     /**
-     * Whether the question is scored automatically: it has an answer key and is not an essay
-     * (which the teacher grades manually).
+     * Whether the question is scored automatically against an answer key: it has one, is not an
+     * essay (which the teacher grades manually) and is not scored by its choices (which have no
+     * right or wrong answer, see isOptionScored).
      *
      * @param  array<string, mixed>  $question
      */
@@ -170,7 +284,7 @@ class QuizScoring
     {
         $answerKey = $question['answer'] ?? null;
 
-        return ! ($answerKey === null || $answerKey === '' || $answerKey === [] || ($question['type'] ?? '') === 'Paragraph');
+        return ! ($this->isOptionScored($question) || $answerKey === null || $answerKey === '' || $answerKey === [] || ($question['type'] ?? '') === 'Paragraph');
     }
 
     /**
@@ -195,6 +309,56 @@ class QuizScoring
             'Tick box grid' => $this->isTickBoxGridCorrect($answer, $answerKey),
             default => $this->isExactMatch($answer, $answerKey),
         };
+    }
+
+    /**
+     * The score of each section (Bagian) of the form, like the subtotal of every number of an
+     * interview sheet. The start of the form is the first section, unless a section comes first
+     * (as in SectionFlow); sections without scored questions are left out. Grades given by hand
+     * are not counted here: a scored questionnaire has none.
+     *
+     * @param  array<int, mixed>  $items  All items of the form, sections included.
+     * @param  array<int|string, mixed>  $answers
+     * @param  list<int|string>|null  $questionIds  The questions the student got, when drawn.
+     * @return list<array{index: int, title: string, score: int, max: int}>
+     */
+    public function sectionScores(array $items, array $answers, ?array $questionIds = null): array
+    {
+        $given = $questionIds === null ? null : array_map('strval', $questionIds);
+        $sections = [['title' => '', 'score' => 0, 'max' => 0]];
+        $isFirstItem = true;
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            if (($item['type'] ?? '') === QuizItems::SECTION) {
+                $section = ['title' => trim(strip_tags((string) ($item['title'] ?? ''))), 'score' => 0, 'max' => 0];
+                $isFirstItem ? $sections[0] = $section : $sections[] = $section;
+                $isFirstItem = false;
+
+                continue;
+            }
+            $isFirstItem = false;
+
+            $id = $item['id'] ?? null;
+            if (! ($this->isAutoScored($item) || $this->isOptionScored($item)) || ($given !== null && ! in_array((string) $id, $given, true))) {
+                continue;
+            }
+            $current = array_key_last($sections);
+            $sections[$current]['max'] += max(0, $this->points($item));
+            if ($id !== null && array_key_exists($id, $answers)) {
+                $sections[$current]['score'] += $this->earned($item, $answers[$id]);
+            }
+        }
+
+        $numbered = array_map(
+            fn (array $section, int $index): array => ['index' => $index, ...$section, 'title' => $section['title'] !== '' ? $section['title'] : 'Bagian '.($index + 1)],
+            $sections,
+            array_keys($sections),
+        );
+
+        return array_values(array_filter($numbered, fn (array $section): bool => $section['max'] > 0));
     }
 
     /**

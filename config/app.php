@@ -85,6 +85,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Online Address (Cloudflare Tunnel)
+    |--------------------------------------------------------------------------
+    |
+    | The metrics address of a Cloudflare quick tunnel to lan:serve, for
+    | example 127.0.0.1:20241 (cloudflared --metrics). Its public address
+    | (https://<acak>.trycloudflare.com) changes whenever the tunnel starts
+    | again, so Kesehatan Server reads the current one from here. Leave it
+    | empty when the server is only opened on the school network.
+    |
+    */
+
+    'online_tunnel_metrics' => env('ONLINE_TUNNEL_METRICS'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Trusted Proxies
     |--------------------------------------------------------------------------
     |

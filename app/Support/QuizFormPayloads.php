@@ -170,6 +170,8 @@ class QuizFormPayloads
             'updatedAt' => $quizForm->updated_at->toISOString(),
             'isPublished' => ! is_null($quizForm->published_at),
             'isTrashed' => ! is_null($quizForm->deleted_at),
+            // Open to everyone but not on the students' Beranda: opened by its link only.
+            'linkOnly' => ! $quizForm->isListedForStudents() && ! ($quizForm->cohorts_exists ?? false) && ! ($quizForm->participants_exists ?? false),
             'tone' => $tone,
             'stripe' => $stripe,
             'themeColorClass' => $themeColor,
@@ -208,7 +210,7 @@ class QuizFormPayloads
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas'])
             ->latest()
-            ->get(['id', 'quiz_form_id', 'quiz_session_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'submit_attempts', 'receipt_hash', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
+            ->get(['id', 'quiz_form_id', 'quiz_session_id', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'respondent_number', 'respondent_school', 'filled_for_respondent', 'email', 'score', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'submit_attempts', 'receipt_hash', 'answers', 'doubtful_question_ids', 'manual_scores', 'question_ids', 'created_at']);
 
         $questions = $this->responseQuestionSummaries(collect(QuizItems::questions($quizForm->questions)), $responses);
 
@@ -217,10 +219,11 @@ class QuizFormPayloads
         $formQuestions = is_array($quizForm->questions) ? $quizForm->questions : [];
         $maxScore = $scoring->maxPoints($formQuestions);
 
-        // Guests type their own name: the same name (and class) on more than one response is flagged.
-        // (Attempts of the same guest device are one student, not a duplicate.)
+        // Guests type their own name, and interviewers the candidate's: the same name (and class, or
+        // registration number) on more than one response is flagged. (Attempts of the same guest
+        // device are one student, not a duplicate.)
         $guestNameCounts = $responses
-            ->filter(fn (QuizResponse $response): bool => $response->user_id === null && filled($response->respondent_name))
+            ->filter(fn (QuizResponse $response): bool => ($response->user_id === null || $response->filled_for_respondent) && filled($response->respondent_name))
             ->unique(fn (QuizResponse $response): string => $response->studentKey())
             ->countBy(fn (QuizResponse $response): string => $this->guestNameKey($response));
 
@@ -234,17 +237,20 @@ class QuizFormPayloads
             $score = is_array($response->answers) ? $result['score'] : (int) ($response->score ?? 0);
             $responseMax = $result['max'];
             $percentage = $scoring->grade($score, $responseMax);
-            $isGuest = $response->user_id === null;
+            $isGuest = $response->user_id === null && ! $response->filled_for_respondent;
+            $namesItself = $isGuest || $response->filled_for_respondent;
 
             return [
                 'id' => $response->id,
                 'user_id' => $response->user_id,
-                'name' => $response->user?->name ?? $response->respondent_name ?? 'Anonim',
+                'name' => $response->respondentDisplayName(),
                 'isGuest' => $isGuest,
-                'duplicateName' => $isGuest && filled($response->respondent_name) && ($guestNameCounts[$this->guestNameKey($response)] ?? 0) > 1,
-                'nis' => $response->user?->nis ?? '-',
-                'kelas' => $response->user?->kelas ?? $response->respondent_class ?? '-',
-                'email' => $response->email ?? $response->user?->email ?? '-',
+                'duplicateName' => $namesItself && filled($response->respondent_name) && ($guestNameCounts[$this->guestNameKey($response)] ?? 0) > 1,
+                // Mode pewawancara: the NIS and class columns hold the registration number and the school.
+                'nis' => $response->respondentDisplayNumber(),
+                'kelas' => $response->respondentDisplayGroup(),
+                'interviewer' => $response->filled_for_respondent ? $response->user?->name : null,
+                'email' => $response->email ?? ($response->filled_for_respondent ? null : $response->user?->email) ?? '-',
                 'score' => $score,
                 'maxScore' => $responseMax,
                 'percentage' => $percentage,
@@ -275,13 +281,18 @@ class QuizFormPayloads
             'exportUrl' => route('forms.responses.export', $quizForm),
             'latest' => $responses->take(5)->map(fn (QuizResponse $response): array => [
                 'id' => $response->id,
-                'name' => $response->user?->name ?? $response->respondent_name,
+                'name' => $response->respondentDisplayName(),
                 'email' => $response->email ?? $response->user?->email,
                 'submittedAt' => DisplayTime::ago($response->created_at),
             ])->values()->all(),
             'gradebook' => $gradebook,
-            // Whether the answers got to the server: saved in time, handed in at the first try, errors.
-            'delivery' => app(ExamDelivery::class)->of($quizForm),
+            // Whether the answers got to the server: saved in time, handed in at the first try, errors,
+            // with the latest errors themselves (who, which device, why) and where to see them all.
+            'delivery' => [
+                ...app(ExamDelivery::class)->of($quizForm),
+                'recentErrors' => app(ExamDelivery::class)->recentErrors($quizForm),
+                'reportUrl' => route('reports.index', ['form' => $quizForm->id, 'from' => DisplayTime::of($quizForm->created_at)->toDateString(), 'to' => DisplayTime::now()->toDateString()]),
+            ],
             'questions' => $questions,
             // Analisis butir soal: difficulty, discrimination and distractors of each question.
             // Only with the Analisis Butir Soal add-on on for this exam (not even computed otherwise).
@@ -328,7 +339,7 @@ class QuizFormPayloads
 
     protected function guestNameKey(QuizResponse $response): string
     {
-        return mb_strtolower((string) $response->respondent_name).'|'.$response->respondent_class;
+        return mb_strtolower((string) $response->respondent_name).'|'.($response->filled_for_respondent ? $response->respondent_number : $response->respondent_class);
     }
 
     /**

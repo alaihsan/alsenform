@@ -20,6 +20,9 @@ class QuizResponse extends Model
         'respondent_identifier',
         'respondent_name',
         'respondent_class',
+        'respondent_number',
+        'respondent_school',
+        'filled_for_respondent',
         'email',
         'answers',
         'doubtful_question_ids',
@@ -98,7 +101,37 @@ class QuizResponse extends Model
             'score' => 'integer',
             'is_timeout' => 'boolean',
             'is_auto_submitted' => 'boolean',
+            'filled_for_respondent' => 'boolean',
         ];
+    }
+
+    /**
+     * The name to show for the response: the candidate an interviewer filled it for, the account,
+     * or the name a guest typed.
+     */
+    public function respondentDisplayName(): string
+    {
+        if ($this->filled_for_respondent) {
+            return $this->respondent_name ?: 'Tanpa nama';
+        }
+
+        return $this->user?->name ?? $this->respondent_name ?? 'Anonim';
+    }
+
+    /**
+     * The number that identifies the respondent: the candidate's registration number, or the NIS.
+     */
+    public function respondentDisplayNumber(): string
+    {
+        return ($this->filled_for_respondent ? $this->respondent_number : $this->user?->nis) ?: '-';
+    }
+
+    /**
+     * Where the respondent belongs: the candidate's school, or the class.
+     */
+    public function respondentDisplayGroup(): string
+    {
+        return ($this->filled_for_respondent ? $this->respondent_school : ($this->user?->kelas ?: $this->respondent_class)) ?: '-';
     }
 
     public function quizForm(): BelongsTo
@@ -117,11 +150,13 @@ class QuizResponse extends Model
     }
 
     /**
-     * Who handed this response in: an account, or a guest by their device.
+     * Who handed this response in: an account, or a guest by their device. A response an
+     * interviewer filled for a candidate (Mode pewawancara) is that candidate's alone.
      */
     public function studentKey(): string
     {
         return match (true) {
+            $this->filled_for_respondent => 'response:'.$this->id,
             $this->user_id !== null => 'user:'.$this->user_id,
             filled($this->respondent_identifier) => 'guest:'.$this->respondent_identifier,
             default => 'response:'.$this->id,

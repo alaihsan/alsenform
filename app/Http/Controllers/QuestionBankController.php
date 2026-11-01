@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\QuizForm;
+use App\Services\Addons;
 use App\Services\ItemAnalysis;
 use App\Services\QuestionBank;
 use App\Support\Addon;
@@ -66,9 +67,12 @@ class QuestionBankController extends Controller
     /**
      * The Bank Soal page: browse, label, archive and reuse every question written.
      */
-    public function page(): Response
+    public function page(Request $request, Addons $addons): Response
     {
-        return Inertia::render('QuestionBank/Index');
+        return Inertia::render('QuestionBank/Index', [
+            // Ekspor Soal ke Word add-on: the chosen questions as a Word file.
+            'docxExportUrl' => $addons->isInstalledFor(Addon::DocxExport, $request->user()) ? route('question-bank.docx-export') : null,
+        ]);
     }
 
     /**

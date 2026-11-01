@@ -322,9 +322,9 @@ test('issue 7: timeout allows partial submission even with unanswered required q
 });
 
 // ---------------------------------------------------------------------------
-// Issue 8: Password leak removed and mandatory first-login password change
+// Issue 8: Password leak removed; changing the default password on the first login is optional
 // ---------------------------------------------------------------------------
-test('issue 8: student has must_change_password flag and is redirected to settings until updated', function () {
+test('issue 8: a new student goes straight to the dashboard with the default password', function () {
     $teacher = User::factory()->create(['role' => 'guru']);
 
     // Teacher creates student
@@ -336,22 +336,19 @@ test('issue 8: student has must_change_password flag and is redirected to settin
 
     $student = User::where('nis', '9988776655')->first();
     expect($student)->not->toBeNull();
-    expect($student->must_change_password)->toBeTrue();
+    expect($student->must_change_password)->toBeFalse();
 
-    // Student visits dashboard or profile -> redirected to change password
+    // Student visits the dashboard: no detour to the password page
     $this->actingAs($student)->get(route('dashboard'))
-        ->assertRedirect(route('password.edit'));
+        ->assertSuccessful();
 
-    // Student changes password
+    // Student may still change the password when they like
     $this->actingAs($student)->put(route('password.update'), [
         'current_password' => '776655',
         'password' => 'newSecretPass123!',
         'password_confirmation' => 'newSecretPass123!',
     ])->assertRedirect();
 
-    expect($student->refresh()->must_change_password)->toBeFalse();
-
-    // Student can now access dashboard normally
     $this->actingAs($student)->get(route('dashboard'))
         ->assertSuccessful();
 });

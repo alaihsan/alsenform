@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Models\User;
@@ -113,4 +114,52 @@ test('a quiz without responses still produces a readable workbook', function () 
 
     expect(reportCells($this->path, 1)['A4'])->toBe(['No', 'header'])
         ->and(reportCells($this->path, 2))->toHaveKey('F4');
+});
+
+test('the grade recap tells when each attempt started, how long it took, how often the page was left and its receipt', function () {
+    $student = User::factory()->create(['role' => 'siswa', 'name' => 'Budi', 'kelas' => 'X-A']);
+    $attempt = startedAttempt($this->quizForm, $student, ['started_at' => Carbon::parse('2026-10-04 01:00:00', 'UTC'), 'blur_count' => 3]);
+    Carbon::setTestNow(Carbon::parse('2026-10-04 01:25:20', 'UTC'));
+    $response = QuizResponse::create([
+        'quiz_form_id' => $this->quizForm->id,
+        'quiz_session_id' => $attempt->id,
+        'user_id' => $student->id,
+        'respondent_identifier' => 'user_'.$student->id,
+        'answers' => [1 => 'Jakarta'],
+    ]);
+    Carbon::setTestNow();
+
+    app(QuizResultsReport::class)->save($this->quizForm, $this->path);
+    $cells = reportCells($this->path, 1);
+
+    expect([$cells['M4'][0], $cells['N4'][0], $cells['O4'][0], $cells['P4'][0]])->toBe(['Waktu Mulai', 'Lama (menit)', 'Pindah Tab', 'Tanda Terima'])
+        // 01:00 UTC is 08:00 WIB
+        ->and((float) $cells['M5'][0])->toEqualWithDelta(46299 + 8 / 24, 0.0001)
+        ->and($cells['N5'])->toBe(['25', 'integer'])
+        ->and($cells['O5'])->toBe(['3', 'integer'])
+        ->and($cells['P5'][0])->toBe($response->receiptCode());
+});
+
+test('the last sheet has the delivery figures and every error the students met', function () {
+    $student = User::factory()->create(['role' => 'siswa', 'name' => 'Ani', 'kelas' => 'X-B']);
+    startedAttempt($this->quizForm, $student);
+    ActivityLog::factory()->create(['event' => ActivityLog::PAGE_FAILED, 'quiz_form_id' => $this->quizForm->id, 'user_id' => $student->id, 'device' => 'iPhone', 'os' => 'iOS 18.7', 'browser' => 'Safari 27.0.1', 'meta' => ['code' => 'FF-302', 'path' => '/forms/'.$this->quizForm->slug, 'message' => 'null is not an object']]);
+    // The teacher's failed save is not an error of the students.
+    ActivityLog::factory()->create(['event' => ActivityLog::SERVER_ERROR, 'quiz_form_id' => $this->quizForm->id, 'user_id' => $this->teacher->id, 'meta' => ['path' => '/forms/'.$this->quizForm->id, 'method' => 'PATCH', 'status' => 500]]);
+
+    app(QuizResultsReport::class)->save($this->quizForm, $this->path);
+
+    $zip = new ZipArchive;
+    $zip->open($this->path);
+    preg_match_all('/<sheet name="([^"]+)"/', $zip->getFromName('xl/workbook.xml'), $names);
+    $zip->close();
+    expect(end($names[1]))->toBe('Pengiriman &amp; Galat');
+
+    $cells = reportCells($this->path, count($names[1]));
+    expect($cells['A6'][0])->toBe('Galat per 100 siswa')
+        ->and($cells['B6'])->toBe(['100', 'decimal'])
+        ->and($cells['C6'][0])->toBe('1 halaman gagal dimuat atau galat server')
+        ->and($cells['G8'][0])->toBe('Penyebab')
+        ->and([$cells['C9'][0], $cells['D9'][0], $cells['F9'][0], $cells['G9'][0]])->toBe(['Halaman gagal dimuat', 'Ani', 'iPhone · iOS 18.7 · Safari 27.0.1', 'Halaman gagal ditampilkan (FF-302)'])
+        ->and($cells)->not->toHaveKey('A10');
 });

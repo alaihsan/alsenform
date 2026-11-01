@@ -22,6 +22,8 @@ class QuizSession extends Model
         'respondent_identifier',
         'respondent_name',
         'respondent_class',
+        'respondent_number',
+        'respondent_school',
         'respondent_email',
         'started_at',
         'expires_at',

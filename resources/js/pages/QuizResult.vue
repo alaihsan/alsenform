@@ -29,11 +29,16 @@ type Attempt = {
     ungraded: number;
     passed: boolean;
     questions: ResultQuestion[];
+    /** Angket berskor: the score of each section (App\\Support\\QuizScoring::sectionScores). */
+    sections?: { index: number; title: string; score: number; max: number }[];
+    /** Mode pewawancara: the candidate the interviewer filled the questionnaire for. */
+    candidate?: { name: string; number: string | null; school: string | null } | null;
 };
 
 /*
  * A student's results, once the teacher shows them: the grade of each attempt and, shown in full,
  * every question with their answer, the right answer, the pembahasan and the teacher's comment.
+ * A scored questionnaire (Angket berskor) shows its total score and the score of each section instead.
  */
 const props = defineProps<{
     quiz: { title: string; publicUrl: string; themeColorClass: string; design?: Partial<FormDesign> | null };
@@ -42,6 +47,7 @@ const props = defineProps<{
     kkm: number;
     attempts: Attempt[];
     hasAttempts: boolean;
+    isScoredQuestionnaire?: boolean;
 }>();
 
 const shownNumber = ref(props.attempts.length ? props.attempts[props.attempts.length - 1].number : 0);
@@ -79,7 +85,7 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                     <div v-if="design?.logo" class="mb-3 flex" :style="{ justifyContent: logoJustify(design) }">
                         <img :src="design.logo" alt="Logo" class="af-logo" />
                     </div>
-                    <p class="text-xs font-extrabold uppercase tracking-widest text-indigo-600">Hasil Ujian</p>
+                    <p class="text-xs font-extrabold uppercase tracking-widest text-indigo-600">{{ isScoredQuestionnaire ? 'Hasil Angket' : 'Hasil Ujian' }}</p>
                     <h1 :class="['mt-1 text-2xl font-black tracking-tight text-slate-900', design ? 'af-title' : '']"><RichContent :content="quiz.title" /></h1>
 
                     <p v-if="!isShown" class="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -103,11 +109,40 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                                 ]"
                                 @click="shownNumber = attempt.number"
                             >
-                                Percobaan {{ attempt.number }} · {{ formatNumber(attempt.grade) }}
+                                {{ attempt.candidate ? attempt.candidate.name : `Percobaan ${attempt.number}` }} ·
+                                {{ isScoredQuestionnaire ? `${formatNumber(attempt.score)}/${attempt.max}` : formatNumber(attempt.grade) }}
                             </button>
                         </div>
 
-                        <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                        <p v-if="shown.candidate" class="mt-4 text-sm text-slate-600" data-testid="candidate">
+                            Calon: <span class="font-bold text-slate-900">{{ shown.candidate.name }}</span>
+                            <template v-if="shown.candidate.number"> · No. {{ shown.candidate.number }}</template>
+                            <template v-if="shown.candidate.school"> · {{ shown.candidate.school }}</template>
+                        </p>
+                        <div v-if="isScoredQuestionnaire" class="mt-5 grid gap-3 sm:grid-cols-3" data-testid="questionnaire-total">
+                            <div class="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
+                                <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Skor</p>
+                                <p class="mt-1 text-4xl font-black text-indigo-700">
+                                    {{ formatNumber(shown.score) }} <span class="text-xl text-slate-400">/ {{ shown.max }}</span>
+                                </p>
+                                <p class="mt-0.5 text-xs font-semibold text-slate-500">{{ formatNumber(shown.grade) }}% dari skor tertinggi</p>
+                            </div>
+                            <div class="rounded-2xl bg-slate-50 p-4">
+                                <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Dikirim</p>
+                                <p class="mt-1 text-sm font-semibold text-slate-800">{{ formatTime(shown.submittedAt) }}</p>
+                            </div>
+                        </div>
+                        <div v-if="isScoredQuestionnaire && (shown.sections?.length ?? 0) > 1" class="mt-3 rounded-2xl bg-slate-50 p-4" data-testid="section-scores">
+                            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Skor per Bagian</p>
+                            <ul class="mt-2 divide-y divide-slate-200">
+                                <li v-for="section in shown.sections" :key="section.index" class="flex items-center justify-between gap-3 py-1.5 text-sm">
+                                    <span class="min-w-0 text-slate-700"><RichContent :content="section.title" /></span>
+                                    <span class="shrink-0 font-bold text-slate-900">{{ formatNumber(section.score) }} / {{ section.max }}</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div v-if="!isScoredQuestionnaire" class="mt-5 grid gap-3 sm:grid-cols-3">
                             <div class="rounded-2xl bg-slate-50 p-4 sm:col-span-1">
                                 <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Nilai</p>
                                 <p :class="['mt-1 text-4xl font-black', shown.passed ? 'text-emerald-600' : 'text-rose-600']">{{ formatNumber(shown.grade) }}</p>
@@ -130,7 +165,9 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                             <Clock class="mt-0.5 h-4 w-4 shrink-0" />
                             {{ shown.ungraded }} jawaban esai/berkas belum dinilai guru, jadi nilai ini masih sementara.
                         </p>
-                        <p v-if="!isFull" class="mt-3 text-sm text-slate-500">Guru menampilkan nilai saja; kunci jawaban tetap dirahasiakan.</p>
+                        <p v-if="!isFull" class="mt-3 text-sm text-slate-500">
+                            {{ isScoredQuestionnaire ? 'Guru menampilkan skor saja.' : 'Guru menampilkan nilai saja; kunci jawaban tetap dirahasiakan.' }}
+                        </p>
                     </template>
                 </div>
             </section>
@@ -167,7 +204,9 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                                 question.waiting
                                     ? 'Menunggu dinilai'
                                     : question.earned !== null
-                                      ? `${formatNumber(question.earned)} / ${question.points} poin`
+                                      ? isScoredQuestionnaire
+                                          ? `Skor ${formatNumber(question.earned)} / ${question.points}`
+                                          : `${formatNumber(question.earned)} / ${question.points} poin`
                                       : 'Tidak dinilai'
                             }}
                         </span>

@@ -2,16 +2,21 @@
 /**
  * The identity a guest gives on a public quiz: the fields the teacher picked when publishing
  * (Nama Lengkap, Kelas, Email). Shown on the confirmation screen, or above a survey.
+ * Mode pewawancara: the candidate the interviewer fills the questionnaire for (name, registration
+ * number and school; only the name is required).
  */
 const name = defineModel<string>('name', { default: '' });
 const kelas = defineModel<string>('kelas', { default: '' });
 const email = defineModel<string>('email', { default: '' });
+const number = defineModel<string>('number', { default: '' });
+const school = defineModel<string>('school', { default: '' });
 
 defineProps<{
     fields: string[];
     classes: string[];
     errors: Record<string, string>;
     idPrefix: string;
+    interview?: boolean;
 }>();
 
 const inputClass = (hasError: boolean): string[] => [
@@ -23,18 +28,48 @@ const inputClass = (hasError: boolean): string[] => [
 <template>
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label v-if="fields.includes('name')" :for="`${idPrefix}-name`" class="block sm:col-span-2">
-            <span class="text-sm font-bold text-slate-800">Nama Lengkap <span class="text-red-500">*</span></span>
+            <span class="text-sm font-bold text-slate-800">{{ interview ? 'Nama Calon' : 'Nama Lengkap' }} <span class="text-red-500">*</span></span>
             <input
                 :id="`${idPrefix}-name`"
                 v-model="name"
                 type="text"
-                autocomplete="name"
+                :autocomplete="interview ? 'off' : 'name'"
                 maxlength="100"
-                placeholder="Tulis nama lengkap Anda"
+                :placeholder="interview ? 'Nama lengkap calon yang diwawancarai' : 'Tulis nama lengkap Anda'"
                 :aria-invalid="Boolean(errors.name)"
                 :class="inputClass(Boolean(errors.name))"
             />
             <span v-if="errors.name" class="mt-1 block text-xs font-semibold text-red-600">{{ errors.name }}</span>
+        </label>
+
+        <label v-if="fields.includes('number')" :for="`${idPrefix}-number`" class="block">
+            <span class="text-sm font-bold text-slate-800">No. Pendaftaran</span>
+            <input
+                :id="`${idPrefix}-number`"
+                v-model="number"
+                type="text"
+                autocomplete="off"
+                maxlength="50"
+                placeholder="Boleh dikosongkan"
+                :aria-invalid="Boolean(errors.number)"
+                :class="inputClass(Boolean(errors.number))"
+            />
+            <span v-if="errors.number" class="mt-1 block text-xs font-semibold text-red-600">{{ errors.number }}</span>
+        </label>
+
+        <label v-if="fields.includes('school')" :for="`${idPrefix}-school`" class="block">
+            <span class="text-sm font-bold text-slate-800">Asal Sekolah</span>
+            <input
+                :id="`${idPrefix}-school`"
+                v-model="school"
+                type="text"
+                autocomplete="off"
+                maxlength="150"
+                placeholder="Boleh dikosongkan"
+                :aria-invalid="Boolean(errors.school)"
+                :class="inputClass(Boolean(errors.school))"
+            />
+            <span v-if="errors.school" class="mt-1 block text-xs font-semibold text-red-600">{{ errors.school }}</span>
         </label>
 
         <label v-if="fields.includes('class')" :for="`${idPrefix}-class`" class="block">

@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\GzipResponseMiddleware;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequestClientHints;
@@ -32,7 +31,6 @@ $app = Application::configure(basePath: dirname(__DIR__))
             GzipResponseMiddleware::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
-            EnsurePasswordIsChanged::class,
             RequestClientHints::class,
         ]);
     })

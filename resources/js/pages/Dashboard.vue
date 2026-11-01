@@ -1554,6 +1554,14 @@ function closeDonationModal(): void {
                                         >
                                             {{ form.isTrashed ? 'Sampah' : form.isPublished ? 'Terbit' : 'Draf' }}
                                         </span>
+                                        <span
+                                            v-if="form.linkOnly && !form.isTrashed"
+                                            class="shrink-0 rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600"
+                                            title="Tidak tampil di Beranda siswa; hanya bisa dibuka lewat tautan"
+                                            data-testid="link-only-badge"
+                                        >
+                                            Hanya tautan
+                                        </span>
                                     </template>
                                 </div>
                             </div>

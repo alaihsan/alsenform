@@ -39,12 +39,13 @@ test('correct password must be provided to update password', function () {
         ->assertRedirect('/settings/password');
 });
 
-test('students changing the temporary password on first login continue to the home page', function () {
+test('students still flagged from before who change the temporary password continue to the home page', function () {
     $student = User::factory()->create(['role' => 'siswa', 'nis' => '2024201', 'must_change_password' => true]);
 
+    // Changing the password is no longer required: the flag sends no one to this page.
     $this->actingAs($student)
         ->get(route('dashboard'))
-        ->assertRedirect(route('password.edit'));
+        ->assertOk();
 
     $this->get(route('password.edit'))
         ->assertOk()

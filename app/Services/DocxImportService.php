@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\MediaUrl;
+use App\Support\RichText;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -11,6 +12,30 @@ use ZipArchive;
 
 class DocxImportService
 {
+    protected const WORD_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+    /**
+     * Word's highlighter colours and the editor's highlighter colour nearest to each.
+     *
+     * @var array<string, string>
+     */
+    protected const WORD_HIGHLIGHTS = [
+        'yellow' => 'yellow', 'darkYellow' => 'orange',
+        'green' => 'green', 'darkGreen' => 'green',
+        'cyan' => 'blue', 'blue' => 'blue', 'darkCyan' => 'blue', 'darkBlue' => 'blue',
+        'magenta' => 'pink', 'darkMagenta' => 'pink', 'red' => 'pink', 'darkRed' => 'pink',
+    ];
+
+    /**
+     * "Keterangan:" (the question's description) and "Pembahasan:" (its explanation), lines that
+     * may run over several lines of one paragraph.
+     */
+    protected const DESCRIPTION_LINE = '/^(?:keterangan|deskripsi)\s*:\s*(.+)$/isu';
+
+    protected const EXPLANATION_LINE = '/^pembahasan\s*:\s*(.+)$/isu';
+
+    protected const ANSWER_LINE = '/^(?:kunci\s*jawaban|jawaban|kunci|answer|key)\s*:\s*(.+)$/is';
+
     /**
      * Words accepted after "Tipe:" and the question type they stand for.
      * "benar salah" and "menjodohkan" are special forms handled separately.
@@ -162,11 +187,12 @@ class DocxImportService
                 $name = $node->getName();
 
                 if ($name === 'p') {
-                    $text = '';
-                    foreach ($node->xpath('.//w:t') as $tNode) {
-                        $text .= (string) $tNode;
+                    $rich = $this->richTextOf($node);
+                    $text = RichText::plain($rich);
+                    // The template writes the question lines in bold: bold over a whole numbered line is its style.
+                    if (preg_match('/^\d+[\.\)]/', $text)) {
+                        $rich = RichText::withoutWholeBold($rich);
                     }
-                    $text = trim($text);
 
                     $media = $this->extractMediaFromXml($node->asXML() ?: '', $relMap, $zip);
 
@@ -174,23 +200,31 @@ class DocxImportService
                         $elements[] = [
                             'type' => 'paragraph',
                             'text' => $text,
+                            'rich' => $rich,
                             'media' => $media,
                         ];
                     }
                 } elseif ($name === 'tbl') {
+                    // Cells keep their formatting; the paragraphs of a cell are its lines.
                     $rows = [];
                     foreach ($node->xpath('.//w:tr') as $tr) {
                         $rowCells = [];
                         foreach ($tr->xpath('.//w:tc') as $tc) {
-                            $cellText = '';
-                            foreach ($tc->xpath('.//w:t') as $tNode) {
-                                $cellText .= (string) $tNode;
-                            }
-                            $rowCells[] = trim($cellText);
+                            $lines = array_filter(
+                                array_map(fn (SimpleXMLElement $paragraph): string => $this->richTextOf($paragraph), $tc->xpath('.//w:p')),
+                                fn (string $line): bool => $line !== '',
+                            );
+                            $rowCells[] = RichText::normalize(implode("\n", $lines));
                         }
-                        if (! empty(array_filter($rowCells, fn ($c) => $c !== ''))) {
+                        if (! empty(array_filter($rowCells, fn ($c) => RichText::plain($c) !== ''))) {
                             $rows[] = $rowCells;
                         }
+                    }
+
+                    // A header row in bold (as the template writes it) is styled, not bold text.
+                    $headerCells = array_filter($rows[0] ?? [], fn (string $cell): bool => RichText::plain($cell) !== '');
+                    if ($headerCells !== [] && array_filter($headerCells, fn (string $cell): bool => ! RichText::isWhollyBold($cell)) === []) {
+                        $rows[0] = array_map([RichText::class, 'withoutWholeBold'], $rows[0]);
                     }
 
                     $media = $this->extractMediaFromXml($node->asXML() ?: '', $relMap, $zip);
@@ -209,6 +243,76 @@ class DocxImportService
         } catch (\Throwable $e) {
             throw new \RuntimeException('Gagal mengurai dokumen Word: '.$e->getMessage());
         }
+    }
+
+    /**
+     * The text of a paragraph with its bold, italic, underline and highlighter, trimmed. A line
+     * break (Shift+Enter) is a new line and a tab a space.
+     */
+    protected function richTextOf(SimpleXMLElement $paragraph): string
+    {
+        $runs = [];
+        foreach ($paragraph->xpath('.//w:r') ?: [] as $run) {
+            $formats = $this->formatsOf($run);
+            foreach ($run->children(self::WORD_NAMESPACE) as $child) {
+                $text = match ($child->getName()) {
+                    't' => (string) $child,
+                    'tab' => ' ',
+                    'cr' => "\n",
+                    'br' => in_array((string) $child->attributes(self::WORD_NAMESPACE)['type'], ['', 'textWrapping'], true) ? "\n" : '',
+                    default => '',
+                };
+                if ($text !== '') {
+                    $runs[] = ['text' => $text, ...$formats];
+                }
+            }
+        }
+
+        return RichText::trim(RichText::serialize($runs));
+    }
+
+    /**
+     * The formatting of a run that the editor knows.
+     *
+     * @return array{b: bool, i: bool, u: bool, mark: string|null}
+     */
+    protected function formatsOf(SimpleXMLElement $run): array
+    {
+        $properties = $run->children(self::WORD_NAMESPACE)->rPr;
+        $value = fn (string $name): ?string => isset($properties->{$name}) ? (string) $properties->{$name}->attributes(self::WORD_NAMESPACE)['val'] : null;
+        // <w:b/> is on, <w:b w:val="0"/> off. Arabic text is often made bold with the complex-script <w:bCs/> only.
+        $isOn = fn (string $name): bool => $value($name) !== null && ! in_array(strtolower((string) $value($name)), ['0', 'false', 'off'], true);
+        $isRtl = $isOn('rtl');
+
+        $mark = self::WORD_HIGHLIGHTS[(string) $value('highlight')] ?? null;
+        if ($mark === null && isset($properties->shd)) {
+            $fill = strtoupper((string) $properties->shd->attributes(self::WORD_NAMESPACE)['fill']);
+            $mark = preg_match('/^[0-9A-F]{6}$/', $fill) && $fill !== 'FFFFFF' ? $this->nearestHighlight($fill) : null;
+        }
+
+        return [
+            'b' => $isOn('b') || ($isRtl && $isOn('bCs')),
+            'i' => $isOn('i') || ($isRtl && $isOn('iCs')),
+            'u' => $value('u') !== null && ! in_array($value('u'), ['none', '0', 'false'], true),
+            'mark' => $mark,
+        ];
+    }
+
+    /**
+     * The editor's highlighter colour nearest to a shading colour (as nearestHighlight() in rich-editor.ts).
+     */
+    protected function nearestHighlight(string $hex): string
+    {
+        $channels = fn (string $color): array => array_map('hexdec', str_split($color, 2));
+        [$red, $green, $blue] = $channels($hex);
+
+        $distances = array_map(function (string $color) use ($channels, $red, $green, $blue): int {
+            [$r, $g, $b] = $channels($color);
+
+            return ($r - $red) ** 2 + ($g - $green) ** 2 + ($b - $blue) ** 2;
+        }, RichText::HIGHLIGHT_COLORS);
+
+        return (string) array_search(min($distances), $distances, true);
     }
 
     /**
@@ -274,7 +378,7 @@ class DocxImportService
         // Check if the document uses "Jawaban: [A-E]" style markers
         $hasJawabanMarker = false;
         foreach ($elements as $el) {
-            if ($el['type'] === 'paragraph' && preg_match('/^(?:kunci\s*jawaban|kunci|jawaban|answer|key)\s*:\s*(.+)$/i', $el['text'])) {
+            if ($el['type'] === 'paragraph' && preg_match(self::ANSWER_LINE, $el['text'])) {
                 $hasJawabanMarker = true;
                 break;
             }
@@ -306,6 +410,14 @@ class DocxImportService
                 $text = $el['text'];
                 $media = $el['media'];
 
+                // "Pembahasan:" right after the answer line belongs to the question it ends.
+                if ($questions !== [] && $currentLines === [] && $currentTables === [] && $currentMedia === [] && $media === []
+                    && preg_match(self::EXPLANATION_LINE, $text) && ! isset($questions[count($questions) - 1]['explanation'])) {
+                    $questions[count($questions) - 1]['explanation'] = $this->metaText($el['rich'], self::EXPLANATION_LINE);
+
+                    continue;
+                }
+
                 // Skip preliminary school header/instructions if we haven't found any questions yet
                 if (empty($questions) && empty($currentLines) && empty($currentTables) && preg_match('/^(?:yayasan|smp|sma|smk|sd|madrasah|instansi|dinas|jl\.|jalan|tlp|telepon|penilaian|ujian|asesmen|mata pelajaran|kelas|hari|tanggal|waktu|petunjuk|bacalah|tulislah|periksalah|pilihlah salah|pilihan salah)/i', $text)) {
                     continue;
@@ -316,7 +428,7 @@ class DocxImportService
                 }
 
                 // Check if this line marks the answer key for the current question
-                if (preg_match('/^(?:kunci\s*jawaban|jawaban|kunci|answer|key)\s*:\s*(.+)$/i', $text, $m)) {
+                if (preg_match(self::ANSWER_LINE, $text, $m)) {
                     $rawAnswer = trim($m[1]);
 
                     $parsed = $this->buildQuestionFromBlock($currentLines, $currentMedia, $currentTables, $rawAnswer, $nextId++, count($questions) + 1);
@@ -329,7 +441,7 @@ class DocxImportService
                     $currentTables = [];
                 } else {
                     if ($text !== '') {
-                        $currentLines[] = $text;
+                        $currentLines[] = $el['rich'];
                     }
                 }
             } elseif ($el['type'] === 'table') {
@@ -402,6 +514,12 @@ class DocxImportService
             }
         }
 
+        if (isset($meta['description'])) {
+            $question['description'] = $question['description'] !== '' ? $meta['description']."\n\n".$question['description'] : $meta['description'];
+        }
+        if (isset($meta['explanation'])) {
+            $question['explanation'] = $meta['explanation'];
+        }
         if (isset($meta['points'])) {
             $question['points'] = max(0, (int) $meta['points']);
         }
@@ -413,7 +531,8 @@ class DocxImportService
     }
 
     /**
-     * Pull the "Tipe:", "Poin:", "Wajib:" and "Skala:" lines out of a block.
+     * Pull the "Tipe:", "Poin:", "Wajib:", "Skala:", "Keterangan:" and "Pembahasan:" lines out of a
+     * block. The description and explanation keep their formatting.
      *
      * @param  list<string>  $lines
      * @return array{0: list<string>, 1: array<string, string>}
@@ -424,6 +543,8 @@ class DocxImportService
             'type' => '/^(?:tipe(?:\s+soal)?|jenis(?:\s+soal)?|type)\s*:\s*(.+)$/iu',
             'points' => '/^(?:poin|bobot|skor|points?)\s*:\s*(\d+)/iu',
             'required' => '/^(?:wajib(?:\s+diisi)?|required)\s*:\s*(.+)$/iu',
+            'description' => self::DESCRIPTION_LINE,
+            'explanation' => self::EXPLANATION_LINE,
         ];
         if ($withScale) {
             $patterns['scale'] = '/^(?:skala|rentang|scale)\s*:\s*(.+)$/iu';
@@ -433,8 +554,8 @@ class DocxImportService
         $remaining = [];
         foreach ($lines as $line) {
             foreach ($patterns as $key => $pattern) {
-                if (preg_match($pattern, trim($line), $match)) {
-                    $meta[$key] = trim($match[1]);
+                if (preg_match($pattern, trim(RichText::plain($line)), $match)) {
+                    $meta[$key] = in_array($key, ['description', 'explanation'], true) ? $this->metaText($line, $pattern) : trim($match[1]);
 
                     continue 2;
                 }
@@ -446,7 +567,20 @@ class DocxImportService
     }
 
     /**
-     * Split a block into the question text and its lettered options ("A. ...", "B) ...").
+     * The value of a "Keterangan:" or "Pembahasan:" line, with its formatting.
+     */
+    protected function metaText(string $line, string $pattern): string
+    {
+        $line = RichText::trim($line);
+        $plain = RichText::plain($line);
+        preg_match($pattern, $plain, $match);
+
+        return RichText::trim(RichText::dropPrefix($line, mb_strlen($plain) - mb_strlen($match[1] ?? '')));
+    }
+
+    /**
+     * Split a block into the question text and its lettered options ("A. ...", "B) ..."). Options
+     * after E (F, G, ...) count when they follow on in order.
      *
      * @param  list<string>  $lines
      * @return array{0: string, 1: list<string>}
@@ -456,8 +590,10 @@ class DocxImportService
         $titleParts = [];
         $options = [];
         foreach ($lines as $line) {
-            if (preg_match('/^([A-E])[\.\)]\s*(.*)$/', $line, $match) && ($options !== [] || $titleParts !== [])) {
-                $options[] = trim($match[2]);
+            $plain = RichText::plain($line);
+            if (preg_match('/^([A-Z])[\.\)]\s*(.*)$/s', $plain, $match) && ($options !== [] || $titleParts !== [])
+                && ($match[1] <= 'E' || ord($match[1]) - ord('A') === count($options))) {
+                $options[] = RichText::trim(RichText::dropPrefix($line, mb_strlen($plain) - mb_strlen($match[2])));
             } elseif ($options === []) {
                 $titleParts[] = $line;
             } else {
@@ -586,13 +722,13 @@ class DocxImportService
     {
         $rows = $table['rows'];
         $header = array_shift($rows) ?? [];
-        $columns = array_values(array_filter(array_map('trim', array_slice($header, 1)), fn ($cell) => $cell !== ''));
+        $columns = array_values(array_filter(array_map([RichText::class, 'trim'], array_slice($header, 1)), fn ($cell) => RichText::plain($cell) !== ''));
 
         $gridRows = [];
         $answer = [];
         foreach ($rows as $row) {
-            $rowLabel = trim($row[0] ?? '');
-            if ($rowLabel === '') {
+            $rowLabel = RichText::trim($row[0] ?? '');
+            if (RichText::plain($rowLabel) === '') {
                 continue;
             }
             $rowIndex = count($gridRows);
@@ -607,7 +743,7 @@ class DocxImportService
             if ($marked !== []) {
                 $answer[(string) $rowIndex] = $type === 'Tick box grid' ? $marked : $marked[0];
                 if ($type === 'Multiple-choice grid' && count($marked) > 1) {
-                    $this->warnings[] = "{$label}: baris \"{$rowLabel}\" menandai lebih dari satu kolom; hanya tanda pertama yang dipakai.";
+                    $this->warnings[] = "{$label}: baris \"".RichText::plain($rowLabel).'" menandai lebih dari satu kolom; hanya tanda pertama yang dipakai.';
                 }
             }
         }
@@ -634,8 +770,8 @@ class DocxImportService
 
         return [
             ...$this->question($id, $this->cleanTitle(implode("\n", $lines)) ?: 'Lengkapi tabel berikut:', $type, [], (object) $answer, $media),
-            'rows' => $gridRows,
-            'columns' => $columns,
+            'rows' => array_map([RichText::class, 'normalize'], $gridRows),
+            'columns' => array_map([RichText::class, 'normalize'], $columns),
         ];
     }
 
@@ -644,7 +780,7 @@ class DocxImportService
      */
     protected function isMarkedCell(string $cell): bool
     {
-        return (bool) preg_match('/^\s*(?:x|v|✓|✔|√|☑|☒|benar|1)\s*$/iu', $cell);
+        return (bool) preg_match('/^\s*(?:x|v|✓|✔|√|☑|☒|benar|1)\s*$/iu', RichText::plain($cell));
     }
 
     /**
@@ -655,7 +791,7 @@ class DocxImportService
     protected function columnIndex(array $header, string $pattern): ?int
     {
         foreach ($header as $index => $cell) {
-            if (preg_match($pattern, trim($cell))) {
+            if (preg_match($pattern, trim(RichText::plain($cell)))) {
                 return $index;
             }
         }
@@ -669,7 +805,7 @@ class DocxImportService
     protected function choiceKey(string $rawAnswer, array $options, string $label): int|string
     {
         $answer = trim($rawAnswer);
-        if (preg_match('/^([A-E])[\.\)]?$/i', $answer, $match)) {
+        if (preg_match('/^([A-Z])[\.\)]?$/i', $answer, $match)) {
             $index = ord(strtoupper($match[1])) - ord('A');
             if (isset($options[$index])) {
                 return $index;
@@ -677,7 +813,7 @@ class DocxImportService
         }
 
         foreach ($options as $index => $option) {
-            if (strcasecmp(trim($option), $answer) === 0) {
+            if (strcasecmp(trim(RichText::plain($option)), $answer) === 0) {
                 return $index;
             }
         }
@@ -694,7 +830,7 @@ class DocxImportService
     protected function checkboxKey(string $rawAnswer, array $options, string $label): array
     {
         $cleaned = (string) preg_replace('/\b(?:dan|atau|serta|and|or)\b|&/i', ' ', $rawAnswer);
-        preg_match_all('/\b([A-E])\b/i', $cleaned, $letters);
+        preg_match_all('/\b([A-Z])\b/i', $cleaned, $letters);
 
         $indices = [];
         foreach (array_unique(array_map('strtoupper', $letters[1])) as $letter) {
@@ -776,13 +912,26 @@ class DocxImportService
     }
 
     /**
-     * Remove the typed question number ("1." / "1)") from the start of the text.
+     * Remove the typed question number ("1." / "1)") from the start of the text, unless nothing
+     * else is written.
      */
     protected function cleanTitle(string $title): string
     {
-        $cleaned = trim((string) preg_replace('/^\d+[\.\)]\s*/', '', trim($title)));
+        $cleaned = $this->withoutNumber($title);
 
-        return $cleaned !== '' ? $cleaned : trim($title);
+        return RichText::plain($cleaned) !== '' ? $cleaned : RichText::trim($title);
+    }
+
+    /**
+     * The text without its typed question number, the formatting kept.
+     */
+    protected function withoutNumber(string $title): string
+    {
+        $title = RichText::trim($title);
+
+        return preg_match('/^\d+[\.\)]\s*/', RichText::plain($title), $match)
+            ? RichText::trim(RichText::dropPrefix($title, mb_strlen($match[0])))
+            : $title;
     }
 
     /**
@@ -812,10 +961,10 @@ class DocxImportService
     {
         return [
             'id' => $id,
-            'title' => $title !== '' ? $title : 'Tanpa judul',
+            'title' => RichText::plain($title) !== '' ? RichText::normalize($title) : 'Tanpa judul',
             'description' => '',
             'type' => $type,
-            'options' => array_values($options),
+            'options' => array_values(array_map([RichText::class, 'normalize'], $options)),
             'answer' => $answer,
             'required' => false,
             'points' => 1,
@@ -833,9 +982,11 @@ class DocxImportService
      */
     protected function buildGridQuestionFromTable(array $table, array $lines, array $media, string $rawAnswer, int $id, ?string $forced = null): array
     {
+        // The cells keep their formatting; what they say is read from their plain text.
         $rows = $table['rows'];
-        $title = implode("\n", $lines);
-        $cleanTitle = preg_replace('/^\d+[\.\)]\s*/', '', trim($title));
+        $plainRows = array_map(fn (array $row): array => array_map([RichText::class, 'plain'], $row), $rows);
+        $cleanTitle = $this->withoutNumber(implode("\n", $lines));
+        $plainTitle = RichText::plain($cleanTitle);
 
         // 1. Detect if this is a True/False table (Benar / Salah)
         $isTrueFalse = $forced === 'true-false';
@@ -843,10 +994,10 @@ class DocxImportService
             $isTrueFalse = false;
         } elseif (preg_match('/^[BS](\s*,\s*[BS])+/i', $rawAnswer) || preg_match('/(?:benar|salah)/i', $rawAnswer)) {
             $isTrueFalse = true;
-        } elseif (preg_match('/benar\s*(?:atau|\/)\s*salah/i', $cleanTitle) || preg_match('/true\s*(?:or|\/)\s*false/i', $cleanTitle)) {
+        } elseif (preg_match('/benar\s*(?:atau|\/)\s*salah/i', $plainTitle) || preg_match('/true\s*(?:or|\/)\s*false/i', $plainTitle)) {
             $isTrueFalse = true;
         } else {
-            foreach ($rows as $row) {
+            foreach ($plainRows as $row) {
                 foreach ($row as $cell) {
                     if (preg_match('/^benar\s*(?:\/|\s)\s*salah$/i', trim($cell)) || preg_match('/^(?:benar|salah)$/i', trim($cell))) {
                         $isTrueFalse = true;
@@ -866,8 +1017,8 @@ class DocxImportService
             if ($forced === 'true-false') {
                 // Match whole header cells, so a statement that merely contains "no" or "soal" stays a row.
                 $isHeader = isset($rows[0]) && $this->columnIndex($rows[0], '/^(?:no\.?|nomor|pernyataan|soal|benar|salah|benar\s*\/\s*salah|b\s*\/\s*s|keterangan|jawaban)$/i') !== null;
-            } elseif (isset($rows[0])) {
-                $firstRowText = implode(' ', $rows[0]);
+            } elseif (isset($plainRows[0])) {
+                $firstRowText = implode(' ', $plainRows[0]);
                 if (preg_match('/(?:no|nomor|pernyataan|soal|benar|salah)/i', $firstRowText)) {
                     $isHeader = true;
                 }
@@ -878,26 +1029,26 @@ class DocxImportService
             $gridRowCells = [];
 
             foreach ($dataRows as $rIdx => $r) {
-                if (empty(array_filter($r, fn ($c) => $c !== ''))) {
+                if (empty(array_filter($r, fn ($c) => RichText::plain($c) !== ''))) {
                     continue;
                 }
 
                 if (count($r) >= 3) {
-                    $num = trim($r[0]);
-                    $stmt = trim($r[1]);
+                    $num = trim(RichText::plain($r[0]));
+                    $stmt = RichText::trim($r[1]);
                     if ($num !== '') {
                         $rowText = (str_ends_with($num, '.') || str_ends_with($num, ')') ? $num : "$num.").' '.$stmt;
                     } else {
                         $rowText = $stmt;
                     }
                 } elseif (count($r) === 2) {
-                    $rowText = trim($r[0]);
+                    $rowText = RichText::trim($r[0]);
                 } else {
-                    $rowText = trim(implode(' ', $r));
+                    $rowText = RichText::trim(implode(' ', $r));
                 }
 
-                if ($rowText !== '') {
-                    $gridRows[] = $rowText;
+                if (RichText::plain($rowText) !== '') {
+                    $gridRows[] = RichText::normalize($rowText);
                     $gridRowCells[] = $r;
                 }
             }
@@ -936,7 +1087,7 @@ class DocxImportService
 
             return [
                 'id' => $id,
-                'title' => $cleanTitle,
+                'title' => RichText::normalize($cleanTitle),
                 'description' => '',
                 'type' => 'Multiple-choice grid',
                 'options' => [],
@@ -952,7 +1103,7 @@ class DocxImportService
         // 2. Detect if this is a Matching table (Menjodohkan / Pasangkan)
         $isMatching = $forced === 'matching'
             || preg_match('/(\d+)\s*[-:]?\s*([A-Za-z])/i', $rawAnswer)
-            || preg_match('/(?:pasangkan|jodohkan|match)/i', $cleanTitle);
+            || preg_match('/(?:pasangkan|jodohkan|match)/i', $plainTitle);
 
         if ($isMatching) {
             if ($cleanTitle === '') {
@@ -963,9 +1114,9 @@ class DocxImportService
             $isHeader = false;
             if ($forced === 'matching') {
                 // Rows of a "Tipe: Menjodohkan" table start with their number, so a first row without one is the header.
-                $isHeader = isset($rows[0]) && ! preg_match('/^\d+[\.\)]?$/', trim($rows[0][0] ?? ''));
-            } elseif (isset($rows[0])) {
-                $firstRowText = implode(' ', $rows[0]);
+                $isHeader = isset($plainRows[0]) && ! preg_match('/^\d+[\.\)]?$/', trim($plainRows[0][0] ?? ''));
+            } elseif (isset($plainRows[0])) {
+                $firstRowText = implode(' ', $plainRows[0]);
                 if (preg_match('/(?:no|nomor|kiri|kanan|pilar|negara|bentuk|aspek)/i', $firstRowText)) {
                     $isHeader = true;
                 }
@@ -976,22 +1127,22 @@ class DocxImportService
             $gridCols = [];
 
             foreach ($dataRows as $rIdx => $r) {
-                if (empty(array_filter($r, fn ($c) => $c !== ''))) {
+                if (empty(array_filter($r, fn ($c) => RichText::plain($c) !== ''))) {
                     continue;
                 }
 
-                $num = trim($r[0] ?? (string) ($rIdx + 1));
-                $left = trim($r[1] ?? '');
-                $right = trim($r[2] ?? '');
+                $num = trim(RichText::plain($r[0] ?? (string) ($rIdx + 1)));
+                $left = RichText::trim($r[1] ?? '');
+                $right = RichText::trim($r[2] ?? '');
 
                 if ($num !== '') {
-                    $gridRows[] = (str_ends_with($num, '.') || str_ends_with($num, ')') ? $num : "$num.").' '.$left;
+                    $gridRows[] = RichText::normalize((str_ends_with($num, '.') || str_ends_with($num, ')') ? $num : "$num.").' '.$left);
                 } else {
-                    $gridRows[] = $left;
+                    $gridRows[] = RichText::normalize($left);
                 }
 
                 $letter = chr(ord('A') + $rIdx);
-                $gridCols[] = "$letter. $right";
+                $gridCols[] = RichText::normalize("$letter. $right");
             }
 
             // Parse matching answer: e.g. "1B, 2C, 3A, dan 4D"
@@ -1007,7 +1158,7 @@ class DocxImportService
 
             return [
                 'id' => $id,
-                'title' => $cleanTitle,
+                'title' => RichText::normalize($cleanTitle),
                 'description' => '',
                 'type' => 'Multiple-choice grid',
                 'options' => [],
@@ -1030,7 +1181,7 @@ class DocxImportService
 
         return [
             'id' => $id,
-            'title' => $cleanTitle !== '' ? $cleanTitle : 'Perhatikan tabel berikut:',
+            'title' => $plainTitle !== '' ? RichText::normalize($cleanTitle) : 'Perhatikan tabel berikut:',
             'description' => trim($tableMd),
             'type' => 'Short answer',
             'options' => [],
@@ -1057,17 +1208,18 @@ class DocxImportService
         foreach ($elements as $el) {
             if ($el['type'] === 'paragraph') {
                 $text = $el['text'];
+                $rich = $el['rich'];
                 $media = $el['media'];
 
                 // Check if question number: e.g. "1. ..." or "1) ..."
-                if (preg_match('/^\d+[\.\)]\s*(.*)$/i', $text, $matches)) {
+                if (preg_match('/^\d+[\.\)]\s*(.*)$/is', $text, $matches)) {
                     if ($currentQuestion) {
                         $questions[] = $this->finalizeNumberedQuestion($currentQuestion, $currentTables);
                         $currentTables = [];
                     }
                     $currentQuestion = [
                         'id' => $nextId++,
-                        'title' => trim($matches[1]) ?: $text,
+                        'title' => trim($matches[1]) !== '' ? $this->cleanTitle($rich) : $rich,
                         'description' => '',
                         'type' => 'Multiple choice',
                         'options' => [],
@@ -1079,22 +1231,22 @@ class DocxImportService
                     ];
                 }
                 // Check if option: e.g. "A. ..." or "B) ..."
-                elseif (preg_match('/^([A-E])[\.\)]\s*(.*)$/i', $text, $matches)) {
+                elseif (preg_match('/^([A-E])[\.\)]\s*(.*)$/is', $text, $matches)) {
                     if ($currentQuestion) {
-                        $currentQuestion['options'][] = trim($matches[2]);
+                        $currentQuestion['options'][] = RichText::normalize(RichText::trim(RichText::dropPrefix($rich, mb_strlen($text) - mb_strlen($matches[2]))));
                         if (! empty($media)) {
                             $currentQuestion['media'] = array_merge($currentQuestion['media'], $media);
                         }
                     }
                 }
                 // Check if answer key: e.g. "Jawaban: B"
-                elseif (preg_match('/^(?:kunci\s*jawaban|jawaban|kunci|answer|key)\s*:\s*(.*)$/i', $text, $matches)) {
+                elseif (preg_match('/^(?:kunci\s*jawaban|jawaban|kunci|answer|key)\s*:\s*(.*)$/is', $text, $matches)) {
                     if ($currentQuestion) {
                         $currentQuestion['raw_answer'] = trim($matches[1]);
                     }
                 } else {
                     if ($currentQuestion && empty($currentQuestion['options'])) {
-                        $currentQuestion['title'] .= "\n".$text;
+                        $currentQuestion['title'] = RichText::normalize($currentQuestion['title']."\n".$rich);
                         if (! empty($media)) {
                             $currentQuestion['media'] = array_merge($currentQuestion['media'], $media);
                         }
@@ -1138,7 +1290,7 @@ class DocxImportService
             } else {
                 $foundIndex = -1;
                 foreach ($q['options'] as $idx => $opt) {
-                    if (strcasecmp(trim($opt), $raw) === 0) {
+                    if (strcasecmp(trim(RichText::plain($opt)), $raw) === 0) {
                         $foundIndex = $idx;
                         break;
                     }

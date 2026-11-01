@@ -94,6 +94,26 @@ export function stripRichFormatting(text?: string | null): string {
     return text ? String(text).replace(FORMAT_TAG_REGEX, '') : '';
 }
 
+/** How many characters students read, the formatting not counted (as App\Rules\MaxVisibleCharacters counts). */
+export function visibleLength(text?: string | null): number {
+    return [...stripRichFormatting(text)].length;
+}
+
+/**
+ * The start of a numbered line of stored text: its formatting tags, a number ("1." or "1)") and a
+ * space. Up to three digits, so a line that begins with a year is not taken for a list.
+ */
+const NUMBERED_LINE = /^((?:<\/?(?:b|i|u)>|<mark data-color="[a-z]+">|<\/mark>)*)(\d{1,3})([.)]) /;
+
+export type NumberedLine = { prefix: string; number: number; delimiter: string; length: number };
+
+/** The number of a line of stored text, or null when it is not numbered. */
+export function numberedLine(line: string): NumberedLine | null {
+    const match = NUMBERED_LINE.exec(line);
+
+    return match ? { prefix: match[1], number: Number(match[2]), delimiter: match[3], length: match[0].length } : null;
+}
+
 /** Whether the text has bold, italic, underline or highlighter formatting. */
 export function hasRichFormatting(text?: string | null): boolean {
     return !!text && new RegExp(FORMAT_TAG_REGEX.source).test(String(text));
@@ -199,16 +219,99 @@ function formatText(text: string): string {
     return html;
 }
 
+/** Keeps the list of open tags up to date with one more tag. */
+function trackTag(open: string[], tag: string): void {
+    if (!tag.startsWith('</')) {
+        open.push(tag);
+
+        return;
+    }
+    const at = open.map(tagName).lastIndexOf(tagName(tag));
+    if (at >= 0) {
+        open.splice(at, 1);
+    }
+}
+
+const closeTags = (open: string[]): string =>
+    [...open]
+        .reverse()
+        .map((tag) => `</${tagName(tag)}>`)
+        .join('');
+
+/** The lines of stored text, each closing the formatting it leaves open and the next opening it again. */
+function balancedLines(text: string): string[] {
+    const lines = [''];
+    const open: string[] = [];
+    splitFormatting(text).forEach((part, index) => {
+        if (index % 2 === 1) {
+            lines[lines.length - 1] += part;
+            trackTag(open, part);
+
+            return;
+        }
+        part.split('\n').forEach((piece, at) => {
+            if (at > 0) {
+                lines[lines.length - 1] += closeTags(open);
+                lines.push(open.join(''));
+            }
+            lines[lines.length - 1] += piece;
+        });
+    });
+    lines[lines.length - 1] += closeTags(open);
+
+    return lines;
+}
+
+/** A formula over more than one line, which lines cannot be taken apart around. */
+const hasFormulaOverLines = (lines: string[]): boolean =>
+    lines.some(
+        (line) =>
+            (line.match(/\$\$/g)?.length ?? 0) % 2 === 1 ||
+            line.includes('\\[') !== line.includes('\\]') ||
+            line.includes('\\(') !== line.includes('\\)'),
+    );
+
+/**
+ * Text with numbered lines ("1. …", "2) …") as a list: the numbers in a column of their own, and a
+ * line too long for the width continuing under its text rather than under its number.
+ */
+function formatWithLists(lines: string[]): string {
+    const items = lines.map(numberedLine);
+    const digits = Math.max(...items.map((item) => (item ? String(item.number).length : 1)));
+
+    return lines
+        .map((line, index) => {
+            const item = items[index];
+            if (!item) {
+                return formatRichContent(line) + (index < lines.length - 1 ? '\n' : '');
+            }
+            // The number is plain: formatting carried over from the line above is the text's, not the number's.
+            return (
+                `<span class="rich-list-item"><span class="rich-list-number" style="min-width: ${digits + 0.6}ch">${item.number}${item.delimiter}</span>` +
+                `<span class="rich-list-text">${formatRichContent(item.prefix + line.slice(item.length))}</span></span>`
+            );
+        })
+        .join('');
+}
+
 /**
  * Parses and formats text containing:
  * 1. LaTeX math formulas ($...$, $$...$$, \(...\), \[...\])
  * 2. Arabic Quran text and verses (with proper Amiri Quran / Madinah font & RTL)
  * 3. Standard text and existing HTML tags.
+ * With `lists`, numbered lines show as a list (see formatWithLists).
  */
-export function formatRichContent(rawContent?: string | null): string {
+export function formatRichContent(rawContent?: string | null, options: { lists?: boolean } = {}): string {
     if (!rawContent) return '';
 
     const content = String(rawContent);
+
+    if (options.lists) {
+        const lines = balancedLines(content);
+        if (lines.some((line) => numberedLine(line)) && !hasFormulaOverLines(lines)) {
+            return formatWithLists(lines);
+        }
+    }
 
     // Regex to detect:
     // 1. $$ ... $$ (display math)

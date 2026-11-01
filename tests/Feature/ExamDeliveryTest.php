@@ -3,6 +3,7 @@
 use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Models\User;
 use App\Services\ExamDelivery;
 use App\Support\QuizFormPayloads;
 
@@ -56,4 +57,47 @@ test('an exam nobody took has no figures yet', function () {
         'firstTry' => null,
         'errorsPer100' => null,
     ]);
+});
+
+test('the errors are those the students met, not those of the teachers editing the exam', function () {
+    $teacher = User::factory()->create(['role' => 'guru']);
+    $collaborator = User::factory()->create(['role' => 'guru']);
+    $student = User::factory()->create(['role' => 'siswa', 'name' => 'Ani', 'kelas' => '7A']);
+    $exam = QuizForm::factory()->for($teacher)->create(['published_at' => now(), 'slug' => 'ujian-ipa']);
+    $exam->collaborators()->attach($collaborator->id);
+    startedAttempt($exam, $student);
+
+    // Saving the exam failed twice for the teacher and once for a collaborator: not the students'.
+    ActivityLog::factory()->count(2)->create(['event' => ActivityLog::SERVER_ERROR, 'quiz_form_id' => $exam->id, 'user_id' => $teacher->id, 'meta' => ['path' => '/forms/'.$exam->id, 'method' => 'PATCH', 'status' => 500, 'reference' => 'ERR-AAAAAA']]);
+    ActivityLog::factory()->create(['event' => ActivityLog::SERVER_ERROR, 'quiz_form_id' => $exam->id, 'user_id' => $collaborator->id, 'meta' => ['path' => '/forms/'.$exam->id, 'method' => 'PATCH', 'status' => 500]]);
+    // The exam page itself counts, also for the teacher trying it (or interviewing).
+    ActivityLog::factory()->create(['event' => ActivityLog::PAGE_FAILED, 'quiz_form_id' => $exam->id, 'user_id' => $teacher->id, 'meta' => ['code' => 'FF-302', 'path' => '/forms/ujian-ipa']]);
+    ActivityLog::factory()->create([
+        'event' => ActivityLog::PAGE_FAILED,
+        'quiz_form_id' => $exam->id,
+        'user_id' => $student->id,
+        'device' => 'iPhone',
+        'os' => 'iOS 18.7',
+        'browser' => 'Safari 27.0.1',
+        'meta' => ['code' => 'FF-302', 'path' => '/forms/ujian-ipa', 'message' => "null is not an object (evaluating 'window.history.state.scrollRegions')"],
+        'created_at' => now()->addMinute(),
+    ]);
+
+    $delivery = app(ExamDelivery::class);
+
+    expect($delivery->of($exam))->toMatchArray(['errors' => 2, 'errorsPer100' => 200.0])
+        ->and($delivery->recentErrors($exam))->toHaveCount(2)
+        ->and($delivery->recentErrors($exam)[0])->toMatchArray([
+            'kind' => 'Halaman gagal dimuat',
+            'person' => 'Ani',
+            'group' => '7A',
+            'device' => 'iPhone · iOS 18.7 · Safari 27.0.1',
+            'cause' => 'Halaman gagal ditampilkan (FF-302)',
+            'detail' => "null is not an object (evaluating 'window.history.state.scrollRegions')",
+        ]);
+
+    // The results page lists them, with the way to Laporan for everything else of the exam.
+    $payload = app(QuizFormPayloads::class)->responses($exam)['delivery'];
+    expect($payload['recentErrors'])->toHaveCount(2)
+        ->and($payload['reportUrl'])->toContain('form='.$exam->id);
 });

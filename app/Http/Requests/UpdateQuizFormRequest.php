@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Models\QuizForm;
+use App\Rules\MaxVisibleCharacters;
 use App\Support\Addon;
 use App\Support\FormDesign;
+use App\Support\QuizScoring;
 use App\Support\RespondentIdentity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -35,7 +37,8 @@ class UpdateQuizFormRequest extends FormRequest
 
         return [
             'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string', 'max:1000'],
+            // Its formatting tags not counted; the whole stored text still fits the column.
+            'description' => ['nullable', 'string', 'max:20000', new MaxVisibleCharacters(QuizForm::DESCRIPTION_MAX_CHARACTERS)],
             'slug' => [
                 'required',
                 'string',
@@ -64,12 +67,22 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.branching' => ['nullable', 'boolean'],
             'questions.*.optionGoTo' => ['nullable', 'array'],
             'questions.*.optionGoTo.*' => ['nullable'],
+            // Angket berskor: the score of each option, or of each column of a grid (see QuizScoring).
+            'questions.*.optionScores' => ['nullable', 'array'],
+            'questions.*.optionScores.*' => ['nullable', 'integer', 'min:0', 'max:'.QuizScoring::MAX_OPTION_SCORE],
+            'questions.*.columnScores' => ['nullable', 'array'],
+            'questions.*.columnScores.*' => ['nullable', 'integer', 'min:0', 'max:'.QuizScoring::MAX_OPTION_SCORE],
             'settings' => ['required', 'array'],
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],
             'settings.shuffleQuestions' => ['boolean'],
             'settings.shuffleOptions' => ['nullable', 'boolean'],
             'settings.isQuiz' => ['nullable', 'boolean'],
+            'settings.optionScoring' => ['nullable', 'boolean'],
+            // Mode pewawancara: the questionnaire is filled for one candidate after another.
+            'settings.interviewMode' => ['nullable', 'boolean'],
+            // Off: a form open to everyone is not on the students' Beranda, only opened by its link.
+            'settings.listedForStudents' => ['nullable', 'boolean'],
             'settings.emailCollectionMode' => ['nullable', 'string', Rule::in(['none', 'verified', 'responder'])],
             'settings.sendResponseCopy' => ['nullable', 'string', Rule::in(['off', 'request', 'always'])],
             'settings.allowResponseEditing' => ['nullable', 'boolean'],
@@ -131,6 +144,7 @@ class UpdateQuizFormRequest extends FormRequest
         return [
             'slug.unique' => 'Tautan sudah digunakan',
             'slug.alpha_dash' => 'Tautan hanya boleh berisi huruf, angka, tanda hubung, dan garis bawah.',
+            'description.max' => 'Deskripsi terlalu panjang.',
         ];
     }
 }

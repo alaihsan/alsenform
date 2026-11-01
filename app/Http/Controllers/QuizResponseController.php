@@ -177,9 +177,11 @@ class QuizResponseController extends Controller
                 'design' => $quizForm->design(),
                 'submitUrl' => route('forms.responses.store', ['quizForm' => $quizForm->slug]),
                 'startUrl' => route('forms.responses.start', ['quizForm' => $quizForm->slug]),
-                // Guests say who they are on the confirmation screen; accounts identify themselves.
-                'identityFields' => $user ? [] : app(RespondentIdentity::class)->fields($quizForm),
+                // Guests say who they are on the confirmation screen; accounts identify themselves,
+                // except an interviewer, who names the candidate (Mode pewawancara).
+                'identityFields' => app(RespondentIdentity::class)->asksIdentityOf($quizForm, $user) ? app(RespondentIdentity::class)->fields($quizForm) : [],
                 'respondentClasses' => RespondentIdentity::CLASSES,
+                'isInterview' => $quizForm->isInterview(),
                 // Token Ujian add-on: the token from the proctor is typed on the confirmation screen.
                 'requiresExamToken' => $this->requiresExamToken($quizForm, $user),
                 'resultsUrl' => route('forms.results', ['quizForm' => $quizForm->slug]),
@@ -199,6 +201,8 @@ class QuizResponseController extends Controller
                 'respondent_identifier' => $quizSession->respondent_identifier,
                 'respondent_name' => $quizSession->respondent_name,
                 'respondent_class' => $quizSession->respondent_class,
+                'respondent_number' => $quizSession->respondent_number,
+                'respondent_school' => $quizSession->respondent_school,
                 'respondent_email' => $quizSession->respondent_email,
                 'started_at' => $quizSession->started_at?->toISOString(),
                 'expires_at' => $quizSession->expires_at?->toISOString(),
@@ -264,8 +268,8 @@ class QuizResponseController extends Controller
             // The questions are fixed now, with the settings of the moment the student starts.
             $examLayout->ensure($quizForm, $session);
 
-            // Guests give their name, class and email before the timer starts; they cannot be
-            // changed afterwards. (A retry of a started exam keeps what was given.)
+            // Guests give their name, class and email before the timer starts, and an interviewer
+            // the candidate's; they cannot be changed afterwards. (A retry keeps what was given.)
             $identity = app(RespondentIdentity::class);
             $identityInput = $request->validate($identity->rules($quizForm, $request->user(), $session), $identity->messages());
             $timeLimitMinutes = $this->timeLimitMinutes($quizForm);
@@ -278,7 +282,7 @@ class QuizResponseController extends Controller
                     'started_at' => $now,
                     // The time limit, but no later than the closing time of the schedule.
                     'expires_at' => $quizForm->attemptExpiresAt($now, $timeLimitMinutes),
-                    ...($request->user() ? [] : $identity->fromInput($quizForm, $identityInput, $session)),
+                    ...($identity->asksIdentityOf($quizForm, $request->user()) ? $identity->fromInput($quizForm, $identityInput, $session) : []),
                 ]);
 
             $session->refresh();
@@ -297,6 +301,8 @@ class QuizResponseController extends Controller
                 'server_time' => now()->toISOString(),
                 'respondent_name' => $session->respondent_name,
                 'respondent_class' => $session->respondent_class,
+                'respondent_number' => $session->respondent_number,
+                'respondent_school' => $session->respondent_school,
                 'respondent_email' => $session->respondent_email,
             ],
         ]);
@@ -404,11 +410,12 @@ class QuizResponseController extends Controller
         // Calculate score on the server
         $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
 
-        // A guest's identity: what the exam session locked at the start, or (a survey that opens
-        // without a confirmation screen) what is sent now.
-        $identity = $user
-            ? ['respondent_name' => null, 'respondent_class' => null, 'respondent_email' => null]
-            : app(RespondentIdentity::class)->fromInput($quizForm, $validated, $session);
+        // A guest's identity, or the candidate an interviewer names: what the exam session locked
+        // at the start, or (a survey that opens without a confirmation screen) what is sent now.
+        $isInterview = $quizForm->isInterview();
+        $identity = app(RespondentIdentity::class)->asksIdentityOf($quizForm, $user)
+            ? app(RespondentIdentity::class)->fromInput($quizForm, $validated, $session)
+            : ['respondent_name' => null, 'respondent_class' => null, 'respondent_email' => null, 'respondent_number' => null, 'respondent_school' => null];
 
         $response = QuizResponse::query()->create([
             'quiz_form_id' => $quizForm->id,
@@ -417,7 +424,11 @@ class QuizResponseController extends Controller
             'respondent_identifier' => $respondentIdentifier,
             'respondent_name' => $identity['respondent_name'],
             'respondent_class' => $identity['respondent_class'],
-            'email' => $identity['respondent_email'] ?? $validated['email'] ?? $user?->email,
+            'respondent_number' => $identity['respondent_number'],
+            'respondent_school' => $identity['respondent_school'],
+            // Filled by an interviewer for the candidate named: the candidate's response.
+            'filled_for_respondent' => $isInterview,
+            'email' => $identity['respondent_email'] ?? $validated['email'] ?? ($isInterview ? null : $user?->email),
             'answers' => $answers,
             'doubtful_question_ids' => $doubts,
             'question_ids' => $givenIds,
@@ -521,9 +532,9 @@ class QuizResponseController extends Controller
     protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl, ?array $layout = null): array
     {
         return array_values(array_map(function ($question) {
-            // The key and the pembahasan stay on the server while the exam runs.
+            // The key, the score of each choice and the pembahasan stay on the server while the exam runs.
             if (is_array($question)) {
-                unset($question['answer'], $question['explanation']);
+                unset($question['answer'], $question['explanation'], $question['optionScores'], $question['columnScores']);
             }
 
             return $question;

@@ -102,7 +102,6 @@ class StudentController extends Controller
             'password' => Hash::make($defaultPassword),
             'role' => 'siswa',
             'is_admin' => false,
-            'must_change_password' => true,
         ]);
 
         return back()->with('success', "Siswa '{$validated['name']}' berhasil ditambahkan dengan password default 6 digit NIS: {$defaultPassword}.");
@@ -165,7 +164,6 @@ class StudentController extends Controller
         $defaultPassword = User::defaultPasswordForNis($student->nis);
         $student->update([
             'password' => Hash::make($defaultPassword),
-            'must_change_password' => true,
         ]);
 
         return back()->with('success', "Password siswa '{$student->name}' berhasil direset ke password default: {$defaultPassword}.");

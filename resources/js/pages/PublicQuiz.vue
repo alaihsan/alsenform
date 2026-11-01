@@ -34,6 +34,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
+import CollapsibleContent from '@/components/CollapsibleContent.vue';
 import RichContent from '@/components/RichContent.vue';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { deviceHintsHeader } from '@/lib/deviceHints';
@@ -77,6 +78,8 @@ const props = defineProps<{
         questions: Question[];
         settings: {
             isQuiz?: boolean;
+            /** Angket berskor: no points shown per question (the scores stay on the server). */
+            optionScoring?: boolean;
             collectEmail: boolean;
             showProgress: boolean;
             shuffleQuestions: boolean;
@@ -104,6 +107,8 @@ const props = defineProps<{
         /** What a guest fills in before starting (name, class, email); empty for accounts. */
         identityFields?: string[];
         respondentClasses?: string[];
+        /** Mode pewawancara: the interviewer names the candidate (name, registration number, school). */
+        isInterview?: boolean;
         /** Token Ujian add-on: the token shown by the proctor is needed to start. */
         requiresExamToken?: boolean;
         /** The student's results, once the teacher shows them. */
@@ -126,6 +131,8 @@ const props = defineProps<{
         respondent_identifier?: string;
         respondent_name?: string | null;
         respondent_class?: string | null;
+        respondent_number?: string | null;
+        respondent_school?: string | null;
         respondent_email?: string | null;
         started_at?: string | null;
         expires_at?: string | null;
@@ -291,9 +298,17 @@ const draftIdentityKey = `alsen_draft_identity_${props.quizForm.id}`;
  */
 const identityFields = computed<string[]>(() => props.quizForm.identityFields ?? []);
 const asksIdentity = computed<boolean>(() => identityFields.value.length > 0);
-const identity = reactive({ name: props.session?.respondent_name ?? '', kelas: props.session?.respondent_class ?? '' });
+const identity = reactive({
+    name: props.session?.respondent_name ?? '',
+    kelas: props.session?.respondent_class ?? '',
+    number: props.session?.respondent_number ?? '',
+    school: props.session?.respondent_school ?? '',
+});
+const isInterview = computed<boolean>(() => Boolean(props.quizForm.isInterview));
 const identityErrors = ref<Record<string, string>>({});
-const identityLocked = ref<boolean>(Boolean(props.session?.respondent_name || props.session?.respondent_class || props.session?.respondent_email));
+const identityLocked = ref<boolean>(
+    Boolean(props.session?.respondent_name || props.session?.respondent_class || props.session?.respondent_number || props.session?.respondent_email),
+);
 const identityEditable = computed<boolean>(() => asksIdentity.value && !identityLocked.value);
 
 if (props.session?.respondent_email) {
@@ -303,6 +318,8 @@ if (props.session?.respondent_email) {
         const saved = JSON.parse(localStorage.getItem(draftIdentityKey) || 'null');
         identity.name = identity.name || saved?.name || '';
         identity.kelas = identity.kelas || saved?.kelas || '';
+        identity.number = identity.number || saved?.number || '';
+        identity.school = identity.school || saved?.school || '';
         email.value = email.value || localStorage.getItem(draftEmailKey) || '';
     } catch {
         // ignore storage access error
@@ -320,7 +337,13 @@ watch(identity, (value) => {
 });
 
 const identitySummary = computed<string>(() =>
-    [identity.name.trim(), identity.kelas ? `Kelas ${identity.kelas}` : '', identityFields.value.includes('email') ? email.value.trim() : '']
+    [
+        identity.name.trim(),
+        identity.kelas ? `Kelas ${identity.kelas}` : '',
+        identity.number.trim() ? `No. ${identity.number.trim()}` : '',
+        identity.school.trim(),
+        identityFields.value.includes('email') ? email.value.trim() : '',
+    ]
         .filter((part) => part)
         .join(' · '),
 );
@@ -354,7 +377,13 @@ const validateIdentity = (): boolean => {
 
 /** Server validation errors of the identity fields; true when there were any. */
 const applyIdentityErrors = (errors?: Record<string, string[] | string>): boolean => {
-    const keys: Record<string, string> = { respondent_name: 'name', respondent_class: 'kelas', email: 'email' };
+    const keys: Record<string, string> = {
+        respondent_name: 'name',
+        respondent_class: 'kelas',
+        respondent_number: 'number',
+        respondent_school: 'school',
+        email: 'email',
+    };
     const mapped: Record<string, string> = {};
     for (const [key, messages] of Object.entries(errors ?? {})) {
         if (keys[key]) {
@@ -368,6 +397,8 @@ const applyIdentityErrors = (errors?: Record<string, string[] | string>): boolea
 const identityPayload = () => ({
     respondent_name: identity.name.trim() || null,
     respondent_class: identity.kelas || null,
+    respondent_number: identity.number.trim() || null,
+    respondent_school: identity.school.trim() || null,
 });
 let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -1110,6 +1141,8 @@ const startExam = async () => {
                 // As stored (and tidied) by the server, which locks it from now on.
                 identity.name = response.data.session.respondent_name ?? identity.name;
                 identity.kelas = response.data.session.respondent_class ?? identity.kelas;
+                identity.number = response.data.session.respondent_number ?? identity.number;
+                identity.school = response.data.session.respondent_school ?? identity.school;
                 email.value = response.data.session.respondent_email ?? email.value;
                 identityLocked.value = true;
             }
@@ -1182,7 +1215,10 @@ const examDurationLabel = computed<string>(() => {
 });
 
 /* How many times the student may take the quiz, and which attempt this is. */
-const maxAttempts = computed<number | null>(() => props.attempts?.max ?? (props.quizForm.settings.limitOneResponse ? 1 : null));
+// Mode pewawancara has no limit: one questionnaire for every candidate.
+const maxAttempts = computed<number | null>(() =>
+    isInterview.value ? null : (props.attempts?.max ?? (props.quizForm.settings.limitOneResponse ? 1 : null)),
+);
 const attemptNumber = computed<number>(() => (props.attempts?.used ?? 0) + 1);
 // After handing this attempt in: the attempts still left (null: no limit).
 const attemptsLeftAfterThis = computed<number | null>(() => (maxAttempts.value === null ? null : Math.max(0, maxAttempts.value - attemptNumber.value)));
@@ -2362,12 +2398,18 @@ const submitAnotherResponse = () => {
                     <ListChecks class="h-4 w-4" /> Lihat Hasil
                 </a>
                 <button
-                    v-if="(quizForm.settings.showSubmitAnotherResponse ?? true) && attemptsLeftAfterThis !== 0"
+                    v-if="isInterview || ((quizForm.settings.showSubmitAnotherResponse ?? true) && attemptsLeftAfterThis !== 0)"
                     type="button"
                     class="mt-6 rounded-2xl border border-slate-300 px-5 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
                     @click="submitAnotherResponse"
                 >
-                    {{ attemptsLeftAfterThis === null ? 'Kirim jawaban lagi' : `Kerjakan lagi (sisa ${attemptsLeftAfterThis} kesempatan)` }}
+                    {{
+                        isInterview
+                            ? 'Isi untuk calon berikutnya'
+                            : attemptsLeftAfterThis === null
+                              ? 'Kirim jawaban lagi'
+                              : `Kerjakan lagi (sisa ${attemptsLeftAfterThis} kesempatan)`
+                    }}
                 </button>
                 <p v-else-if="maxAttempts !== null && maxAttempts > 1" class="mt-4 text-sm font-semibold text-slate-500">
                     Semua {{ maxAttempts }} kesempatan mengerjakan sudah dipakai.
@@ -2417,13 +2459,15 @@ const submitAnotherResponse = () => {
                             </span>
                         </div>
                     </div>
-                    <RichContent
-                        v-if="quizForm.description && (!isPaginated || currentPage === 1)"
-                        :content="quizForm.description"
-                        as="p"
-                        class="af-description mt-3 text-slate-500"
-                        :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
-                    />
+                    <CollapsibleContent v-if="quizForm.description && (!isPaginated || currentPage === 1)" class="mt-3" data-testid="form-description">
+                        <RichContent
+                            :content="quizForm.description"
+                            lists
+                            as="p"
+                            class="af-description text-slate-500"
+                            :style="{ fontFamily: quizForm.settings.answerFont ?? 'inherit' }"
+                        />
+                    </CollapsibleContent>
                 </div>
             </section>
 
@@ -2433,7 +2477,9 @@ const submitAnotherResponse = () => {
                 class="mx-auto mt-4 flex max-w-3xl items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 shadow-sm"
             >
                 <UserRound class="h-4 w-4 shrink-0 text-indigo-600" />
-                <span class="min-w-0 truncate">Peserta: <strong class="text-slate-900">{{ identitySummary }}</strong></span>
+                <span class="min-w-0 truncate"
+                    >{{ isInterview ? 'Calon' : 'Peserta' }}: <strong class="text-slate-900">{{ identitySummary }}</strong></span
+                >
             </div>
             <section
                 v-if="hasExamStarted && identityEditable && (!isPaginated || currentPage === 1)"
@@ -2442,13 +2488,18 @@ const submitAnotherResponse = () => {
             >
                 <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">
                     <UserRound class="h-5 w-5 text-indigo-600" />
-                    Identitas Peserta
+                    {{ isInterview ? 'Data Calon' : 'Identitas Peserta' }}
                 </h2>
-                <p class="mt-1 text-sm text-slate-500">Isi sebelum mengirim jawaban.</p>
+                <p class="mt-1 text-sm text-slate-500">
+                    {{ isInterview ? 'Tulis data calon yang diwawancarai sebelum mengirim.' : 'Isi sebelum mengirim jawaban.' }}
+                </p>
                 <RespondentIdentityFields
                     v-model:name="identity.name"
                     v-model:kelas="identity.kelas"
                     v-model:email="email"
+                    v-model:number="identity.number"
+                    v-model:school="identity.school"
+                    :interview="isInterview"
                     :fields="identityFields"
                     :classes="quizForm.respondentClasses ?? []"
                     :errors="identityErrors"
@@ -2514,7 +2565,7 @@ const submitAnotherResponse = () => {
                             Soal {{ getQuestionNumber(question.id) }}
                         </span>
                         <span
-                            v-if="quizForm.settings.isQuiz !== false && question.points"
+                            v-if="quizForm.settings.isQuiz !== false && !quizForm.settings.optionScoring && question.points"
                             class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
                         >
                             {{ question.points }} Poin
@@ -3121,12 +3172,9 @@ const submitAnotherResponse = () => {
                 >
                     <RichContent :content="quizForm.title" />
                 </h1>
-                <RichContent
-                    v-if="quizForm.description"
-                    :content="quizForm.description"
-                    as="p"
-                    class="mt-2 text-sm text-slate-500"
-                />
+                <CollapsibleContent v-if="quizForm.description" :collapsed-height="100" class="mt-2">
+                    <RichContent :content="quizForm.description" as="p" lists class="text-sm text-slate-500" />
+                </CollapsibleContent>
 
                 <div class="mt-5 grid grid-cols-2 gap-3">
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -3162,13 +3210,22 @@ const submitAnotherResponse = () => {
                 <div v-if="identityEditable" class="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
                     <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
                         <UserRound class="h-4 w-4" />
-                        Identitas Peserta
+                        {{ isInterview ? 'Data Calon yang Diwawancarai' : 'Identitas Peserta' }}
                     </h2>
-                    <p class="mt-1 text-xs text-slate-500">Isi dengan benar. Data ini tidak dapat diubah setelah ujian dimulai.</p>
+                    <p class="mt-1 text-xs text-slate-500">
+                        {{
+                            isInterview
+                                ? 'Satu isian untuk satu calon. Data ini tidak dapat diubah setelah wawancara dimulai.'
+                                : 'Isi dengan benar. Data ini tidak dapat diubah setelah ujian dimulai.'
+                        }}
+                    </p>
                     <RespondentIdentityFields
                         v-model:name="identity.name"
                         v-model:kelas="identity.kelas"
                         v-model:email="email"
+                        v-model:number="identity.number"
+                        v-model:school="identity.school"
+                        :interview="isInterview"
                         :fields="identityFields"
                         :classes="quizForm.respondentClasses ?? []"
                         :errors="identityErrors"

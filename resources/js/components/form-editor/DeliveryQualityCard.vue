@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { ExamDelivery } from '@/types/quiz';
-import { Gauge } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { ChevronDown, ExternalLink, Gauge } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 /*
  * Pengiriman Jawaban: whether the answers of this exam got to the server, in three figures that
- * tell what to improve (the Wi-Fi, the server, or the devices).
+ * tell what to improve (the Wi-Fi, the server, or the devices), and the errors themselves.
  */
 const props = defineProps<{
     delivery: ExamDelivery;
@@ -55,9 +55,12 @@ const figures = computed(() => [
         value: props.delivery.errorsPer100 === null ? '–' : props.delivery.errorsPer100.toLocaleString('id-ID'),
         tone: toneOfErrors(props.delivery.errorsPer100),
         detail: `${props.delivery.errors} halaman gagal dimuat atau galat server`,
-        hint: 'Tinggi: lihat Laporan → aktivitas "Halaman gagal dimuat" dan "Galat server" untuk perangkat dan penyebabnya.',
+        hint: 'Tinggi: buka daftar galat di bawah untuk melihat siapa, di perangkat apa, dan penyebabnya.',
     },
 ]);
+
+const errors = computed(() => props.delivery.recentErrors ?? []);
+const isErrorListOpen = ref(false);
 </script>
 
 <template>
@@ -83,5 +86,47 @@ const figures = computed(() => [
                 </dd>
             </div>
         </dl>
+
+        <div v-if="errors.length" class="mt-3 rounded-xl border border-slate-200">
+            <button
+                type="button"
+                class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-slate-50"
+                :aria-expanded="isErrorListOpen"
+                aria-controls="delivery-errors"
+                data-testid="delivery-errors-toggle"
+                @click="isErrorListOpen = !isErrorListOpen"
+            >
+                <span>
+                    Daftar galat
+                    <span class="font-semibold text-slate-500"
+                        >({{ delivery.errors > errors.length ? `${errors.length} terbaru dari ${delivery.errors}` : delivery.errors }})</span
+                    >
+                </span>
+                <ChevronDown :class="['h-4 w-4 shrink-0 text-slate-500 transition', isErrorListOpen && 'rotate-180']" />
+            </button>
+            <div v-if="isErrorListOpen" id="delivery-errors" class="border-t border-slate-200">
+                <ul class="divide-y divide-slate-100">
+                    <li v-for="error in errors" :key="error.id" class="px-4 py-3 text-xs">
+                        <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                            <p class="font-bold text-slate-800">
+                                {{ error.person }}<span v-if="error.group" class="font-semibold text-slate-500"> · {{ error.group }}</span>
+                            </p>
+                            <p class="tabular-nums text-slate-500">{{ error.time }} · {{ error.kind }}</p>
+                        </div>
+                        <p class="mt-0.5 font-semibold text-rose-700">{{ error.cause }}</p>
+                        <p class="mt-0.5 text-slate-600">{{ error.device }}</p>
+                        <p v-if="error.detail" class="mt-1 break-words font-mono text-[11px] text-slate-500">{{ error.detail }}</p>
+                    </li>
+                </ul>
+                <a
+                    v-if="delivery.reportUrl"
+                    :href="delivery.reportUrl"
+                    class="flex items-center gap-1.5 border-t border-slate-200 px-4 py-2.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50"
+                >
+                    <ExternalLink class="h-3.5 w-3.5" />
+                    Semua aktivitas ujian ini di Laporan
+                </a>
+            </div>
+        </div>
     </section>
 </template>

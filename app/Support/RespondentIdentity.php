@@ -12,6 +12,9 @@ use Illuminate\Validation\Rule;
  * Who a guest (someone without an account) is on a public quiz. The teacher picks the fields
  * when publishing: Nama Lengkap, Kelas and Email. Guests fill them in on the confirmation screen;
  * once the exam has started they are locked in the exam session.
+ *
+ * Mode pewawancara: everyone, the interviewer with an account too, names the candidate the
+ * questionnaire is filled for (name, registration number and school).
  */
 class RespondentIdentity
 {
@@ -22,6 +25,13 @@ class RespondentIdentity
      * @var list<string>
      */
     public const FIELDS = ['name', 'class'];
+
+    /**
+     * The candidate's fields in Mode pewawancara: the name is required, the others are not.
+     *
+     * @var list<string>
+     */
+    public const INTERVIEW_FIELDS = ['name', 'number', 'school'];
 
     /**
      * The classes of the Kelas drop-down.
@@ -37,6 +47,10 @@ class RespondentIdentity
      */
     public function fields(QuizForm $quizForm): array
     {
+        if ($quizForm->isInterview()) {
+            return self::INTERVIEW_FIELDS;
+        }
+
         $settings = is_array($quizForm->settings) ? $quizForm->settings : [];
         $fields = array_values(array_intersect(self::FIELDS, (array) ($settings['respondentFields'] ?? [])));
 
@@ -55,12 +69,20 @@ class RespondentIdentity
      */
     public function rules(QuizForm $quizForm, ?User $user, ?QuizSession $session = null, bool $required = true): array
     {
-        if ($user) {
+        if ($user && ! $this->asksIdentityOf($quizForm, $user)) {
             return [];
         }
 
         $fields = $this->fields($quizForm);
         $isRequired = fn (string $field, ?string $stored): string => $required && in_array($field, $fields, true) && blank($stored) ? 'required' : 'nullable';
+
+        if ($quizForm->isInterview()) {
+            return [
+                'respondent_name' => [$isRequired('name', $session?->respondent_name), 'string', 'min:3', 'max:100', 'regex:/\pL/u'],
+                'respondent_number' => ['nullable', 'string', 'max:50'],
+                'respondent_school' => ['nullable', 'string', 'max:150'],
+            ];
+        }
 
         return [
             'respondent_name' => [$isRequired('name', $session?->respondent_name), 'string', 'min:3', 'max:100', 'regex:/\pL/u'],
@@ -79,6 +101,8 @@ class RespondentIdentity
             'respondent_name.min' => 'Nama lengkap minimal 3 huruf.',
             'respondent_name.max' => 'Nama lengkap maksimal 100 karakter.',
             'respondent_name.regex' => 'Nama lengkap harus berisi huruf.',
+            'respondent_number.max' => 'Nomor pendaftaran maksimal 50 karakter.',
+            'respondent_school.max' => 'Asal sekolah maksimal 150 karakter.',
             'respondent_class.required' => 'Pilih kelas Anda.',
             'respondent_class.in' => 'Pilih kelas dari daftar yang tersedia.',
             'email.required' => 'Email wajib diisi.',
@@ -91,19 +115,33 @@ class RespondentIdentity
      * the identity cannot change once the exam has started.
      *
      * @param  array<string, mixed>  $input
-     * @return array{respondent_name: string|null, respondent_class: string|null, respondent_email: string|null}
+     * @return array{respondent_name: string|null, respondent_class: string|null, respondent_email: string|null, respondent_number: string|null, respondent_school: string|null}
      */
     public function fromInput(QuizForm $quizForm, array $input, ?QuizSession $session = null): array
     {
         $fields = $this->fields($quizForm);
         $class = $input['respondent_class'] ?? null;
         $email = trim((string) ($input['email'] ?? ''));
+        $text = fn (string $field, int $limit): ?string => in_array($field, $fields, true) && filled($value = Str::squish((string) ($input["respondent_{$field}"] ?? '')))
+            ? Str::limit($value, $limit, '')
+            : null;
 
         return [
             'respondent_name' => $session?->respondent_name ?? (in_array('name', $fields, true) ? $this->tidyName($input['respondent_name'] ?? null) : null),
             'respondent_class' => $session?->respondent_class ?? (in_array('class', $fields, true) && in_array($class, self::CLASSES, true) ? $class : null),
             'respondent_email' => $session?->respondent_email ?? (in_array('email', $fields, true) && $email !== '' ? Str::lower($email) : null),
+            'respondent_number' => $session?->respondent_number ?? $text('number', 50),
+            'respondent_school' => $session?->respondent_school ?? $text('school', 150),
         ];
+    }
+
+    /**
+     * Whether someone with an account names who they answer for: only an interviewer, in Mode
+     * pewawancara. Guests always say who they are.
+     */
+    public function asksIdentityOf(QuizForm $quizForm, ?User $user): bool
+    {
+        return $user === null || $quizForm->isInterview();
     }
 
     /**
