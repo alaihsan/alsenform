@@ -138,6 +138,10 @@ const form = reactive({
                 return kept;
             }),
             points: q.points ?? 1,
+            // Where a section leads and where each answer sends the student: kept, or every save would reset them to "next".
+            ...(q.goTo !== undefined ? { goTo: q.goTo } : {}),
+            ...(q.branching ? { branching: true } : {}),
+            ...(q.optionGoTo ? { optionGoTo: [...q.optionGoTo] } : {}),
             // Kept, or every save would drop them.
             ...(q.explanation ? { explanation: q.explanation } : {}),
             ...(q.optionScores ? { optionScores: [...q.optionScores] } : {}),
@@ -161,6 +165,8 @@ const form = reactive({
         showProgress: props.quizForm?.settings?.showProgress ?? true,
         shuffleQuestions: props.quizForm?.settings?.shuffleQuestions ?? false,
         shuffleOptions: props.quizForm?.settings?.shuffleOptions ?? false,
+        // Where the first section leads when the form does not start with a section item.
+        firstSectionGoTo: props.quizForm?.settings?.firstSectionGoTo as SectionTarget | undefined,
         questionDraw: {
             enabled: false,
             mode: 'count',

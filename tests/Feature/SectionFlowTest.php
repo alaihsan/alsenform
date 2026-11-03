@@ -7,6 +7,7 @@ use App\Models\QuizSession;
 use App\Models\User;
 use App\Support\SectionFlow;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -140,6 +141,42 @@ test('the teacher saves the flow, and targets that point nowhere become "next"',
         // Only choice questions send by their answer.
         ->and($saved->questions[5])->not->toHaveKeys(['branching', 'optionGoTo'])
         ->and($saved->settings['firstSectionGoTo'])->toBe('submit');
+});
+
+test('the editor gets the flow, and saving it back unchanged keeps it', function () {
+    $this->exam->update(['settings' => [...$this->exam->settings, 'firstSectionGoTo' => 20]]);
+
+    $editor = $this->actingAs($this->teacher)->get(route('forms.edit', $this->exam))->inertiaProps('quizForm');
+
+    expect($editor['questions'][0])->toMatchArray(['branching' => true, 'optionGoTo' => [10, 20, 'submit']])
+        ->and($editor['questions'][2]['goTo'])->toBe('submit')
+        ->and($editor['settings']['firstSectionGoTo'])->toBe(20);
+
+    $this->patch(route('forms.update', $this->exam), [
+        'title' => $editor['title'],
+        'slug' => $editor['slug'],
+        'questions' => $editor['questions'],
+        'settings' => $editor['settings'],
+        'published' => true,
+        'base_version' => $editor['version'],
+    ])->assertSessionHasNoErrors();
+
+    $saved = $this->exam->fresh();
+    expect($saved->questions[0]['branching'])->toBeTrue()
+        ->and($saved->questions[0]['optionGoTo'])->toBe([10, 20, 'submit'])
+        ->and($saved->questions[2]['goTo'])->toBe('submit')
+        ->and($saved->settings['firstSectionGoTo'])->toBe(20);
+});
+
+/*
+ * The editor builds its copy of the questions and settings field by field. A field it leaves out
+ * is missing from its next save, and a missing target is saved as "next": the teacher's jumps
+ * would be gone after any edit made once the editor was reloaded.
+ */
+test('the editor keeps the flow of the questions and settings it loads', function () {
+    $loading = Str::betweenFirst(File::get(resource_path('js/pages/FormEditor.vue')), 'const form = reactive({', "\n});");
+
+    expect($loading)->toContain('q.goTo', 'q.branching', 'q.optionGoTo', 'settings?.firstSectionGoTo');
 });
 
 test('questions in skipped sections are not required, those on the way are', function () {
