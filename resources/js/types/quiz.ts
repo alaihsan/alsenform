@@ -55,6 +55,13 @@ export type Question = {
     optionScores?: (number | null)[];
     /** Angket berskor, a multiple-choice grid: the score of each column, in every row. */
     columnScores?: (number | null)[];
+    /**
+     * Mode pewawancara, "Skor diisi pewawancara": the score of each option is its maximum, and the
+     * interviewer types the score earned for every choice made (App\Support\InterviewScores).
+     */
+    scoreEntry?: boolean;
+    /** On the interview page: the maximum of each option, when the interviewer types the scores. */
+    scoreMaxima?: number[];
     /** Editor only, not saved: the question's field written right to left (the RTL button of Teks Arab (RTL)). */
     isRtl?: boolean;
 };

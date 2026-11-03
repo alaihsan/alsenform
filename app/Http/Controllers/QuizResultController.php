@@ -55,7 +55,7 @@ class QuizResultController extends Controller
                 ? $responses->values()->map(fn (QuizResponse $response, int $index): array => [
                     ...$this->attempt($response, $index + 1, $questions, $kkm, $isFull),
                     'sections' => $isQuestionnaire
-                        ? $this->scoring->sectionScores($items, is_array($response->answers) ? $response->answers : [], $response->question_ids)
+                        ? $this->scoring->sectionScores($items, is_array($response->answers) ? $response->answers : [], $response->question_ids, $response->manual_scores)
                         : [],
                     // Mode pewawancara: the candidate the interviewer filled it for.
                     'candidate' => $response->filled_for_respondent ? [
@@ -133,9 +133,12 @@ class QuizResultController extends Controller
             $answer = $answers[$id] ?? null;
             $points = $this->scoring->points($question);
             $graded = is_numeric($manual[$id] ?? null);
-            $isCorrect = $graded
-                ? ((float) $manual[$id] >= $points ? true : ((float) $manual[$id] <= 0 ? false : null))
-                : $this->scoring->isCorrect($question, $answer);
+            // A choice scored by its own score (or by the interviewer, up to it) has no right or wrong.
+            $isCorrect = match (true) {
+                $this->scoring->isOptionScored($question) => null,
+                $graded => (float) $manual[$id] >= $points ? true : ((float) $manual[$id] <= 0 ? false : null),
+                default => $this->scoring->isCorrect($question, $answer),
+            };
 
             return [
                 'number' => $index + 1,

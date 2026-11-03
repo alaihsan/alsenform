@@ -146,6 +146,7 @@ const form = reactive({
             ...(q.explanation ? { explanation: q.explanation } : {}),
             ...(q.optionScores ? { optionScores: [...q.optionScores] } : {}),
             ...(q.columnScores ? { columnScores: [...q.columnScores] } : {}),
+            ...(q.scoreEntry ? { scoreEntry: true } : {}),
         })) ?? [
             {
                 id: 1,
@@ -1159,6 +1160,20 @@ const setChoiceScore = (question: Question, index: number, value: string) => {
     scores[index] = score === null || !Number.isFinite(score) ? null : Math.max(0, Math.min(100, score));
     question[key] = scores;
     markChanged('Skor jawaban diperbarui');
+};
+
+/** Mode pewawancara: whether the interviewer may type the score of each choice made (one choice, or ticked ones). */
+const canTypeScores = (question: Question) =>
+    isInterview.value && canScoreChoices(question) && ['Multiple choice', 'Drop-down', 'Dropdown', 'Checkboxes'].includes(question.type);
+/** "Skor diisi pewawancara": the score of each option is its maximum, the interviewer types 0 up to it. */
+const isScoreEntry = (question: Question) => canTypeScores(question) && question.scoreEntry === true;
+const setScoreEntry = (question: Question, isOn: boolean) => {
+    if (isOn) {
+        question.scoreEntry = true;
+    } else {
+        delete question.scoreEntry;
+    }
+    markChanged(isOn ? 'Skor diisi pewawancara' : 'Skor mengikuti pilihan');
 };
 
 /** The highest score an answer can earn, as the server counts it: the best option, all ticked options, the best column in every row. */
@@ -3457,14 +3472,14 @@ watch(
                                                     class="flex shrink-0 items-center gap-1.5 text-xs font-bold text-slate-500"
                                                     data-testid="option-score"
                                                 >
-                                                    Skor
+                                                    {{ isScoreEntry(question) ? 'Maks.' : 'Skor' }}
                                                     <input
                                                         type="number"
                                                         min="0"
                                                         max="100"
                                                         inputmode="numeric"
                                                         :value="choiceScore(question, optionIndex) ?? ''"
-                                                        :aria-label="`Skor pilihan ${optionIndex + 1}`"
+                                                        :aria-label="`${isScoreEntry(question) ? 'Skor maksimal' : 'Skor'} pilihan ${optionIndex + 1}`"
                                                         placeholder="0"
                                                         class="h-9 w-16 rounded-lg border border-slate-300 px-2 text-center text-sm font-bold text-slate-800 focus:border-indigo-500 focus:ring-indigo-500"
                                                         @click.stop
@@ -3484,8 +3499,34 @@ watch(
                                                 class="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900"
                                                 data-testid="choice-score-summary"
                                             >
-                                                <span class="font-bold">Angket berskor:</span> skor tertinggi {{ maxChoiceScore(question) }}. Tidak ada
-                                                jawaban benar atau salah; pilihan tanpa skor bernilai 0.
+                                                <template v-if="isScoreEntry(question)">
+                                                    <span class="font-bold">Skor diisi pewawancara:</span> angka tiap pilihan adalah skor maksimalnya. Saat
+                                                    wawancara, setiap pilihan yang dipilih memunculkan kotak skor 0 sampai maksimal itu (boleh desimal,
+                                                    misalnya 4,5). Skor soal ini paling tinggi {{ maxChoiceScore(question) }}.
+                                                </template>
+                                                <template v-else>
+                                                    <span class="font-bold">Angket berskor:</span> skor tertinggi {{ maxChoiceScore(question) }}. Tidak ada
+                                                    jawaban benar atau salah; pilihan tanpa skor bernilai 0.
+                                                </template>
+                                                <label
+                                                    v-if="canTypeScores(question)"
+                                                    class="mt-2.5 flex cursor-pointer items-start gap-2 border-t border-indigo-100 pt-2.5 font-semibold text-indigo-900"
+                                                    data-testid="score-entry-toggle"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        class="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                                                        :checked="isScoreEntry(question)"
+                                                        @click.stop
+                                                        @change="setScoreEntry(question, ($event.target as HTMLInputElement).checked)"
+                                                    />
+                                                    <span>
+                                                        Skor diisi pewawancara
+                                                        <span class="block font-normal text-indigo-800/80"
+                                                            >Pewawancara mengetik skor tiap pilihan yang dipilih, 0 sampai skor maksimal pilihan itu.</span
+                                                        >
+                                                    </span>
+                                                </label>
                                             </div>
                                             <div
                                                 v-else-if="form.settings.isQuiz && optionQuestionTypes.includes(question.type)"

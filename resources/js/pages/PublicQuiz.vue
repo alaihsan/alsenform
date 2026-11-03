@@ -44,6 +44,7 @@ import { stripRichFormatting } from '@/utils/rich-content';
 import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
+import InterviewScoreInput from '@/components/InterviewScoreInput.vue';
 
 type Question = {
     id: number;
@@ -67,6 +68,8 @@ type Question = {
     goTo?: SectionTarget;
     branching?: boolean;
     optionGoTo?: SectionTarget[];
+    /** Mode pewawancara, "Skor diisi pewawancara": the maximum of each option, whose score the interviewer types. */
+    scoreMaxima?: number[];
 };
 
 const props = defineProps<{
@@ -139,6 +142,8 @@ const props = defineProps<{
         server_time?: string;
         is_locked?: boolean;
         draft_answers?: Record<string, any> | null;
+        /** Mode pewawancara: the scores typed so far, by question id and choice (kept with the draft). */
+        draft_scores?: Record<string, Record<string, number>> | null;
         draft_saved_at?: string | null;
         /** The questions marked "Ragu-ragu" in this attempt (kept on the server with the draft). */
         doubtful_question_ids?: string[];
@@ -176,6 +181,30 @@ const doubtfulIds = ref<string[]>(
             // ignore storage access error
         }
         return (props.session?.doubtful_question_ids ?? []).map(String);
+    })(),
+);
+/*
+ * Mode pewawancara, "Skor diisi pewawancara": the interviewer types the score the candidate earns
+ * for every choice made, from 0 up to the maximum of that choice (scoreMaxima), with decimals. The
+ * scores are kept on the device and with the draft on the server, and handed in with the answers.
+ */
+const scoresKey = `alsen_scores_${props.quizForm.id}_${props.session?.token ?? 'tamu'}`;
+const typedScores = ref<Record<string, Record<string, string>>>(
+    (() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(scoresKey) || 'null');
+            if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+                return saved;
+            }
+        } catch {
+            // ignore storage access error
+        }
+        return Object.fromEntries(
+            Object.entries(props.session?.draft_scores ?? {}).map(([id, choices]) => [
+                id,
+                Object.fromEntries(Object.entries(choices).map(([choice, score]) => [choice, String(score).replace('.', ',')])),
+            ]),
+        );
     })(),
 );
 const email = ref('');
@@ -489,6 +518,7 @@ const syncDraftToServer = async () => {
                 respondent_identifier: respondentIdentifier,
                 answers: answers.value,
                 doubts: doubtfulIds.value,
+                ...(hasScoreEntry.value ? { scores: scoresPayload() } : {}),
                 pending_since: unsyncedSince,
             },
             { timeout: REQUEST_TIMEOUT_MS },
@@ -543,6 +573,7 @@ const clearDraft = () => {
         localStorage.removeItem(draftSavedAtKey);
         localStorage.removeItem(draftIdentityKey);
         localStorage.removeItem(doubtsKey);
+        localStorage.removeItem(scoresKey);
         autoSaveStatus.value = 'idle';
     } catch {
         // ignore
@@ -569,6 +600,22 @@ watch(
         }, 500);
     },
     { deep: true }
+);
+
+watch(
+    typedScores,
+    (scores) => {
+        if (isSubmitted.value) return;
+        hasUnsyncedDraft = true;
+        noteUnsyncedChange();
+        scheduleServerDraftSync();
+        try {
+            localStorage.setItem(scoresKey, JSON.stringify(scores));
+        } catch {
+            // ignore storage error
+        }
+    },
+    { deep: true },
 );
 
 watch(email, (newVal) => {
@@ -1370,6 +1417,36 @@ const onPathIds = computed<Set<number> | null>(() => {
 const isOnPath = (question: Question): boolean => onPathIds.value === null || onPathIds.value.has(question.id);
 const answerableQuestions = computed<Question[]>(() => displayQuestions.value.filter((question) => !isContentItem(question) && isOnPath(question)));
 /** The answers (and "Ragu-ragu" marks) of the questions on the student's way only. */
+const isScoreEntryQuestion = (question: Question): boolean => Array.isArray(question.scoreMaxima) && question.scoreMaxima.length > 0;
+const hasScoreEntry = computed<boolean>(() => displayQuestions.value.some(isScoreEntryQuestion));
+const typedScoreOf = (question: Question, option: string): string => typedScores.value[String(question.id)]?.[option] ?? '';
+const setTypedScore = (question: Question, option: string, value: string) => {
+    const id = String(question.id);
+    typedScores.value = { ...typedScores.value, [id]: { ...(typedScores.value[id] ?? {}), [option]: value } };
+};
+/** The choices made in a question whose scores are typed, each with its maximum. */
+const choicesMadeOf = (question: Question): { option: string; maximum: number }[] => {
+    const answer = answers.value[question.id];
+    const chosen: unknown[] = question.type === 'Checkboxes' ? (Array.isArray(answer) ? answer : []) : [answer];
+
+    return question.options
+        .map((option, index) => ({ option, maximum: question.scoreMaxima?.[index] ?? 0 }))
+        .filter(({ option }) => chosen.includes(option));
+};
+const isTypedScoreValid = (value: string, maximum: number): boolean => {
+    const text = value.trim().replace(',', '.');
+
+    return /^\d+(\.\d+)?$/.test(text) && Number(text) <= maximum;
+};
+/** The typed scores of the choices made, as handed in (the server reads a decimal comma too). */
+const scoresPayload = (): Record<string, Record<string, string>> =>
+    Object.fromEntries(
+        displayQuestions.value
+            .filter(isScoreEntryQuestion)
+            .map((question) => [String(question.id), Object.fromEntries(choicesMadeOf(question).map(({ option }) => [option, typedScoreOf(question, option)]))])
+            .filter(([, choices]) => Object.keys(choices).length > 0),
+    );
+
 const answersOnPath = (): Record<number, any> =>
     onPathIds.value === null ? answers.value : Object.fromEntries(Object.entries(answers.value).filter(([id]) => onPathIds.value!.has(Number(id))));
 const doubtsOnPath = (): string[] => (onPathIds.value === null ? doubtfulIds.value : doubtfulIds.value.filter((id) => onPathIds.value!.has(Number(id))));
@@ -1461,6 +1538,13 @@ const totalAnsweredCount = computed<number>(() => {
 const unansweredRequiredQuestions = computed<Question[]>(() => {
     return answerableQuestions.value.filter((q) => q.required && !isQuestionAnswered(q));
 });
+
+/** Mode pewawancara: questions with a choice made whose score is missing or out of range. */
+const questionsMissingScores = computed<Question[]>(() =>
+    answerableQuestions.value.filter(
+        (question) => isScoreEntryQuestion(question) && choicesMadeOf(question).some(({ option, maximum }) => !isTypedScoreValid(typedScoreOf(question, option), maximum)),
+    ),
+);
 
 /*
  * Floating question navigator. On wide screens it is docked beside the questions (left by default,
@@ -1645,6 +1729,13 @@ const goToQuestion = (questionId: number) => {
     });
 };
 
+const goToFirstMissingScore = () => {
+    if (questionsMissingScores.value.length > 0) {
+        showSubmitConfirmModal.value = false;
+        goToQuestion(questionsMissingScores.value[0].id);
+    }
+};
+
 const goToFirstUnansweredRequired = () => {
     if (unansweredRequiredQuestions.value.length === 0) {
         return;
@@ -1823,7 +1914,7 @@ const openSubmitConfirmation = () => {
 };
 
 const confirmAndSubmit = () => {
-    if (unansweredRequiredQuestions.value.length > 0) {
+    if (unansweredRequiredQuestions.value.length > 0 || questionsMissingScores.value.length > 0) {
         return;
     }
     showSubmitConfirmModal.value = false;
@@ -2109,6 +2200,7 @@ const submissionPayload = (isTimeout: boolean) => ({
     ...identityPayload(),
     answers: answersOnPath(),
     doubts: doubtsOnPath(),
+    ...(hasScoreEntry.value ? { scores: scoresPayload() } : {}),
     respondent_identifier: respondentIdentifier,
     session_token: props.session?.token ?? null,
     is_timeout: isTimeout,
@@ -2720,15 +2812,27 @@ const submitAnotherResponse = () => {
                         @input="autoResizePublicTextarea($event)"
                         @keydown="handleShiftEnterKeydown($event)"
                     ></textarea>
-                    <select
-                        v-else-if="question.type === 'Drop-down'"
-                        :value="answers[question.id] ?? ''"
-                        class="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5"
-                        @change="answers[question.id] = ($event.target as HTMLSelectElement).value"
-                    >
-                        <option value="" disabled>Pilih jawaban</option>
-                        <option v-for="option in question.options" :key="option" :value="option">{{ stripRichFormatting(option) }}</option>
-                    </select>
+                    <div v-else-if="question.type === 'Drop-down'" class="mt-4 sm:mt-5">
+                        <select
+                            :value="answers[question.id] ?? ''"
+                            class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-indigo-500"
+                            @change="answers[question.id] = ($event.target as HTMLSelectElement).value"
+                        >
+                            <option value="" disabled>Pilih jawaban</option>
+                            <option v-for="(option, optionIndex) in question.options" :key="option" :value="option">
+                                {{ stripRichFormatting(option) }}{{ isScoreEntryQuestion(question) ? ` (maks. ${question.scoreMaxima?.[optionIndex] ?? 0})` : '' }}
+                            </option>
+                        </select>
+                        <!-- Skor diisi pewawancara: the score of the choice made -->
+                        <InterviewScoreInput
+                            v-for="choice in isScoreEntryQuestion(question) ? choicesMadeOf(question) : []"
+                            :key="`score-${question.id}-${choice.option}`"
+                            :model-value="typedScoreOf(question, choice.option)"
+                            :maximum="choice.maximum"
+                            :label="`Skor ${stripRichFormatting(question.title)}: ${stripRichFormatting(choice.option)}`"
+                            @update:model-value="setTypedScore(question, choice.option, $event)"
+                        />
+                    </div>
                     <div
                         v-else-if="question.type === 'Linear scale'"
                         class="mt-4 flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-50 p-3 sm:mt-5 sm:justify-between sm:p-4"
@@ -2845,9 +2949,8 @@ const submitAnotherResponse = () => {
                     </div>
 
                     <div v-else-if="question.options?.length" class="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
+                        <template v-for="(option, optionIndex) in question.options" :key="option">
                         <label
-                            v-for="(option, optionIndex) in question.options"
-                            :key="option"
                             :class="[
                                 'af-option flex cursor-pointer items-start gap-3 rounded-2xl border px-3.5 py-3 transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-300 sm:px-4',
                                 isOptionSelected(question, option) ? 'border-indigo-500 bg-indigo-50/70' : 'border-slate-200 hover:bg-slate-50',
@@ -2875,7 +2978,22 @@ const submitAnotherResponse = () => {
                                 <template v-else>{{ optionLetter(optionIndex) }}</template>
                             </span>
                             <RichContent :content="option" class="af-option-text min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-slate-800 sm:text-base" />
+                            <span
+                                v-if="isScoreEntryQuestion(question)"
+                                class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600"
+                                >maks. {{ (question.scoreMaxima?.[optionIndex] ?? 0).toLocaleString('id-ID') }}</span
+                            >
                         </label>
+                        <!-- Skor diisi pewawancara: the score of this choice, once it is made -->
+                        <InterviewScoreInput
+                            v-if="isScoreEntryQuestion(question) && isOptionSelected(question, option)"
+                            class="ml-10"
+                            :model-value="typedScoreOf(question, option)"
+                            :maximum="question.scoreMaxima?.[optionIndex] ?? 0"
+                            :label="`Skor ${stripRichFormatting(question.title)}: ${stripRichFormatting(option)}`"
+                            @update:model-value="setTypedScore(question, option, $event)"
+                        />
+                        </template>
                     </div>
                     <input
                         v-else-if="question.type === 'Date'"
@@ -3341,6 +3459,28 @@ const submitAnotherResponse = () => {
                 </div>
             </div>
 
+            <!-- Mode pewawancara: a choice made without its score (or out of range) -->
+            <div
+                v-if="questionsMissingScores.length > 0"
+                class="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs text-amber-900"
+                data-testid="missing-scores"
+            >
+                <div class="flex items-start gap-2.5 text-sm font-bold text-amber-800">
+                    <AlertCircle class="h-5 w-5 shrink-0 text-amber-600" />
+                    <span>Ada {{ questionsMissingScores.length }} soal yang skornya belum diisi atau di luar rentang.</span>
+                </div>
+                <p class="mt-1.5 pl-7 leading-relaxed text-amber-800">Setiap pilihan yang dipilih perlu skor 0 sampai skor maksimalnya.</p>
+                <div class="mt-3 pl-7">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-amber-700"
+                        @click="goToFirstMissingScore"
+                    >
+                        Isi skornya
+                    </button>
+                </div>
+            </div>
+
             <!-- Warning if Unanswered Required Questions Exist -->
             <div
                 v-if="unansweredRequiredQuestions.length > 0"
@@ -3379,9 +3519,9 @@ const submitAnotherResponse = () => {
                 </p>
             </div>
 
-            <!-- Complete check message if all answered -->
+            <!-- Complete check message if all answered (and every typed score is filled) -->
             <div
-                v-else
+                v-else-if="questionsMissingScores.length === 0"
                 class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-xs text-emerald-800"
             >
                 <div class="flex items-center gap-2 font-bold text-emerald-700 text-sm">
@@ -3426,7 +3566,7 @@ const submitAnotherResponse = () => {
                 </button>
                 <button
                     type="button"
-                    :disabled="isSubmitting || unansweredRequiredQuestions.length > 0"
+                    :disabled="isSubmitting || unansweredRequiredQuestions.length > 0 || questionsMissingScores.length > 0"
                     :class="[
                         'af-button w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-bold text-white shadow-md transition-all duration-300',
                         themeClass,

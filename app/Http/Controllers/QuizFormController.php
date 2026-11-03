@@ -155,7 +155,7 @@ class QuizFormController extends Controller
         }
 
         return array_map(
-            fn (mixed $question): mixed => is_array($question) ? Arr::except($question, ['optionScores', 'columnScores']) : $question,
+            fn (mixed $question): mixed => is_array($question) ? Arr::except($question, ['optionScores', 'columnScores', 'scoreEntry']) : $question,
             $questions,
         );
     }

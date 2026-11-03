@@ -15,6 +15,7 @@ use App\Support\Addon;
 use App\Support\ExamLayout;
 use App\Support\ExamToken;
 use App\Support\FileAnswers;
+use App\Support\InterviewScores;
 use App\Support\MediaUrl;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
@@ -209,6 +210,7 @@ class QuizResponseController extends Controller
                 'server_time' => now()->toISOString(),
                 'is_locked' => $quizSession->isEffectivelyLocked($quizForm),
                 'draft_answers' => $hasServerDraft ? $quizSession->draft_answers : null,
+                'draft_scores' => $hasServerDraft ? $quizSession->draft_scores : null,
                 'doubtful_question_ids' => $quizSession->submitted_at === null ? ($quizSession->doubtful_question_ids ?? []) : [],
                 'draft_saved_at' => $hasServerDraft ? $quizSession->draft_saved_at?->toISOString() : null,
             ],
@@ -407,8 +409,22 @@ class QuizResponseController extends Controller
         ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($answers, $assignedIds);
         $doubts = $quizForm->onlyGiven($doubts, $givenIds);
 
+        // Mode pewawancara, "Skor diisi pewawancara": the score typed for every choice made (0 up to
+        // the score of the choice), which counts like a grade given by hand. Each choice needs one;
+        // a page opened before the teacher switched it on sends none, and its choices keep their score.
+        $interviewScores = app(InterviewScores::class);
+        $typedScores = $countsSavedAnswers ? $session->draft_scores : $request->input('scores');
+        $typesScores = $request->has('scores');
+        if (! $isTimeout && ! $countsSavedAnswers && $typesScores && ($problems = $interviewScores->problems($quizForm, $answers, $typedScores)) !== []) {
+            throw ValidationException::withMessages(['scores' => $problems]);
+        }
+        $enteredScores = $interviewScores->sanitize($quizForm, $answers, $typedScores);
+        $manualScores = $interviewScores->totals($enteredScores);
+
         // Calculate score on the server
-        $score = app(QuizScoring::class)->score($quizForm->questions ?? [], $answers);
+        $score = $manualScores === []
+            ? app(QuizScoring::class)->score($quizForm->questions ?? [], $answers)
+            : (int) round(app(QuizScoring::class)->result($quizForm->questions ?? [], $answers, $givenIds, $manualScores)['score']);
 
         // A guest's identity, or the candidate an interviewer names: what the exam session locked
         // at the start, or (a survey that opens without a confirmation screen) what is sent now.
@@ -433,6 +449,7 @@ class QuizResponseController extends Controller
             'doubtful_question_ids' => $doubts,
             'question_ids' => $givenIds,
             'score' => $score,
+            ...($enteredScores !== [] ? ['entered_scores' => $enteredScores, 'manual_scores' => $manualScores] : []),
             'is_timeout' => $isTimeout,
             'late_seconds' => $countsSavedAnswers ? null : $lateSeconds,
             // How many tries handing in took this page (weak Wi-Fi, a busy server), for the exam's figures.
@@ -444,6 +461,7 @@ class QuizResponseController extends Controller
         $session?->update([
             'submitted_at' => now(),
             'draft_answers' => null,
+            ...($session->draft_scores !== null ? ['draft_scores' => null] : []),
             ...$identity,
         ]);
 
@@ -531,9 +549,16 @@ class QuizResponseController extends Controller
      */
     protected function sanitizedQuestions(QuizForm $quizForm, MediaUrl $mediaUrl, ?array $layout = null): array
     {
-        return array_values(array_map(function ($question) {
+        // Mode pewawancara, "Skor diisi pewawancara": the interviewer sees the maximum of each choice.
+        $interviewScores = app(InterviewScores::class);
+        $scoreEntryIds = array_map('strval', array_keys($interviewScores->questions($quizForm)));
+
+        return array_values(array_map(function ($question) use ($interviewScores, $scoreEntryIds) {
             // The key, the score of each choice and the pembahasan stay on the server while the exam runs.
             if (is_array($question)) {
+                if (in_array((string) ($question['id'] ?? ''), $scoreEntryIds, true)) {
+                    $question['scoreMaxima'] = $interviewScores->maxima($question);
+                }
                 unset($question['answer'], $question['explanation'], $question['optionScores'], $question['columnScores']);
             }
 
@@ -769,12 +794,17 @@ class QuizResponseController extends Controller
         // The device's answers may take another way through the sections.
         ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($answers, $assignedIds);
         $doubts = $request->has('doubts') ? $quizForm->questionIdsAmong($request->input('doubts'), $assignedIds) : $autoSubmitted->doubtful_question_ids;
+        $enteredScores = app(InterviewScores::class)->sanitize($quizForm, $answers, $request->has('scores') ? $request->input('scores') : $session->draft_scores);
 
         $autoSubmitted->update([
             'answers' => $answers,
             'question_ids' => $givenIds,
             'doubtful_question_ids' => $quizForm->onlyGiven($doubts, $givenIds),
             'score' => app(QuizScoring::class)->score($quizForm->questions ?? [], $answers),
+            ...($enteredScores !== [] ? [
+                'entered_scores' => $enteredScores,
+                'manual_scores' => array_replace(is_array($autoSubmitted->manual_scores) ? $autoSubmitted->manual_scores : [], app(InterviewScores::class)->totals($enteredScores)),
+            ] : []),
             'is_auto_submitted' => false,
             'late_seconds' => $this->secondsLate($session),
             'ip_address' => $request->ip(),
@@ -867,6 +897,8 @@ class QuizResponseController extends Controller
         $session->update([
             'draft_answers' => $draftAnswers,
             ...($request->has('doubts') ? ['doubtful_question_ids' => $quizForm->questionIdsAmong($validated['doubts'] ?? [], $assignedIds)] : []),
+            // Mode pewawancara: the scores typed so far, for the choices made.
+            ...($request->has('scores') ? ['draft_scores' => app(InterviewScores::class)->sanitize($quizForm, $draftAnswers, $validated['scores'] ?? []) ?: null] : []),
             'draft_saved_at' => now(),
             // Peta Kelas and the exam's delivery figures: the device's answers are on the server now.
             ...$session->arrivedDraftAttributes(isset($validated['pending_since']) ? (int) $validated['pending_since'] : null),

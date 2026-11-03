@@ -13,6 +13,7 @@ use App\Support\QuizScoring;
 use App\Support\XlsxWriter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -221,13 +222,13 @@ class QuizResultsReport
         ];
 
         foreach ($students->values() as $index => $student) {
-            $scores = array_column($this->scoring->sectionScores($items, $student['answers'], $student['questionIds']), 'score', 'index');
+            $scores = array_column($this->scoring->sectionScores($items, $student['answers'], $student['questionIds'], $student['manualScores']), 'score', 'index');
             $rows[] = [
                 XlsxWriter::cell($index + 1, 'integer'),
                 XlsxWriter::cell($student['nis'], 'textCenter'),
                 XlsxWriter::cell($student['attempts'] > 1 ? "{$student['name']} (percobaan {$student['attempt']})" : $student['name'], 'text'),
                 XlsxWriter::cell($student['kelas'], 'textCenter'),
-                ...array_map(fn (array $section) => isset($scores[$section['index']]) ? XlsxWriter::cell($scores[$section['index']], 'integer') : XlsxWriter::cell('-', 'textCenter'), $sections),
+                ...array_map(fn (array $section) => isset($scores[$section['index']]) ? XlsxWriter::cell($scores[$section['index']], is_int($scores[$section['index']]) ? 'integer' : 'decimal') : XlsxWriter::cell('-', 'textCenter'), $sections),
                 XlsxWriter::cell($student['score'], floor($student['score']) === (float) $student['score'] ? 'integer' : 'decimal'),
             ];
         }
@@ -534,7 +535,7 @@ class QuizResultsReport
 
         $responses = $quizForm->responses()
             ->with(['user:id,name,email,nis,kelas', 'quizSession:id,started_at,blur_count'])
-            ->get(['id', 'quiz_form_id', 'quiz_session_id', 'receipt_hash', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'respondent_number', 'respondent_school', 'filled_for_respondent', 'email', 'score', 'manual_scores', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
+            ->get([...$this->typedScoresColumn(), 'id', 'quiz_form_id', 'quiz_session_id', 'receipt_hash', 'user_id', 'respondent_identifier', 'respondent_name', 'respondent_class', 'respondent_number', 'respondent_school', 'filled_for_respondent', 'email', 'score', 'manual_scores', 'is_timeout', 'is_auto_submitted', 'late_seconds', 'answers', 'question_ids', 'created_at']);
 
         // Every attempt of a student is listed, numbered in the order they were handed in.
         $attemptNumbers = QuizResponse::attemptNumbers($responses);
@@ -576,6 +577,8 @@ class QuizResultsReport
                         : null,
                     'answers' => is_array($response->answers) ? $response->answers : [],
                     'manualScores' => is_array($response->manual_scores) ? $response->manual_scores : [],
+                    // Mode pewawancara: the score typed for each choice made, by question.
+                    'enteredScores' => is_array($response->entered_scores) ? $response->entered_scores : [],
                     'ungraded' => $result['ungraded'],
                     'attempt' => $attemptNumbers[$response->id]['attempt'] ?? 1,
                     'attempts' => $attemptNumbers[$response->id]['attempts'] ?? 1,
@@ -667,6 +670,24 @@ class QuizResultsReport
 
         // A scored questionnaire: no right or wrong, the score the answer earned.
         if ($this->scoring->isOptionScored($question)) {
+            $typed = $student['enteredScores'][$question['id']] ?? null;
+            $manual = $student['manualScores'][$question['id']] ?? null;
+
+            // Skor diisi pewawancara: the score typed for each choice made, out of its maximum.
+            if (is_array($typed) && is_numeric($manual)) {
+                $maxima = array_combine(
+                    array_map(fn (mixed $option): string => is_scalar($option) ? (string) $option : '', array_values((array) ($question['options'] ?? []))),
+                    array_pad(array_values($this->scoring->choiceScores($question)), count((array) ($question['options'] ?? [])), 0),
+                );
+                $lines = array_map(
+                    fn (string $choice, mixed $score): string => $this->plainText($choice).': '.$this->decimal((float) $score).' (maks. '.($maxima[$choice] ?? 0).')',
+                    array_keys($typed),
+                    $typed,
+                );
+
+                return ['text' => implode("\n", $lines)."\nSkor: ".$this->decimal((float) $manual), 'mark' => 'ungraded'];
+            }
+
             return [
                 'text' => $text === '' ? '(tidak dijawab)' : $text."\nSkor: ".$this->scoring->earned($question, $answer),
                 'mark' => 'ungraded',
@@ -688,6 +709,16 @@ class QuizResultsReport
             false => ['text' => $text === '' ? '(tidak dijawab)' : $text, 'mark' => 'wrong'],
             null => ['text' => $text, 'mark' => 'ungraded'],
         };
+    }
+
+    /**
+     * The column of the scores an interviewer typed, when the database has it (until it is migrated).
+     *
+     * @return list<string>
+     */
+    protected function typedScoresColumn(): array
+    {
+        return once(fn (): array => Schema::hasColumn('quiz_responses', 'entered_scores') ? ['entered_scores'] : []);
     }
 
     /**
@@ -720,7 +751,8 @@ class QuizResultsReport
         }
 
         if ($this->scoring->isOptionScored($question)) {
-            return $header."\nSkor: ".Str::limit($this->choiceScoresText($question), 140);
+            // Skor diisi pewawancara: the score of each choice is the most it can earn.
+            return $header.($this->scoring->isScoreEntry($question) ? "\nSkor maks.: " : "\nSkor: ").Str::limit($this->choiceScoresText($question), 140);
         }
 
         if (! $this->scoring->isAutoScored($question)) {

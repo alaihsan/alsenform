@@ -72,6 +72,8 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.optionScores.*' => ['nullable', 'integer', 'min:0', 'max:'.QuizScoring::MAX_OPTION_SCORE],
             'questions.*.columnScores' => ['nullable', 'array'],
             'questions.*.columnScores.*' => ['nullable', 'integer', 'min:0', 'max:'.QuizScoring::MAX_OPTION_SCORE],
+            // Mode pewawancara: the interviewer types the score of each choice made, up to its score.
+            'questions.*.scoreEntry' => ['nullable', 'boolean'],
             'settings' => ['required', 'array'],
             'settings.collectEmail' => ['boolean'],
             'settings.showProgress' => ['boolean'],

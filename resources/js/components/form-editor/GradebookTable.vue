@@ -168,6 +168,9 @@ const gradeTone = (percentage: number) =>
             ? 'bg-amber-100 text-amber-800'
             : 'bg-rose-100 text-rose-800';
 
+/** Scores and grades as read in Indonesian: 16,5 and 53,23. */
+const formatNumber = (value: number): string => value.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+
 const COLUMNS = computed<{ key: SortKey; label: string; align?: 'center'; title?: string }[]>(() => [
     { key: 'nis', label: props.interview ? 'No. Pendaftaran' : 'NIS' },
     { key: 'kelas', label: props.interview ? 'Asal Sekolah' : 'Kelas / Kelompok' },
@@ -324,11 +327,11 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                 </div>
                 <div class="shrink-0 text-right">
                     <span :class="['inline-block rounded-full px-2.5 py-0.5 text-xs font-bold', gradeTone(row.percentage)]">{{
-                        scoredQuestionnaire ? `${row.percentage}%` : row.percentage
+                        scoredQuestionnaire ? `${formatNumber(row.percentage)}%` : formatNumber(row.percentage)
                     }}</span>
                     <p v-if="row.ungraded" class="text-[10px] font-bold text-amber-700">sementara · {{ row.ungraded }} belum dinilai</p>
                     <p class="mt-0.5 text-[11px] font-semibold text-indigo-600">
-                        {{ scoredQuestionnaire ? 'Skor' : '' }} {{ row.score }} / {{ row.maxScore ?? maxScore }}
+                        {{ scoredQuestionnaire ? 'Skor' : '' }} {{ formatNumber(row.score) }} / {{ row.maxScore ?? maxScore }}
                         {{ scoredQuestionnaire ? '' : 'poin' }}
                     </p>
                     <p
@@ -443,10 +446,12 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                         <td class="px-4 py-3">
                             <span class="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{{ row.kelas }}</span>
                         </td>
-                        <td class="px-4 py-3 text-center font-bold text-indigo-600">{{ row.score }} / {{ row.maxScore ?? maxScore }}</td>
+                        <td class="px-4 py-3 text-center font-bold text-indigo-600">
+                            {{ formatNumber(row.score) }} / {{ row.maxScore ?? maxScore }}
+                        </td>
                         <td class="px-4 py-3 text-center">
                             <span :class="['inline-block rounded-full px-2.5 py-0.5 font-bold', gradeTone(row.percentage)]">{{
-                                scoredQuestionnaire ? `${row.percentage}%` : row.percentage
+                                scoredQuestionnaire ? `${formatNumber(row.percentage)}%` : formatNumber(row.percentage)
                             }}</span>
                             <span
                                 v-if="row.ungraded"

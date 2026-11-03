@@ -8,6 +8,7 @@ use App\Models\QuizResponse;
 use App\Models\QuizSession;
 use App\Support\ActivityRecorder;
 use App\Support\ExamLayout;
+use App\Support\InterviewScores;
 use App\Support\QuizScoring;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -115,6 +116,8 @@ class SubmitExpiredAttempts
             $assignedIds = $this->examLayout->assignedIds($quizForm, $attempt->layout);
             // A form that sends students past sections keeps only what is on their way.
             ['answers' => $answers, 'questionIds' => $givenIds] = $quizForm->keepOnPath($attempt->savedAnswersFor($quizForm, $assignedIds), $assignedIds);
+            // Mode pewawancara: the scores typed so far count like grades given by hand.
+            $enteredScores = app(InterviewScores::class)->sanitize($quizForm, $answers, $attempt->draft_scores);
             $isAccount = $attempt->user_id !== null;
             // Mode pewawancara: the candidate the interviewer named, also for an account.
             $isInterview = $quizForm->isInterview();
@@ -135,6 +138,7 @@ class SubmitExpiredAttempts
                 'doubtful_question_ids' => $quizForm->onlyGiven($attempt->doubtful_question_ids, $givenIds),
                 'question_ids' => $givenIds,
                 'score' => $this->scoring->score($questions, $answers),
+                ...($enteredScores !== [] ? ['entered_scores' => $enteredScores, 'manual_scores' => app(InterviewScores::class)->totals($enteredScores)] : []),
                 'is_timeout' => true,
                 'is_auto_submitted' => true,
             ]);
@@ -146,6 +150,7 @@ class SubmitExpiredAttempts
             $attempt->update([
                 'submitted_at' => now(),
                 'draft_answers' => null,
+                ...($attempt->draft_scores !== null ? ['draft_scores' => null] : []),
             ]);
 
             $startedOn = $this->startActivityOf($attempt);

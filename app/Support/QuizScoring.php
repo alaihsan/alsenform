@@ -24,6 +24,14 @@ class QuizScoring
     public const MAX_OPTION_SCORE = 100;
 
     /**
+     * The question types whose score an interviewer may type for each choice made ("Skor diisi
+     * pewawancara"): one choice, or the ticked ones.
+     *
+     * @var list<string>
+     */
+    public const SCORE_ENTRY_TYPES = ['Multiple choice', 'Drop-down', 'Dropdown', 'Checkboxes'];
+
+    /**
      * Total points earned by a set of answers keyed by question id.
      *
      * @param  array<int, array<string, mixed>>  $questions
@@ -73,6 +81,19 @@ class QuizScoring
         }
 
         return $this->choiceScores($question) !== [];
+    }
+
+    /**
+     * Whether the interviewer types the score of each choice made, from 0 up to the score of that
+     * choice (its maximum), instead of the choice earning its score. Only in Mode pewawancara.
+     *
+     * @param  array<string, mixed>  $question
+     */
+    public function isScoreEntry(array $question): bool
+    {
+        return ($question['scoreEntry'] ?? false) === true
+            && in_array($question['type'] ?? '', self::SCORE_ENTRY_TYPES, true)
+            && $this->isOptionScored($question);
     }
 
     /**
@@ -320,9 +341,10 @@ class QuizScoring
      * @param  array<int, mixed>  $items  All items of the form, sections included.
      * @param  array<int|string, mixed>  $answers
      * @param  list<int|string>|null  $questionIds  The questions the student got, when drawn.
-     * @return list<array{index: int, title: string, score: int, max: int}>
+     * @param  array<int|string, mixed>|null  $manualScores  Points by question id: the scores an interviewer typed.
+     * @return list<array{index: int, title: string, score: int|float, max: int}>
      */
-    public function sectionScores(array $items, array $answers, ?array $questionIds = null): array
+    public function sectionScores(array $items, array $answers, ?array $questionIds = null, ?array $manualScores = null): array
     {
         $given = $questionIds === null ? null : array_map('strval', $questionIds);
         $sections = [['title' => '', 'score' => 0, 'max' => 0]];
@@ -346,10 +368,19 @@ class QuizScoring
                 continue;
             }
             $current = array_key_last($sections);
-            $sections[$current]['max'] += max(0, $this->points($item));
-            if ($id !== null && array_key_exists($id, $answers)) {
+            $points = max(0, $this->points($item));
+            $sections[$current]['max'] += $points;
+            if ($id !== null && is_numeric($manualScores[$id] ?? null)) {
+                $sections[$current]['score'] += min($points, max(0, (float) $manualScores[$id]));
+            } elseif ($id !== null && array_key_exists($id, $answers)) {
                 $sections[$current]['score'] += $this->earned($item, $answers[$id]);
             }
+        }
+
+        // Typed scores may have decimals; whole sums stay whole.
+        foreach ($sections as $index => $section) {
+            $score = round((float) $section['score'], 2);
+            $sections[$index]['score'] = floor($score) === $score ? (int) $score : $score;
         }
 
         $numbered = array_map(
