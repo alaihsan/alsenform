@@ -258,6 +258,10 @@
             if (state.reloading || (state.booted && code !== 'FF-302')) {
                 return;
             }
+            /* The browser opened the page without its history entry ("history.state ... scrollRegions"): a reload makes a new one. */
+            if (code === 'FF-302' && /scrollRegions|history\.state/.test(String((detail && detail.message) || '')) && reloadOnce()) {
+                return;
+            }
             /* A failure on a browser older than the app needs: that is the reason to tell. */
             var shownCode = isOldBrowser && code !== 'FF-201' && code !== 'FF-202' ? 'FF-102' : code;
             report(shownCode, detail || {});

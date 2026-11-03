@@ -2,9 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use Closure;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Symfony\Component\HttpFoundation\Response;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -16,6 +18,22 @@ class HandleInertiaRequests extends Middleware
      * @var string
      */
     protected $rootView = 'app';
+
+    /**
+     * A page opened in full is never kept by the browser. A tab the browser restores, or the back
+     * button, would otherwise open the kept copy the next morning: the app files of that day,
+     * from before an update (FF-302), and the data of that moment.
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        $response = parent::handle($request, $next);
+
+        if (! $request->header('X-Inertia') && str_contains((string) $response->headers->get('Content-Type'), 'text/html')) {
+            $response->headers->set('Cache-Control', 'no-store, private');
+        }
+
+        return $response;
+    }
 
     /**
      * Determines the current asset version.

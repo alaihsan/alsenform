@@ -4,6 +4,8 @@ use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\User;
 use App\Support\PageFailure;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /*
@@ -49,6 +51,32 @@ test('pages are in Indonesian and never machine translated, which would break th
 
     expect($html)->toContain('<html lang="id" translate="no">')
         ->toContain('<meta name="google" content="notranslate">');
+});
+
+/*
+ * FF-302, "window.history.state.scrollRegions": a tab the browser restored, or the back button,
+ * opened a page without its history entry. Kept copies of pages ran the app files of the day
+ * before (from before the fix), so pages are not kept; the entry is made right before Inertia
+ * starts; and if Inertia still finds none, the guard reloads once instead of showing the code.
+ */
+test('a page opened in full is not kept by the browser, an Inertia visit is answered as before', function () {
+    expect($this->get(route('login'))->assertOk()->headers->get('Cache-Control'))->toContain('no-store')
+        ->and($this->actingAs($this->student)->get(route('dashboard'))->assertOk()->headers->get('Cache-Control'))->toContain('no-store');
+
+    $version = $this->get(route('dashboard'))->viewData('page')['version'];
+    $visit = $this->get(route('dashboard'), ['X-Inertia' => 'true', 'X-Inertia-Version' => (string) $version]);
+
+    expect($visit->headers->get('X-Inertia'))->toBe('true')
+        ->and($visit->headers->get('Cache-Control'))->not->toContain('no-store');
+});
+
+test('a page opened without its history entry gets one before Inertia starts, or is reloaded once', function () {
+    $setup = Str::betweenFirst(File::get(resource_path('js/app.ts')), 'setup({ el, App, props, plugin }) {', 'createApp(');
+    $html = $this->get(route('login'))->getContent();
+
+    expect($setup)->toContain('restoreMissingHistoryEntry(props.initialPage)')
+        ->and($html)->toContain("code === 'FF-302' && /scrollRegions|history\\.state/.test(")
+        ->toContain('reloadOnce()) {');
 });
 
 test('a guest\'s blank exam page is recorded with its code, device and exam', function () {

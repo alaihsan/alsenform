@@ -76,27 +76,27 @@ const resolvePage = (name: string): Promise<DefineComponent> =>
  * Safari may open a page again without its history entry: back or forward, or a tab iOS closed in
  * the background and loads again when the student comes back. Inertia then reads the scroll
  * positions of the missing entry and the page stays blank (FF-302, "window.history.state.
- * scrollRegions"). The page the server just sent becomes the entry, as Inertia itself stores it.
+ * scrollRegions"). The page the server just sent becomes the entry, as Inertia itself stores it,
+ * right before Inertia starts: Safari may still empty it while the page's code is being loaded.
  */
-const restoreMissingHistoryEntry = (): void => {
-    const page = document.getElementById('app')?.dataset.page;
-
+const restoreMissingHistoryEntry = (page: unknown): void => {
     if (window.history.state !== null || !page) {
         return;
     }
 
     try {
-        window.history.replaceState({ page: JSON.parse(page) }, '', window.location.href);
+        window.history.replaceState({ page }, '', window.location.href);
     } catch {
-        // Inertia sets the entry itself on a normal visit.
+        // The page guard reloads the page once if Inertia still finds no entry.
     }
 };
-restoreMissingHistoryEntry();
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: resolvePage,
     setup({ el, App, props, plugin }) {
+        restoreMissingHistoryEntry(props.initialPage);
+
         const app = createApp({ render: () => [h(App, props), h(BrandFooter), h(ConnectionLostNotice)] })
             .use(plugin)
             .use(ZiggyVue);
