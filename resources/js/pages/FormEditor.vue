@@ -40,6 +40,7 @@ import {
     UNTITLED_QUESTION,
 } from '@/constants/form-editor';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
+import { useCardReorder } from '@/composables/useCardReorder';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { copyText } from '@/lib/clipboard';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
@@ -242,19 +243,7 @@ const showPublish = ref(false);
 const showMoreMenu = ref(false);
 const openTypeMenuQuestionId = ref<number | null>(null);
 const editingAnswerKeyQuestionId = ref<number | null>(null);
-const draggedQuestionId = ref<number | null>(null);
-const draggableQuestionId = ref<number | null>(null);
 const activeLightboxMedia = ref<{ url: string; type: 'image' | 'video'; caption?: string } | null>(null);
-
-const enableCardDrag = (id: number) => {
-    draggableQuestionId.value = id;
-};
-
-const disableCardDrag = () => {
-    if (draggedQuestionId.value === null) {
-        draggableQuestionId.value = null;
-    }
-};
 
 const setMediaWidth = (media: any, width: string) => {
     media.width = width;
@@ -1533,15 +1522,16 @@ const handleMediaUpload = async (event: Event, media: any) => {
     }
 };
 
-const moveQuestion = (fromId: number, toId: number) => {
-    if (fromId === toId) {
-        return;
-    }
+/*
+ * Moving questions, sections and titles, like in Google Forms: hold the ⋮ of a card (or the dots on
+ * top of it) and drag it where the blue line shows; the arrow keys on them move it one place. The
+ * card moves when it is dropped (composables/useCardReorder): sections are found by their own id,
+ * so the jumps between sections stay as they were.
+ */
+const questionList = ref<{ $el: HTMLElement } | null>(null);
 
-    const fromIndex = form.questions.findIndex((question: Question) => question.id === fromId);
-    const toIndex = form.questions.findIndex((question: Question) => question.id === toId);
-
-    if (fromIndex < 0 || toIndex < 0) {
+const moveQuestionTo = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || !form.questions[fromIndex] || toIndex < 0 || toIndex >= form.questions.length) {
         return;
     }
 
@@ -1551,35 +1541,35 @@ const moveQuestion = (fromId: number, toId: number) => {
     markChanged('Urutan pertanyaan diubah');
 };
 
-const handleDragStart = (question: Question, event: DragEvent) => {
-    const target = event.target as HTMLElement;
-    const isFromHandle = target.closest('[data-drag-handle]');
-    if (!draggableQuestionId.value || !isFromHandle) {
-        event.preventDefault();
-        return;
-    }
-    draggedQuestionId.value = question.id;
-    activeQuestionId.value = question.id;
-    event.dataTransfer?.setData('text/plain', String(question.id));
-    if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = 'move';
-    }
-};
+const {
+    draggingIndex: reorderingIndex,
+    ghost: reorderGhost,
+    line: reorderLine,
+    start: startReorder,
+    moveByKey: reorderByKey,
+} = useCardReorder({
+    list: () => questionList.value?.$el ?? null,
+    count: () => form.questions.length,
+    move: moveQuestionTo,
+});
 
-const handleDragEnd = () => {
-    draggedQuestionId.value = null;
-    draggableQuestionId.value = null;
-};
-
-const handleDrop = (question: Question, event: DragEvent) => {
-    event.preventDefault();
-    const fromId = Number(event.dataTransfer?.getData('text/plain') || draggedQuestionId.value);
-    if (fromId) {
-        moveQuestion(fromId, question.id);
+/** What the card being moved shows while it follows the pointer. */
+const reorderGhostText = computed<{ label: string; title: string } | null>(() => {
+    const item: Question | undefined = reorderingIndex.value === null ? undefined : form.questions[reorderingIndex.value];
+    if (!item) {
+        return null;
     }
-    draggedQuestionId.value = null;
-    draggableQuestionId.value = null;
-};
+
+    const title = stripRichFormatting(item.title).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (item.type === 'Section') {
+        return { label: sectionLabels.value[item.id] ?? 'Bagian', title: title || 'Bagian tanpa judul' };
+    }
+    if (isContentItem(item)) {
+        return { label: 'Judul dan deskripsi', title: title || 'Tanpa judul' };
+    }
+
+    return { label: `Soal ${answerableQuestions.value.indexOf(item) + 1} · ${questionTypeLabel(item.type)}`, title: title || 'Pertanyaan tanpa judul' };
+});
 
 /*
  * Labels of the questions (kept in the question bank): subject, class, chapter and difficulty.
@@ -2511,6 +2501,7 @@ watch(
                     </section>
 
                     <TransitionGroup
+                        ref="questionList"
                         tag="div"
                         class="space-y-4"
                         move-class="motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out"
@@ -2538,17 +2529,13 @@ watch(
                             />
                         </div>
                         <section
-                            :draggable="draggableQuestionId === question.id"
+                            data-reorder-card
                             :class="[
                                 'af-card relative overflow-visible rounded-2xl border border-slate-300 bg-white shadow-sm transition duration-200 hover:shadow-md',
                                 isContentItem(question) ? 'af-section' : 'af-question',
-                                draggedQuestionId === question.id ? 'scale-[0.99] opacity-60' : '',
+                                reorderingIndex === itemIndex ? 'opacity-40' : '',
                             ]"
                             @click="activeQuestionId = question.id"
-                            @dragstart="handleDragStart(question, $event)"
-                            @dragover.prevent
-                            @drop="handleDrop(question, $event)"
-                            @dragend="handleDragEnd"
                         >
                             <!-- Like Google Forms: the section label on top of its card -->
                             <div
@@ -2566,17 +2553,18 @@ watch(
                                 <!-- A section or a "title and description": a title and a description only -->
                                 <template v-if="isContentItem(question)">
                                     <div class="col-span-full" data-testid="content-item">
-                                        <div
+                                        <button
+                                            type="button"
                                             data-drag-handle
-                                            class="mx-auto mb-2 flex w-12 cursor-grab justify-center gap-1.5 py-1 text-slate-300 select-none hover:text-slate-500 active:cursor-grabbing"
-                                            title="Tahan dan geser untuk memindahkan"
-                                            @mousedown="enableCardDrag(question.id)"
-                                            @mouseenter="enableCardDrag(question.id)"
-                                            @mouseleave="disableCardDrag"
-                                            @mouseup="disableCardDrag"
+                                            :aria-label="question.type === 'Section' ? 'Pindahkan bagian' : 'Pindahkan judul'"
+                                            class="mx-auto mb-2 flex w-12 cursor-grab touch-none justify-center gap-1.5 py-1 text-slate-300 select-none [-webkit-touch-callout:none] hover:text-slate-500 active:cursor-grabbing"
+                                            title="Tahan lalu geser untuk memindahkan (atau tombol panah atas/bawah)"
+                                            @pointerdown="startReorder(itemIndex, $event)"
+                                            @keydown="reorderByKey(itemIndex, $event)"
+                                            @contextmenu.prevent
                                         >
                                             <span v-for="dot in 6" :key="dot" class="h-1 w-1 rounded-full bg-current"></span>
-                                        </div>
+                                        </button>
                                         <RichTextInput
                                             v-model="question.title"
                                             :multiline="false"
@@ -2621,6 +2609,18 @@ watch(
                                                     @click.stop="deleteQuestion(question)"
                                                 >
                                                     <Trash2 class="h-5 w-5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    data-drag-handle
+                                                    :aria-label="question.type === 'Section' ? 'Pindahkan bagian' : 'Pindahkan judul'"
+                                                    class="-mx-1 cursor-grab touch-none rounded-lg p-1 text-slate-500 transition select-none [-webkit-touch-callout:none] hover:bg-slate-100 hover:text-slate-800 active:cursor-grabbing"
+                                                    title="Tahan lalu geser untuk memindahkan (atau tombol panah atas/bawah)"
+                                                    @pointerdown="startReorder(itemIndex, $event)"
+                                                    @keydown="reorderByKey(itemIndex, $event)"
+                                                    @contextmenu.prevent
+                                                >
+                                                    <MoreVertical class="h-5 w-5" />
                                                 </button>
                                             </span>
                                         </div>
@@ -2856,22 +2856,18 @@ watch(
                                 <template v-else>
                                     <!-- NORMAL EDIT MODE -->
                                     <div>
-                                        <div
+                                        <button
+                                            type="button"
                                             data-drag-handle
-                                            class="mx-auto mb-3 flex w-12 cursor-grab justify-center gap-1.5 py-1 text-slate-300 select-none hover:text-slate-500 active:cursor-grabbing"
-                                            title="Tahan dan geser untuk memindahkan urutan soal"
-                                            @mousedown="enableCardDrag(question.id)"
-                                            @mouseenter="enableCardDrag(question.id)"
-                                            @mouseleave="disableCardDrag"
-                                            @mouseup="disableCardDrag"
+                                            aria-label="Pindahkan soal"
+                                            class="mx-auto mb-3 flex w-12 cursor-grab touch-none justify-center gap-1.5 py-1 text-slate-300 select-none [-webkit-touch-callout:none] hover:text-slate-500 active:cursor-grabbing"
+                                            title="Tahan lalu geser untuk memindahkan soal (atau tombol panah atas/bawah)"
+                                            @pointerdown="startReorder(itemIndex, $event)"
+                                            @keydown="reorderByKey(itemIndex, $event)"
+                                            @contextmenu.prevent
                                         >
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                            <span class="h-1 w-1 rounded-full bg-current"></span>
-                                        </div>
+                                            <span v-for="dot in 6" :key="dot" class="h-1 w-1 rounded-full bg-current"></span>
+                                        </button>
 
                                         <!-- Toolbar of the formula and Teks Arab (RTL) add-ons, only with one of them installed -->
                                         <FormulaArabicToolbar
@@ -3723,7 +3719,18 @@ watch(
                                                     />
                                                 </button>
                                             </span>
-                                            <MoreVertical class="hidden h-6 w-6 sm:block" />
+                                            <button
+                                                type="button"
+                                                data-drag-handle
+                                                aria-label="Pindahkan soal"
+                                                class="-mx-1 cursor-grab touch-none rounded-lg p-1 text-slate-500 transition select-none [-webkit-touch-callout:none] hover:bg-slate-100 hover:text-slate-800 active:cursor-grabbing"
+                                                title="Tahan lalu geser untuk memindahkan soal (atau tombol panah atas/bawah)"
+                                                @pointerdown="startReorder(itemIndex, $event)"
+                                                @keydown="reorderByKey(itemIndex, $event)"
+                                                @contextmenu.prevent
+                                            >
+                                                <MoreVertical class="h-6 w-6" />
+                                            </button>
                                         </div>
                                     </div>
                                 </template>
@@ -3780,6 +3787,28 @@ watch(
                         </section>
                         </template>
                     </TransitionGroup>
+
+                    <!-- Moving a card: where it lands, and the card that follows the pointer -->
+                    <Teleport to="body">
+                        <div
+                            v-if="reorderLine"
+                            class="pointer-events-none fixed z-[60] h-1 -translate-y-1/2 rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.25)]"
+                            :style="{ top: `${reorderLine.top}px`, left: `${reorderLine.left}px`, width: `${reorderLine.width}px` }"
+                            data-testid="reorder-line"
+                        ></div>
+                        <div
+                            v-if="reorderGhost && reorderGhostText"
+                            class="pointer-events-none fixed z-[61] flex h-16 items-center gap-3 rounded-2xl border border-blue-300 bg-white/95 px-4 shadow-2xl ring-2 ring-blue-500/30"
+                            :style="{ top: `${reorderGhost.top}px`, left: `${reorderGhost.left}px`, width: `${reorderGhost.width}px` }"
+                            data-testid="reorder-ghost"
+                        >
+                            <MoreVertical class="h-5 w-5 shrink-0 text-blue-600" />
+                            <span class="min-w-0">
+                                <span class="block text-xs font-bold text-blue-700">{{ reorderGhostText.label }}</span>
+                                <span class="block truncate text-sm text-slate-800">{{ reorderGhostText.title }}</span>
+                            </span>
+                        </div>
+                    </Teleport>
                     <div v-if="hasManySections" class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 px-2 text-sm text-slate-600" data-testid="after-section">
                         <CornerDownRight class="h-4 w-4 shrink-0 text-slate-400" />
                         <span class="af-on-page font-semibold">Setelah bagian {{ editorSections.length }}</span>
