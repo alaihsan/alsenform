@@ -90,6 +90,13 @@ return [
             'driver' => 'octane',
         ],
 
+        // CACHE_STORE=failover: Redis, and the database while Redis is off, so signing in and
+        // exams (whose rate limits live in the cache) keep working. Kesehatan Server tells.
+        'failover' => [
+            'driver' => 'failover',
+            'stores' => ['redis', 'database'],
+        ],
+
     ],
 
     /*

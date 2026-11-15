@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /*
@@ -40,7 +41,7 @@ test('only admins open Kesehatan Server', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Reports/ServerHealth')
-            ->has('health.checks', 9)
+            ->has('health.checks', 10)
             ->where('health.checks.0.key', 'database')
             ->where('health.checks.0.tone', 'good'));
 });
@@ -68,6 +69,38 @@ test('open server errors, pending database updates and unsaved answers show up',
         ->and($checks['migrations'])->toMatchArray(['value' => '1 pembaruan tertunda', 'tone' => 'bad'])
         ->and($checks['exams'])->toMatchArray(['value' => '2', 'tone' => 'warn'])
         ->and($checks['exams']['detail'])->toContain('1 siswa');
+});
+
+test('the cache shows where it runs, and whether the framework caches are built for an exam', function () {
+    expect(healthChecks()['cache'])->toMatchArray(['label' => 'Cache', 'value' => 'Memori', 'tone' => 'good']);
+
+    config(['cache.default' => 'failover']);
+    Redis::shouldReceive('connection')->with('cache')->andReturn(Mockery::mock(['ping' => true]));
+    $cache = healthChecks()['cache'];
+
+    expect($cache)->toMatchArray(['value' => 'Redis', 'tone' => 'good', 'hint' => null])
+        ->and($cache['detail'])->toEndWith(' ms · konfigurasi dan routing dibaca ulang tiap permintaan');
+
+    app()['env'] = 'production';
+
+    expect(healthChecks()['cache'])->toMatchArray(['value' => 'Redis', 'tone' => 'warn'])
+        ->and(healthChecks()['cache']['hint'])->toContain('php artisan exam:optimize');
+});
+
+test('Redis that is off is worth a look behind the database, and needs fixing on its own', function () {
+    // Nothing listens on port 1.
+    config(['cache.default' => 'failover', 'database.redis.cache.port' => 1]);
+
+    expect(healthChecks()['cache'])->toMatchArray([
+        'value' => 'Redis mati',
+        'detail' => 'sementara memakai database, lebih lambat',
+        'tone' => 'warn',
+    ])->and(healthChecks()['cache']['hint'])->toContain('brew services start redis');
+
+    config(['cache.default' => 'redis']);
+
+    expect(healthChecks()['cache'])->toMatchArray(['value' => 'Redis mati', 'tone' => 'bad'])
+        ->and(healthChecks()['cache']['hint'])->toContain('login dan halaman ujian gagal dibuka');
 });
 
 test('the online address is read from the Cloudflare tunnel, and left out without one', function () {

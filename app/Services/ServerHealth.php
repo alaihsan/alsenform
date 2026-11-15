@@ -10,6 +10,7 @@ use App\Support\DisplayTime;
 use App\Support\PendingMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 use Throwable;
 
 /**
@@ -36,6 +37,7 @@ class ServerHealth
     {
         return array_values(array_filter([
             $this->database(),
+            $this->cache(),
             $this->online(),
             $this->exams(),
             $this->serverErrors(),
@@ -82,6 +84,60 @@ class ServerHealth
             trim(config('database.default').($size !== null ? ' · '.$this->bytes($size, 1) : '')),
             $milliseconds < 50 ? 'good' : ($milliseconds < 300 ? 'warn' : 'bad'),
             $milliseconds < 50 ? null : 'Database lambat menjawab: tutup aplikasi berat di komputer server, atau periksa disk yang hampir penuh.',
+        );
+    }
+
+    /**
+     * Where the cache runs: it keeps the rate limits of signing in and of every exam page. Redis
+     * that is off is taken over by the database when the cache is the "failover" store (slower);
+     * a cache on Redis alone stops signing in and exams. Before an exam, the configuration and
+     * routes should come from the framework caches (exam:optimize), not be read on every request.
+     *
+     * @return array{key: string, label: string, value: string, detail: string|null, tone: 'good'|'warn'|'bad', hint: string|null}
+     */
+    protected function cache(): array
+    {
+        $store = (string) config('cache.default');
+        $isFailover = config("cache.stores.{$store}.driver") === 'failover';
+        $primaryStore = $isFailover ? (string) (config("cache.stores.{$store}.stores")[0] ?? '') : $store;
+        $driver = (string) config("cache.stores.{$primaryStore}.driver", $primaryStore);
+        $details = [];
+
+        if ($driver === 'redis') {
+            try {
+                $started = hrtime(true);
+                Redis::connection(config("cache.stores.{$primaryStore}.connection", 'cache'))->ping();
+                $details[] = number_format((hrtime(true) - $started) / 1_000_000, 1, ',', '.').' ms';
+            } catch (Throwable) {
+                return $this->check(
+                    'cache',
+                    'Cache',
+                    'Redis mati',
+                    $isFailover ? 'sementara memakai database, lebih lambat' : null,
+                    $isFailover ? 'warn' : 'bad',
+                    'Nyalakan Redis di komputer server: brew services start redis (Linux: sudo systemctl start redis-server).'
+                        .($isFailover ? '' : ' Selama Redis mati, login dan halaman ujian gagal dibuka.'),
+                );
+            }
+        }
+
+        $isFrameworkCached = app()->configurationIsCached() && app()->routesAreCached();
+        $details[] = $isFrameworkCached ? 'konfigurasi dan routing di-cache' : 'konfigurasi dan routing dibaca ulang tiap permintaan';
+        $needsFrameworkCache = ! $isFrameworkCached && app()->environment('production');
+
+        return $this->check(
+            'cache',
+            'Cache',
+            match ($driver) {
+                'redis' => 'Redis',
+                'database' => 'Database',
+                'file' => 'Berkas',
+                'array' => 'Memori',
+                default => ucfirst($driver),
+            },
+            implode(' · ', $details),
+            $needsFrameworkCache ? 'warn' : 'good',
+            $needsFrameworkCache ? 'Sebelum ujian jalankan php artisan exam:optimize, agar konfigurasi dan routing tidak dibaca ulang di setiap permintaan.' : null,
         );
     }
 
