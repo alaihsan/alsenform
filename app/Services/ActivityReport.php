@@ -207,6 +207,7 @@ class ActivityReport
             'note' => match (true) {
                 $log->event === ActivityLog::PAGE_FAILED => $this->pageFailureNote($log),
                 $log->event === ActivityLog::SERVER_ERROR => trim(($log->meta['reference'] ?? '').': galat server (HTTP '.($log->meta['status'] ?? 500).')', ': '),
+                $log->event === ActivityLog::EXAM_TIME_EXTENDED => '+'.(int) ($log->meta['minutes'] ?? 0).' menit untuk '.(int) ($log->meta['attempts'] ?? 0).' siswa',
                 ($log->meta['auto'] ?? false) && ($log->meta['locked'] ?? false) => 'Dikirim otomatis: waktu habis saat terkunci',
                 (bool) ($log->meta['auto'] ?? false) => 'Dikirim otomatis: waktu habis, halaman tertutup',
                 ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',

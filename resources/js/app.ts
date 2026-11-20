@@ -7,7 +7,7 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import BrandFooter from './components/BrandFooter.vue';
 import ConnectionLostNotice from './components/ConnectionLostNotice.vue';
-import { initializeTheme } from './composables/useAppearance';
+import { initializeTheme, releaseServerLightOnlyHold, syncThemeFromPage } from './composables/useAppearance';
 import { BRAND_NAME } from './lib/brand';
 import { setupDeviceHints } from './lib/deviceHints';
 import { setupRequestTimeouts } from './lib/requestTimeouts';
@@ -111,7 +111,9 @@ createInertiaApp({
             });
         };
 
+        syncThemeFromPage(props.initialPage as Parameters<typeof syncThemeFromPage>[0]);
         app.mount(el);
+        releaseServerLightOnlyHold();
         isAppMounted = true;
         window.FalconPageGuard?.booted();
     },
@@ -120,7 +122,7 @@ createInertiaApp({
     },
 });
 
-// This will set light / dark mode on page load...
+// The chosen look (light, dark, warm) and its changes: see composables/useAppearance.ts.
 initializeTheme();
 
 // The device each request comes from, for the activity report (see lib/deviceHints.ts).

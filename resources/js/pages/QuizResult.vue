@@ -3,6 +3,7 @@ import RichContent from '@/components/RichContent.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle2, Clock, Lightbulb, MessageSquare, MinusCircle, XCircle } from 'lucide-vue-next';
 import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
+import { useLightOnlyPage } from '@/composables/useAppearance';
 import { computed, ref } from 'vue';
 
 type ResultQuestion = {
@@ -50,6 +51,9 @@ const props = defineProps<{
     isScoredQuestionnaire?: boolean;
 }>();
 
+// The exam keeps the look its teacher designed, whatever look the student's device prefers.
+useLightOnlyPage();
+
 const shownNumber = ref(props.attempts.length ? props.attempts[props.attempts.length - 1].number : 0);
 const shown = computed(() => props.attempts.find((attempt) => attempt.number === shownNumber.value) ?? null);
 const plainTitle = computed(() => new DOMParser().parseFromString(props.quiz.title, 'text/html').body.textContent?.trim() ?? '');
@@ -67,7 +71,7 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
     <Head :title="`Hasil: ${plainTitle}`" />
 
     <div
-        :class="['af-page min-h-screen px-4 py-6 sm:py-10', design ? 'af-designed' : 'bg-[#f0efff]']"
+        :class="['af-page min-h-screen px-4 py-6 sm:py-10', design ? 'af-designed' : 'bg-canvas-strong']"
         :style="design ? { ...designVariables(design), ...pageBackgroundStyle(design) } : undefined"
     >
         <main class="mx-auto max-w-3xl space-y-4">

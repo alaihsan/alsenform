@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ServerError;
 use App\Services\ActivityReport;
 use App\Support\DisplayTime;
+use App\Support\ServerErrorAdvice;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -145,6 +146,7 @@ class ServerErrorController extends Controller
             'lastUser' => $serverError->lastUser?->name,
             'isResolved' => $serverError->resolved_at !== null,
             'resolvedAt' => DisplayTime::format($serverError->resolved_at, 'd M Y H:i'),
+            'advice' => ServerErrorAdvice::for($serverError),
             'occurrencesUrl' => route('server-errors.show', $serverError),
             'updateUrl' => route('server-errors.update', $serverError),
         ];

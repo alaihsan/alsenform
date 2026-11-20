@@ -389,7 +389,7 @@ function confirmRemove(): void {
         <!-- ============================================== -->
         <div
             v-if="isAddClassModalOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
         >
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -447,7 +447,7 @@ function confirmRemove(): void {
         <!-- ============================================== -->
         <div
             v-if="isRemoveModalOpen"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
         >
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center gap-3 text-red-600 mb-3">

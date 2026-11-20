@@ -877,7 +877,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL: Tambah Pengguna Baru (Admin/Guru/Murid) -->
         <!-- ============================================== -->
-        <div v-if="isAddModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4">
+        <div v-if="isAddModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4">
             <div class="relative my-8 w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Header -->
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1090,7 +1090,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL: Edit Data Pengguna                      -->
         <!-- ============================================== -->
-        <div v-if="isEditModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4">
+        <div v-if="isEditModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4">
             <div class="relative my-8 w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div>
@@ -1200,7 +1200,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL: Quick Change Role                       -->
         <!-- ============================================== -->
-        <div v-if="isRoleModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+        <div v-if="isRoleModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div class="flex items-center gap-2.5">
@@ -1300,7 +1300,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL: Ganti / Reset Password                  -->
         <!-- ============================================== -->
-        <div v-if="isPasswordModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+        <div v-if="isPasswordModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div class="flex items-center gap-2.5">
@@ -1411,7 +1411,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL: Hapus Pengguna                          -->
         <!-- ============================================== -->
-        <div v-if="isDeleteModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+        <div v-if="isDeleteModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <div class="mb-3 flex items-center gap-3 text-red-600">
                     <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-600">
@@ -1455,7 +1455,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <div
             v-if="isImportModalOpen"
-            class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4"
+            class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4"
         >
             <div class="relative my-8 w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
                 <!-- Header -->

@@ -396,7 +396,7 @@ async function executeImport(): Promise<void> {
         >
             <div
                 v-if="toastMessage"
-                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-slate-900/95 px-4 py-3 text-sm font-medium text-white shadow-2xl backdrop-blur"
+                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-slate-950/95 px-4 py-3 text-sm font-medium text-white shadow-2xl backdrop-blur"
             >
                 <div class="flex h-6 w-6 items-center justify-center rounded-full" :class="toastType === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500/20 text-emerald-400'">
                     <X v-if="toastType === 'error'" class="h-3.5 w-3.5" />
@@ -713,7 +713,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL 1: IMPOR DATA MURID (CSV / PASTE)       -->
         <!-- ============================================== -->
-        <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div v-if="isImportModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
             <div class="w-full max-w-3xl rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
                 <!-- Modal Header -->
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -954,7 +954,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL 2: TAMBAH / EDIT MURID SATUAN           -->
         <!-- ============================================== -->
-        <div v-if="isFormModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div v-if="isFormModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
             <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                     <h3 class="text-base font-bold text-slate-900">
@@ -1073,7 +1073,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL 3: KELOLA / GANTI PASSWORD MURID         -->
         <!-- ============================================== -->
-        <div v-if="isPasswordModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div v-if="isPasswordModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
             <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
                 <!-- Modal Header -->
                 <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -1188,7 +1188,7 @@ async function executeImport(): Promise<void> {
         <!-- ============================================== -->
         <!-- MODAL 4: HAPUS MURID CONFIRMATION             -->
         <!-- ============================================== -->
-        <div v-if="isDeleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div v-if="isDeleteModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
             <div class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
                 <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 mx-auto">
                     <Trash2 class="h-6 w-6" />

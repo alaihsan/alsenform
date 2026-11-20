@@ -447,9 +447,9 @@ const cellClass = (row: GridRow, column: ShownColumn) => {
         mark ? MARK_CLASSES[mark] : column.left !== null ? 'bg-white' : '',
         column.left !== null ? 'sticky z-[1]' : '',
         isSelected(row, column)
-            ? 'shadow-[inset_0_0_0_2px_#4f46e5]'
+            ? 'shadow-[inset_0_0_0_2px_theme(colors.indigo.600)]'
             : findKey.value && row.keys[column.index].includes(findKey.value)
-              ? 'shadow-[inset_0_0_0_2px_#f59e0b]'
+              ? 'shadow-[inset_0_0_0_2px_theme(colors.amber.500)]'
               : '',
     ];
 };

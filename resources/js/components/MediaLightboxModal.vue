@@ -134,7 +134,7 @@ onUnmounted(() => {
                 @click.self="emit('close')"
             >
                 <!-- Top Toolbar -->
-                <div class="relative z-10 flex items-center justify-between border-b border-white/10 bg-slate-900/60 px-4 py-3 sm:px-6">
+                <div class="relative z-10 flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-4 py-3 sm:px-6">
                     <div class="flex items-center gap-3">
                         <span class="rounded-lg bg-indigo-600/30 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-300 border border-indigo-500/30">
                             {{ media.type === 'image' ? 'Gambar' : 'Video' }}

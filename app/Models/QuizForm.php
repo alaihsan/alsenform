@@ -449,6 +449,43 @@ class QuizForm extends Model
     }
 
     /**
+     * Attempts whose time ran out longer ago than this are not given extra time: they were left
+     * long ago (or handed in by the server), not cut short by an outage.
+     */
+    public const EXTRA_TIME_EXPIRED_WITHIN_MINUTES = 30;
+
+    /**
+     * Give every attempt still in progress extra minutes ("Tambah waktu"), for example after the
+     * server was down during the exam while the timers kept running. Each attempt is moved on its
+     * own, only while it is still not handed in, so a student handing in at that moment keeps
+     * their response and a repeated click arriving at the same time adds the minutes once.
+     *
+     * @return int The number of attempts given the extra time.
+     */
+    public function extendRunningAttempts(int $minutes): int
+    {
+        $extended = 0;
+
+        $this->sessions()
+            ->whereNotNull('started_at')
+            ->whereNull('submitted_at')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '>=', now()->subMinutes(self::EXTRA_TIME_EXPIRED_WITHIN_MINUTES))
+            ->select(['id', 'expires_at'])
+            ->chunkById(200, function ($sessions) use ($minutes, &$extended): void {
+                foreach ($sessions as $session) {
+                    $extended += QuizSession::query()
+                        ->whereKey($session->id)
+                        ->whereNull('submitted_at')
+                        ->where('expires_at', $session->expires_at)
+                        ->update(['expires_at' => $session->expires_at->copy()->addMinutes($minutes)]);
+                }
+            });
+
+        return $extended;
+    }
+
+    /**
      * What a response keeps when the form sends respondents past sections (see SectionFlow): the
      * answers on the respondent's way, and the questions given narrowed to that way.
      *

@@ -34,6 +34,9 @@ class ActivityLog extends Model
     /** An error of the server (HTTP 500) on a request of this person, with its reference code in the meta. */
     public const SERVER_ERROR = 'server_error';
 
+    /** A teacher gave the students working on an exam extra minutes, with the minutes and attempts in the meta. */
+    public const EXAM_TIME_EXTENDED = 'exam_time_extended';
+
     /**
      * Labels of the events, in the order the report lists them.
      *
@@ -46,6 +49,7 @@ class ActivityLog extends Model
         self::EXAM_SUBMITTED => 'Kirim jawaban',
         self::PAGE_FAILED => 'Halaman gagal dimuat',
         self::SERVER_ERROR => 'Galat server',
+        self::EXAM_TIME_EXTENDED => 'Tambah waktu ujian',
     ];
 
     /**

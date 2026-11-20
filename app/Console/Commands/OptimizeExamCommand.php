@@ -2,10 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Support\AssetBuild;
 use App\Support\PendingMigrations;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\Process\Process;
 
 class OptimizeExamCommand extends Command
 {
@@ -126,9 +126,11 @@ class OptimizeExamCommand extends Command
         // 6. Ensure Vite assets are built
         if (! file_exists(public_path('build/manifest.json'))) {
             $this->info('⚙️  Membangun aset produksi Vite...');
-            $process = new Process(['npm', 'run', 'build'], base_path());
-            $process->run();
-            $this->info('✓ Aset frontend Vite berhasil dibundel.');
+            if (app(AssetBuild::class)->build()) {
+                $this->info('✓ Aset frontend Vite berhasil dibundel.');
+            } else {
+                $this->error('Gagal membangun aset frontend. Jalankan: npm run build');
+            }
         } else {
             $this->info('✓ Aset frontend produksi sudah siap (Cache-Control aktif).');
         }

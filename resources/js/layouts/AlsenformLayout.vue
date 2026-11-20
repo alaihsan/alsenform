@@ -15,7 +15,7 @@ withDefaults(
 </script>
 
 <template>
-    <div class="min-h-screen bg-[#f5f4ff] text-slate-900">
+    <div class="min-h-screen bg-canvas text-slate-900">
         <header class="sticky top-0 z-30 border-b border-slate-100 bg-white">
             <div class="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
                 <component :is="minimal ? 'div' : Link" :href="minimal ? undefined : route('dashboard')" class="flex min-w-0 items-center">

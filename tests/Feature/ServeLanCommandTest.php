@@ -74,6 +74,42 @@ function startLanTestServer(int $port, array $arguments): Process
     return $process;
 }
 
+/**
+ * Stop a server of startLanTestServer() with its workers: stop() ends the main process only, and
+ * its workers would keep running, until the computer can start no more processes.
+ */
+function stopLanTestServer(Process $server, int $port): void
+{
+    $server->stop(0);
+    (new ServeLanCommand)->killPortProcesses($port);
+}
+
+/**
+ * The processes still running a PHP server on the given port of 127.0.0.1.
+ *
+ * @return list<string>
+ */
+function lanTestServerProcesses(int $port): array
+{
+    $processes = explode("\n", (string) shell_exec('ps -ax -o args='));
+
+    return array_values(array_filter($processes, fn (string $process): bool => str_contains($process, "-S 127.0.0.1:{$port} ")));
+}
+
+test('a test server leaves none of its workers running once stopped', function () {
+    $socket = stream_socket_server('tcp://127.0.0.1:0');
+    $port = (int) substr(strrchr(stream_socket_get_name($socket, false), ':'), 1);
+    fclose($socket);
+
+    $server = startLanTestServer($port, [base_path('server.php')]);
+    expect(lanTestServerProcesses($port))->toHaveCount(3);
+
+    stopLanTestServer($server, $port);
+
+    expect(lanTestServerProcesses($port))->toBe([])
+        ->and((new ServeLanCommand)->getPortPids($port))->toBe([]);
+});
+
 function lanCommandWithoutMetadata(): ServeLanCommand
 {
     return new class extends ServeLanCommand
@@ -106,7 +142,7 @@ test('lan:serve stops the server on the port without touching programs connected
             ->and($command->isPortInUse($port))->toBeFalse();
     } finally {
         fclose($client);
-        $server->stop(0);
+        stopLanTestServer($server, $port);
     }
 });
 
@@ -124,7 +160,7 @@ test('lan:stop stops an alsenform server that has no background metadata', funct
             ->and($buffer->fetch())->toContain("Server Falcon Forms pada port {$port} telah dihentikan")
             ->and($command->isPortInUse($port))->toBeFalse();
     } finally {
-        $server->stop(0);
+        stopLanTestServer($server, $port);
     }
 });
 
@@ -166,8 +202,8 @@ test('lan:stop --port stops the server on that port, not the background server n
             ->and(file_exists($infoFile))->toBeTrue();
     } finally {
         @unlink($infoFile);
-        $background->stop(0);
-        $old->stop(0);
+        stopLanTestServer($background, $backgroundPort);
+        stopLanTestServer($old, $oldPort);
     }
 });
 
@@ -185,7 +221,7 @@ test('lan:stop leaves a server of another application running', function () {
             ->and($buffer->fetch())->toContain('bukan oleh server Falcon Forms')
             ->and($command->isPortInUse($port))->toBeTrue();
     } finally {
-        $server->stop(0);
+        stopLanTestServer($server, $port);
     }
 });
 
@@ -281,8 +317,10 @@ test('lan:serve announces the new student url when the server ip address changes
 
 test('lan:serve stops with a clear message when postgresql is not reachable', function () {
     $defaultConnection = config('database.default');
+    // PostgreSQL where nothing listens, whatever database the tests run on: a copy of an SQLite
+    // connection would ignore the host, open, and go on to start the server.
     config([
-        'database.connections.unreachable' => array_merge(config("database.connections.{$defaultConnection}"), ['host' => '127.0.0.1', 'port' => 1]),
+        'database.connections.unreachable' => array_merge(config('database.connections.pgsql'), ['host' => '127.0.0.1', 'port' => 1]),
         'database.default' => 'unreachable',
     ]);
 

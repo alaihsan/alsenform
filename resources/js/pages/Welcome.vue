@@ -32,7 +32,7 @@ const submit = () => {
 <template>
     <Head title="Masuk" />
 
-    <main class="flex min-h-screen flex-col justify-between bg-[#f5f4ff] text-slate-950 selection:bg-indigo-500 selection:text-white">
+    <main class="flex min-h-screen flex-col justify-between bg-canvas text-slate-950 selection:bg-indigo-500 selection:text-white">
         <!-- Header -->
         <header class="sticky top-0 z-20 w-full border-b border-indigo-100/80 bg-white/75 backdrop-blur-md">
             <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -53,7 +53,7 @@ const submit = () => {
         <!-- Main Login Section (Centered) -->
         <div class="mx-auto flex w-full max-w-md flex-1 items-center justify-center px-4 py-8 sm:py-12">
             <div class="w-full">
-                <div class="rounded-[2.2rem] border-2 border-indigo-100 bg-white p-6 shadow-[0_12px_0_#e0e7ff] sm:p-8">
+                <div class="rounded-[2.2rem] border-2 border-indigo-100 bg-white p-6 shadow-[0_12px_0_theme(colors.indigo.100)] sm:p-8">
                     <!-- Direct Login Form -->
                     <div class="space-y-5">
                         <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
@@ -134,7 +134,7 @@ const submit = () => {
                             <button
                                 type="submit"
                                 :disabled="form.processing"
-                                class="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 text-sm font-black text-white shadow-[0_5px_0_#3730a3] transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50"
+                                class="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 text-sm font-black text-white shadow-[0_5px_0_theme(colors.indigo.800)] transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50"
                             >
                                 <Loader2 v-if="form.processing" class="h-4 w-4 animate-spin" />
                                 <LogIn v-else class="h-4 w-4" />

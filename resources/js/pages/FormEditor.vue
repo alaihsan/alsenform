@@ -21,6 +21,7 @@ import RichTextInput from '@/components/form-editor/RichTextInput.vue';
 import SectionTargetSelect from '@/components/form-editor/SectionTargetSelect.vue';
 import SelectionFormatToolbar from '@/components/form-editor/SelectionFormatToolbar.vue';
 import DeliveryQualityCard from '@/components/form-editor/DeliveryQualityCard.vue';
+import ExtendTimeCard from '@/components/form-editor/ExtendTimeCard.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
     backgroundPatterns,
@@ -204,7 +205,7 @@ const form = reactive({
         questionFont: props.quizForm?.settings?.questionFont ?? "'Inter', sans-serif",
         answerFont: props.quizForm?.settings?.answerFont ?? "'Inter', sans-serif",
         themeColorClass: props.quizForm?.settings?.themeColorClass ?? 'bg-indigo-600',
-        backgroundColorClass: props.quizForm?.settings?.backgroundColorClass ?? 'bg-[#f0efff]',
+        backgroundColorClass: props.quizForm?.settings?.backgroundColorClass ?? 'bg-canvas-strong',
         backgroundPatternClass: props.quizForm?.settings?.backgroundPatternClass ?? 'pattern-none',
         // Desainer Form add-on: null until the teacher designs the exam.
         design: props.quizForm?.settings?.design ? withDesignDefaults(props.quizForm.settings.design) : (null as FormDesign | null),
@@ -725,7 +726,7 @@ const gradebook = computed(() => props.quizForm?.responses?.gradebook ?? []);
 const pieChartStyle = (question: NonNullable<QuizFormPayload['responses']>['questions'][number]) => {
     if (!question.total || !question.options.length) {
         return {
-            background: '#e2e8f0',
+            background: 'rgb(var(--c-slate-200))',
         };
     }
 
@@ -2117,7 +2118,7 @@ watch(
     <main
         :class="[
             'min-h-screen text-slate-900 transition-all duration-300',
-            activeDesign ? '' : (form.settings.backgroundColorClass ?? 'bg-[#f0efff]'),
+            activeDesign ? '' : (form.settings.backgroundColorClass ?? 'bg-canvas-strong'),
             activeDesign?.backgroundImage ? '' : (form.settings.backgroundPatternClass ?? 'pattern-none'),
         ]"
         :style="activeDesign ? pageBackgroundStyle(activeDesign) : undefined"
@@ -2126,7 +2127,7 @@ watch(
             <div class="flex h-16 items-center gap-3 px-4 sm:px-5">
                 <button
                     type="button"
-                    class="h-9 w-9 shrink-0 rounded-[22%] transition hover:-translate-y-0.5 hover:shadow-[0_4px_0_#311a72]"
+                    class="h-9 w-9 shrink-0 rounded-[22%] transition hover:-translate-y-0.5 hover:shadow-[0_4px_0_theme(colors.violet.950)]"
                     aria-label="Kembali ke beranda"
                     title="Kembali ke Beranda"
                     @click="navigateBackToDashboard"
@@ -3109,7 +3110,7 @@ watch(
                                                         >
                                                             <!-- Floating Hover Badge for Fullscreen Zoom -->
                                                             <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-950/25 opacity-0 transition group-hover:opacity-100">
-                                                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-900/85 px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-xs">
+                                                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-950/85 px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-xs">
                                                                     <ZoomIn class="h-4 w-4" />
                                                                     Klik untuk layar penuh & zoom
                                                                 </span>
@@ -4885,6 +4886,10 @@ watch(
                         @toggle="(on) => examTokenAddon && setAddonForExam(examTokenAddon, on)"
                         @open-gallery="isAddonGalleryOpen = true"
                     />
+                    <ExtendTimeCard
+                        v-if="quizForm?.id && (Number(form.settings.timeLimit) > 0 || form.settings.schedule?.closesAt)"
+                        :url="`/forms/${quizForm.id}/sessions/extend-time`"
+                    />
                     <ClassMapPanel v-if="quizForm?.classMapUrl" :url="quizForm.classMapUrl" :busy-ids="unlockingIds" @unlock="unlockFromClassMap" />
                     <UnlockRequestsPanel
                         :unlock-requests="unlockRequests"
@@ -5704,7 +5709,7 @@ Jawaban: A, C</pre
                                         ? 'border-indigo-500 bg-slate-50 ring-2 ring-indigo-500/20'
                                         : 'border-slate-200 hover:bg-slate-50',
                                     pattern.value,
-                                    form.settings.backgroundColorClass ?? 'bg-[#f0efff]',
+                                    form.settings.backgroundColorClass ?? 'bg-canvas-strong',
                                 ]"
                                 @click="
                                     form.settings.backgroundPatternClass = pattern.value;
@@ -5884,12 +5889,13 @@ button[aria-label]::after,
     transform: translateX(-50%);
     white-space: nowrap;
     border-radius: 8px;
-    background: #0f172a;
+    /* A dark tooltip on light looks, a light one on dark looks (palette.js). */
+    background: rgb(var(--c-slate-900));
     padding: 6px 8px;
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
-    color: white;
+    color: rgb(var(--t-inverse));
     box-shadow: 0 10px 25px rgb(15 23 42 / 18%);
     /* Only rendered while shown: a hidden tooltip near the screen edge would widen the page on phones. */
     display: none;

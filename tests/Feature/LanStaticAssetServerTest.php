@@ -1,5 +1,6 @@
 <?php
 
+use App\Console\Commands\ServeLanCommand;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
@@ -26,7 +27,9 @@ beforeEach(function () {
     $this->port = (int) substr(strrchr(stream_socket_get_name($socket, false), ':'), 1);
     fclose($socket);
 
-    $this->server = new Process([PHP_BINARY, '-S', '127.0.0.1:'.$this->port, base_path('server.php')], base_path());
+    // Without workers: the .env asks lan:serve for 24 (PHP_CLI_SERVER_WORKERS), and the workers of
+    // a server live on after stop(), each test leaving 24 processes behind until none can be started.
+    $this->server = new Process([PHP_BINARY, '-S', '127.0.0.1:'.$this->port, base_path('server.php')], base_path(), ['PHP_CLI_SERVER_WORKERS' => false]);
     $this->server->start();
 
     $ready = false;
@@ -81,6 +84,10 @@ function lanRequest(int $port, string $path, array $headers = []): array
 
     return ['status' => (int) $status[1], 'headers' => $responseHeaders, 'body' => $body];
 }
+
+test('the test server is a single process, whatever the .env asks lan:serve for', function () {
+    expect((new ServeLanCommand)->getPortPids($this->port))->toBe([(string) $this->server->getPid()]);
+});
 
 test('pre-compressed build assets are served when the browser accepts gzip', function () {
     $precompressed = gzencode($this->script, 9);

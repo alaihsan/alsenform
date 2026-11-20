@@ -94,7 +94,7 @@ const chooseClass = (kelas: string) => {
                         <thead class="bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                             <tr>
                                 <th scope="col" class="sticky left-0 z-10 w-12 min-w-[3rem] bg-slate-50 px-3 py-3 text-center">No</th>
-                                <th scope="col" class="sticky left-12 z-10 min-w-[11rem] bg-slate-50 px-4 py-3 shadow-[inset_-1px_0_0_#e2e8f0]">
+                                <th scope="col" class="sticky left-12 z-10 min-w-[11rem] bg-slate-50 px-4 py-3 shadow-[inset_-1px_0_0_theme(colors.slate.200)]">
                                     Nama
                                 </th>
                                 <th
@@ -112,7 +112,7 @@ const chooseClass = (kelas: string) => {
                                 <td class="sticky left-0 z-10 w-12 min-w-[3rem] bg-white px-3 py-2.5 text-center tabular-nums text-slate-500">
                                     {{ index + 1 }}
                                 </td>
-                                <td class="sticky left-12 z-10 min-w-[11rem] bg-white px-4 py-2.5 shadow-[inset_-1px_0_0_#e2e8f0]">
+                                <td class="sticky left-12 z-10 min-w-[11rem] bg-white px-4 py-2.5 shadow-[inset_-1px_0_0_theme(colors.slate.200)]">
                                     <span class="block font-semibold text-slate-900">{{ student.name }}</span>
                                     <span class="block text-xs text-slate-500">{{
                                         student.kelas === '-' ? 'Tanpa kelas' : `Kelas ${student.kelas}`

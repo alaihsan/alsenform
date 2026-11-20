@@ -373,6 +373,12 @@ class QuizResponseController extends Controller
                 $isTimeout = true;
             }
 
+            // The page's time ran out, but the teacher has given extra time since: nothing is handed
+            // in, the page is told the new end and the student continues.
+            if ($isTimeout && ! $this->timeIsUp($session) && $this->wasGivenExtraTime($quizForm, $session)) {
+                return $this->extraTimeGiven($request, $session);
+            }
+
             // A locked attempt waits for the teacher, except when its time is up: the answers
             // given so far are then stored instead of being lost.
             if ($session->isEffectivelyLocked($quizForm) && ! $this->timeIsUp($session)) {
@@ -1036,7 +1042,46 @@ class QuizResponseController extends Controller
             'locked' => $session?->isEffectivelyLocked($quizForm) ?? false,
             'unlock_requested' => $unlockRequested,
             'submitted' => $session?->submitted_at !== null,
+            // The end of the attempt, which the teacher may move later ("Tambah waktu"): the
+            // countdown of an open page follows it, against the server's clock.
+            'expires_at' => $session?->expires_at?->toISOString(),
+            'server_time' => now()->toISOString(),
         ]);
+    }
+
+    /**
+     * The answer to a timeout hand-in from a page that has not heard of the extra time yet.
+     */
+    protected function extraTimeGiven(Request $request, QuizSession $session): RedirectResponse|JsonResponse
+    {
+        $message = 'Guru menambah waktu ujian. Silakan lanjutkan mengerjakan.';
+
+        if (! $request->wantsJson()) {
+            return back()->withErrors(['error' => $message]);
+        }
+
+        return response()->json([
+            'message' => $message,
+            'extra_time' => true,
+            'expires_at' => $session->expires_at?->toISOString(),
+            'server_time' => now()->toISOString(),
+        ], 409);
+    }
+
+    /**
+     * Whether the teacher gave the attempt extra time ("Tambah waktu"): it ends later than its time
+     * limit (or the closing time) set at the start. A page that has not heard of it yet hands in
+     * when its old end comes.
+     */
+    protected function wasGivenExtraTime(QuizForm $quizForm, QuizSession $session): bool
+    {
+        if ($session->expires_at === null || $session->started_at === null) {
+            return false;
+        }
+
+        $endAtStart = $quizForm->attemptExpiresAt($session->started_at, $this->timeLimitMinutes($quizForm));
+
+        return $endAtStart !== null && $session->expires_at->gt($endAtStart->copy()->addSeconds(30));
     }
 
     /**

@@ -2,7 +2,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { router, usePage } from '@inertiajs/vue3';
-import { Activity, BookOpen, ChartColumn, Home, Library, LogOut, Puzzle, ShieldCheck, UserRound, Users } from 'lucide-vue-next';
+import { useAppearance, type Appearance } from '@/composables/useAppearance';
+import { Activity, BookOpen, ChartColumn, Clock, Coffee, Home, Library, LogOut, Monitor, Moon, Puzzle, ShieldCheck, Sun, UserRound, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 const props = withDefaults(
@@ -49,6 +50,24 @@ const goToAddons = () => props.leave(() => router.visit(route('addons.index')));
 const goToProfile = () => props.leave(() => router.visit(route('profile.edit')));
 const goToPrivacy = () => props.leave(() => router.visit(route('privacy')));
 const logout = () => props.leave(() => router.post(route('logout')));
+
+// The look, at hand in every page; Profil → Tampilan explains each choice.
+const { appearance, colorTheme, setAppearance, setColorTheme } = useAppearance();
+const appearanceChoices: { value: Appearance; label: string; icon: typeof Sun }[] = [
+    { value: 'light', label: 'Terang', icon: Sun },
+    { value: 'dark', label: 'Gelap', icon: Moon },
+    { value: 'system', label: 'Ikuti sistem', icon: Monitor },
+    { value: 'schedule', label: 'Ikuti jam', icon: Clock },
+];
+/** Changing the look keeps the menu open, to compare the choices. */
+const chooseAppearance = (event: Event, value: Appearance) => {
+    event.preventDefault();
+    void setAppearance(value).catch(() => undefined);
+};
+const toggleWarm = (event: Event) => {
+    event.preventDefault();
+    void setColorTheme(colorTheme.value === 'warm' ? 'standard' : 'warm').catch(() => undefined);
+};
 </script>
 
 <template>
@@ -86,6 +105,54 @@ const logout = () => props.leave(() => router.post(route('logout')));
                         {{ roleLabel }}
                     </span>
                 </div>
+            </div>
+            <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
+            <div class="px-2.5 pb-1.5 pt-1">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tampilan</p>
+                <div class="mt-1.5 grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label="Tampilan">
+                    <DropdownMenuItem
+                        v-for="choice in appearanceChoices"
+                        :key="choice.value"
+                        role="menuitemradio"
+                        :aria-checked="appearance === choice.value"
+                        :title="choice.label"
+                        :aria-label="choice.label"
+                        :data-appearance-choice="choice.value"
+                        :class="[
+                            'flex h-8 cursor-pointer items-center justify-center rounded-lg transition-colors focus:outline-none',
+                            appearance === choice.value
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-slate-500 hover:bg-white hover:text-slate-800 focus:bg-white',
+                        ]"
+                        @select="chooseAppearance($event, choice.value)"
+                    >
+                        <component :is="choice.icon" class="h-4 w-4" />
+                    </DropdownMenuItem>
+                </div>
+                <DropdownMenuItem
+                    role="menuitemcheckbox"
+                    :aria-checked="colorTheme === 'warm'"
+                    data-warm-toggle
+                    class="mt-1.5 flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                    @select="toggleWarm"
+                >
+                    <Coffee class="h-4 w-4 text-slate-500" />
+                    <span class="flex-1">Nuansa hangat</span>
+                    <span
+                        :class="[
+                            'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
+                            colorTheme === 'warm' ? 'bg-indigo-600' : 'bg-slate-300',
+                        ]"
+                        aria-hidden="true"
+                    >
+                        <span
+                            :class="[
+                                'absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                                colorTheme === 'warm' ? 'translate-x-[18px]' : 'translate-x-0.5',
+                            ]"
+                        />
+                    </span>
+                </DropdownMenuItem>
             </div>
             <DropdownMenuSeparator class="my-1 border-t border-slate-100" />
             <DropdownMenuItem

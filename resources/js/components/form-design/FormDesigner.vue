@@ -167,7 +167,7 @@ const insertHook = (selector: string) => {
 
 <template>
     <div
-        class="fixed inset-0 z-[70] flex bg-slate-900/40 backdrop-blur-sm"
+        class="fixed inset-0 z-[70] flex bg-slate-950/40 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label="Desainer Formulir"

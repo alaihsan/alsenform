@@ -20,6 +20,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
+import AppearanceSettings from '@/components/appearance/AppearanceSettings.vue';
 import DeleteUser from '@/components/DeleteUser.vue';
 import InputError from '@/components/InputError.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -226,7 +227,7 @@ const isStudent = computed(() => {
                         </Avatar>
                         <button
                             type="button"
-                            class="absolute inset-0 flex flex-col items-center justify-center rounded-3xl bg-slate-900/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                            class="absolute inset-0 flex flex-col items-center justify-center rounded-3xl bg-slate-950/50 text-white opacity-0 transition-opacity group-hover:opacity-100"
                             title="Ubah foto profil"
                             @click="triggerAvatarUpload"
                         >
@@ -369,6 +370,9 @@ const isStudent = computed(() => {
                 </div>
             </form>
         </div>
+
+        <!-- Tampilan: terang, gelap, ikuti sistem atau jam, dan nuansa warna -->
+        <AppearanceSettings />
 
         <!-- 2. Preferensi default kuis (guru & admin) -->
         <div v-if="isTeacherOrAdmin" :class="alsenCard">

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use FilesystemIterator;
+use Illuminate\Support\Facades\Process;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -12,6 +13,20 @@ use SplFileInfo;
  */
 class AssetBuild
 {
+    /** The command that builds the bundle; the tests fake it (tests/TestCase.php). */
+    public const COMMAND = 'npm run build';
+
+    /**
+     * Builds the bundle again (it replaces public/build), the build's output given to $output as it
+     * comes. Whether it worked.
+     *
+     * @param  (callable(string, string): void)|null  $output
+     */
+    public function build(?callable $output = null): bool
+    {
+        return Process::path(base_path())->timeout(600)->run(self::COMMAND, $output)->successful();
+    }
+
     public function manifestPath(): string
     {
         return public_path('build/manifest.json');

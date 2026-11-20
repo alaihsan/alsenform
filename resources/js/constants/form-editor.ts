@@ -139,16 +139,16 @@ export const fonts = [
 ];
 
 export const colorThemes = [
-    { name: 'Classic Indigo', theme: 'bg-indigo-600', bg: 'bg-[#f0efff]' },
-    { name: 'Emerald Garden', theme: 'bg-emerald-600', bg: 'bg-[#eefdf5]' },
-    { name: 'Rose Blush', theme: 'bg-rose-600', bg: 'bg-[#fff1f2]' },
-    { name: 'Amber Warmth', theme: 'bg-amber-600', bg: 'bg-[#fefaf0]' },
-    { name: 'Sky Breeze', theme: 'bg-sky-600', bg: 'bg-[#f0f9ff]' },
-    { name: 'Fuchsia Fantasy', theme: 'bg-fuchsia-600', bg: 'bg-[#fdf4ff]' },
-    { name: 'Violet Mystery', theme: 'bg-violet-600', bg: 'bg-[#f5f3ff]' },
-    { name: 'Teal Dream', theme: 'bg-teal-600', bg: 'bg-[#f0fdfa]' },
-    { name: 'Orange Warmth', theme: 'bg-orange-600', bg: 'bg-[#fff7ed]' },
-    { name: 'Slate Gray', theme: 'bg-slate-700', bg: 'bg-[#f8fafc]' },
+    { name: 'Classic Indigo', theme: 'bg-indigo-600', bg: 'bg-canvas-strong' },
+    { name: 'Emerald Garden', theme: 'bg-emerald-600', bg: 'bg-emerald-50' },
+    { name: 'Rose Blush', theme: 'bg-rose-600', bg: 'bg-rose-50' },
+    { name: 'Amber Warmth', theme: 'bg-amber-600', bg: 'bg-amber-50' },
+    { name: 'Sky Breeze', theme: 'bg-sky-600', bg: 'bg-sky-50' },
+    { name: 'Fuchsia Fantasy', theme: 'bg-fuchsia-600', bg: 'bg-fuchsia-50' },
+    { name: 'Violet Mystery', theme: 'bg-violet-600', bg: 'bg-violet-50' },
+    { name: 'Teal Dream', theme: 'bg-teal-600', bg: 'bg-teal-50' },
+    { name: 'Orange Warmth', theme: 'bg-orange-600', bg: 'bg-orange-50' },
+    { name: 'Slate Gray', theme: 'bg-slate-700', bg: 'bg-slate-50' },
 ];
 
 export const backgroundPatterns = [

@@ -11,6 +11,7 @@ use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\DocxExportController;
 use App\Http\Controllers\ExamProgressController;
 use App\Http\Controllers\ExamTokenController;
+use App\Http\Controllers\ExtendExamTimeController;
 use App\Http\Controllers\FollowUpExamController;
 use App\Http\Controllers\GradingController;
 use App\Http\Controllers\PageFailureController;
@@ -143,6 +144,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::post('unlock-requests/{unlockRequest}/approve', [UnlockRequestController::class, 'approve'])->name('forms.unlock-requests.approve');
         Route::post('forms/{quizForm}/sessions/unlock-all', [UnlockRequestController::class, 'unlockAll'])->name('forms.sessions.unlock-all');
         Route::post('forms/{quizForm}/sessions/{quizSession}/unlock', [UnlockRequestController::class, 'unlockSession'])->name('forms.sessions.unlock');
+
+        // Tambah waktu: extra minutes for every student still working on the exam (e.g. after an outage)
+        Route::post('forms/{quizForm}/sessions/extend-time', ExtendExamTimeController::class)->name('forms.sessions.extend-time');
 
         // Cohort Management Routes
         Route::get('cohorts', [CohortController::class, 'index'])->name('cohorts.index');

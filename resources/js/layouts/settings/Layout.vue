@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { ArrowLeft, BookOpen, KeyRound, Palette, UserRound, Users } from 'lucide-vue-next';
+import { ArrowLeft, BookOpen, KeyRound, UserRound, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 withDefaults(
@@ -24,9 +24,8 @@ const isStudent = computed(() => {
 });
 
 const sidebarNavItems = computed(() => [
-    { title: 'Profil', description: 'Foto & data diri', href: '/settings/profile', icon: UserRound },
+    { title: 'Profil', description: 'Data diri & tampilan', href: '/settings/profile', icon: UserRound },
     { title: 'Password', description: 'Keamanan akun', href: '/settings/password', icon: KeyRound },
-    { title: 'Tampilan', description: 'Tema aplikasi', href: '/settings/appearance', icon: Palette },
     // Teachers manage student accounts; admins also manage teacher and admin accounts.
     ...(isStudent.value
         ? []

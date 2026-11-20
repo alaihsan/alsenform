@@ -36,6 +36,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import axios from 'axios';
 import CollapsibleContent from '@/components/CollapsibleContent.vue';
 import RichContent from '@/components/RichContent.vue';
+import { useLightOnlyPage } from '@/composables/useAppearance';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { deviceHintsHeader } from '@/lib/deviceHints';
 import { CONTENT_ITEM_TYPES, type SectionTarget } from '@/types/quiz';
@@ -161,6 +162,9 @@ const props = defineProps<{
     opensAt?: string | null;
     serverTime?: string;
 }>();
+
+// The exam keeps the look its teacher designed, whatever look the student's device prefers.
+useLightOnlyPage();
 
 const answers = ref<Record<number, any>>({});
 
@@ -702,7 +706,15 @@ const hasPendingLock = () => {
     }
 };
 
-type LockState = { lock_on_blur?: boolean; locked?: boolean; unlock_requested?: boolean };
+type LockState = {
+    lock_on_blur?: boolean;
+    locked?: boolean;
+    unlock_requested?: boolean;
+    submitted?: boolean;
+    // The end of the attempt on the server, which the teacher may move ("Tambah waktu"), and the server's clock.
+    expires_at?: string | null;
+    server_time?: string;
+};
 
 // The answers on the page when the student left, sent with the lock (also later, when it went offline).
 let answersWhenLeft: Record<number, any> | null = null;
@@ -740,6 +752,8 @@ const refreshLockState = async () => {
                   params: { session_token: props.session?.token, returning: returningAs, unsynced_since: unsyncedSince ?? 0 },
                   timeout: REQUEST_TIMEOUT_MS,
               });
+        // First, so a hand-in withdrawn by extra time is not sent again when the connection is back.
+        followExamEnd(response.data);
         if (!isServerReachable.value) {
             markServerReachable(true);
             onConnectionRestored();
@@ -843,6 +857,7 @@ const probeLock = async () => {
     const version = lockVersion;
     try {
         const response = await axios.post(`/forms/${props.quizForm.slug}/lock`, lockPayload(), { timeout: REQUEST_TIMEOUT_MS });
+        followExamEnd(response.data);
         if (version !== lockVersion || isSubmitted.value || isSubmitting.value) {
             return;
         }
@@ -1132,6 +1147,73 @@ const startCountdown = () => {
 
     updateTimer();
     timerInterval = setInterval(updateTimer, 1000);
+};
+
+/** Milliseconds until the attempt ends by the server's clock; 0 without an end set by the server. */
+const examRemainingMs = (): number =>
+    examExpiresAt.value ? Math.max(0, new Date(examExpiresAt.value).getTime() - (Date.now() + examClockOffset)) : 0;
+
+// "Waktu ujian ditambah 10 menit": shown for a moment when the teacher gives extra time.
+const extraTimeNotice = ref('');
+let extraTimeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/*
+ * Tambah waktu: the teacher may give extra minutes while the exam runs, for example after the server
+ * was down while the timers kept running. Every status answer tells the end of the attempt; when it
+ * moves, the countdown follows without a reload. A page whose time had already run out takes back
+ * its hand-in and lets the student continue.
+ */
+const applyExamEnd = (expiresAt: string, serverTime?: string) => {
+    const previousEnd = examExpiresAt.value ? new Date(examExpiresAt.value).getTime() : null;
+    examExpiresAt.value = expiresAt;
+    if (serverTime) {
+        examClockOffset = new Date(serverTime).getTime() - Date.now();
+    }
+    const addedMinutes = previousEnd !== null ? Math.round((new Date(expiresAt).getTime() - previousEnd) / 60000) : 0;
+    if (examRemainingMs() > 0) {
+        // Answers given from now on are saved on the server again.
+        isServerDraftSealed = false;
+        withdrawTimeoutHandIn();
+        if (addedMinutes > 0) {
+            extraTimeNotice.value = `Waktu ujian ditambah ${addedMinutes} menit. Silakan lanjutkan mengerjakan.`;
+            if (extraTimeNoticeTimer) {
+                clearTimeout(extraTimeNoticeTimer);
+            }
+            extraTimeNoticeTimer = setTimeout(() => (extraTimeNotice.value = ''), 8000);
+        }
+    }
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    startCountdown();
+};
+
+/** Follow the end of the attempt told by a status or lock answer. */
+const followExamEnd = (state: LockState | undefined) => {
+    if (!hasExamBegun || isSubmitted.value || state?.submitted || !state?.expires_at || !examExpiresAt.value) {
+        return;
+    }
+    if (new Date(state.expires_at).getTime() !== new Date(examExpiresAt.value).getTime()) {
+        applyExamEnd(state.expires_at, state.server_time);
+    }
+};
+
+/** The hand-in started when the time ran out is taken back: the student has time again. */
+const withdrawTimeoutHandIn = () => {
+    if (!pendingSubmission.value?.isTimeout) {
+        return;
+    }
+    pendingSubmission.value = null;
+    submissionError.value = '';
+    submissionNotice.value = '';
+    if (submissionRetryTimer) {
+        clearTimeout(submissionRetryTimer);
+        submissionRetryTimer = null;
+    }
+    if (hasUnsyncedDraft) {
+        scheduleServerDraftSync();
+    }
 };
 
 const beginExam = (questions: Question[]) => {
@@ -2114,6 +2196,11 @@ const sendAnswers = async (isTimeout: boolean) => {
 
     try {
         for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+            // The teacher gave extra time while this hand-in was being retried: the student continues.
+            if (isTimeout && examRemainingMs() > 0) {
+                withdrawTimeoutHandIn();
+                return;
+            }
             try {
                 submitTries++;
                 const response = await axios.post(props.quizForm.submitUrl, submissionPayload(isTimeout), {
@@ -2126,6 +2213,15 @@ const sendAnswers = async (isTimeout: boolean) => {
                 return;
             } catch (error: any) {
                 const status: number | undefined = error?.response?.status;
+
+                // The teacher gave extra time this page had not heard of yet: nothing was handed in.
+                if (status === 409 && isTimeout && error.response.data?.extra_time && error.response.data?.expires_at) {
+                    markServerReachable(true);
+                    applyExamEnd(error.response.data.expires_at, error.response.data.server_time);
+                    if (!pendingSubmission.value) {
+                        return;
+                    }
+                }
 
                 if (status === 422) {
                     pendingSubmission.value = null;
@@ -2364,6 +2460,26 @@ const submitAnotherResponse = () => {
                 <Wifi class="h-5 w-5" />
             </div>
             <p class="text-sm font-bold text-slate-900">Koneksi tersambung kembali. Jawaban dikirim ke server.</p>
+        </div>
+    </Transition>
+
+    <!-- Tambah waktu: the teacher gave extra time, the countdown already shows it -->
+    <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="translate-y-2 opacity-0"
+    >
+        <div
+            v-if="extraTimeNotice"
+            role="status"
+            aria-live="polite"
+            class="fixed inset-x-4 top-14 z-[110] mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-indigo-200 bg-white p-3.5 text-left shadow-[0_12px_32px_rgba(15,23,42,0.18)] sm:top-28 lg:bottom-6 lg:top-auto"
+        >
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <Clock class="h-5 w-5" />
+            </div>
+            <p class="text-sm font-bold text-slate-900">{{ extraTimeNotice }}</p>
         </div>
     </Transition>
 
@@ -3262,135 +3378,143 @@ const submitAnotherResponse = () => {
         </aside>
     </template>
 
-    <!-- Exam start confirmation: rules, number of questions and duration -->
+    <!--
+        Exam start confirmation: rules, number of questions and duration. The box keeps a space above
+        and below it on every screen; its content scrolls inside it, with the buttons always in view.
+    -->
     <div
         v-if="isStartModalOpen"
-        class="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
+        class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 px-3 py-4 backdrop-blur-sm sm:px-6 sm:py-10"
+        data-testid="exam-start-overlay"
     >
         <section
             role="dialog"
             aria-modal="true"
             aria-labelledby="exam-start-title"
-            class="af-card af-header my-4 w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            class="af-card af-header flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
         >
-            <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image af-header-image-inset" />
-            <div :class="['h-3', themeClass]"></div>
-            <div class="p-6 sm:p-8">
-                <span class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
-                    <ScrollText class="h-3.5 w-3.5" />
-                    Konfirmasi Ujian
-                </span>
-                <div v-if="design?.logo" class="mt-4 flex" :style="{ justifyContent: logoJustify(design) }">
-                    <img :src="design.logo" alt="Logo" class="af-logo" />
-                </div>
-                <h1
-                    id="exam-start-title"
-                    :class="['mt-3 text-2xl font-black leading-tight text-slate-900 sm:text-3xl', design ? 'af-title' : '']"
-                    :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
-                >
-                    <RichContent :content="quizForm.title" />
-                </h1>
-                <CollapsibleContent v-if="quizForm.description" :collapsed-height="100" class="mt-2">
-                    <RichContent :content="quizForm.description" as="p" lists class="text-sm text-slate-500" />
-                </CollapsibleContent>
-
-                <div class="mt-5 grid grid-cols-2 gap-3">
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                            <ListChecks class="h-4 w-4 text-indigo-600" />
-                            Jumlah Soal
-                        </div>
-                        <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examQuestionCount }} <span class="text-sm font-bold text-slate-500">soal</span></p>
-                        <p v-if="examRequiredCount > 0" class="mt-0.5 text-xs text-slate-500">{{ examRequiredCount }} soal wajib dijawab</p>
+            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="exam-start-body">
+                <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image af-header-image-inset" />
+                <div :class="['h-3', themeClass]"></div>
+                <div class="p-6 sm:p-8">
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                        <ScrollText class="h-3.5 w-3.5" />
+                        Konfirmasi Ujian
+                    </span>
+                    <div v-if="design?.logo" class="mt-4 flex" :style="{ justifyContent: logoJustify(design) }">
+                        <img :src="design.logo" alt="Logo" class="af-logo" />
                     </div>
-                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                            <Clock class="h-4 w-4 text-indigo-600" />
-                            Durasi
+                    <h1
+                        id="exam-start-title"
+                        :class="['mt-3 text-2xl font-black leading-tight text-slate-900 sm:text-3xl', design ? 'af-title' : '']"
+                        :style="design ? undefined : { fontFamily: quizForm.settings.questionFont ?? 'inherit' }"
+                    >
+                        <RichContent :content="quizForm.title" />
+                    </h1>
+                    <CollapsibleContent v-if="quizForm.description" :collapsed-height="100" class="mt-2">
+                        <RichContent :content="quizForm.description" as="p" lists class="text-sm text-slate-500" />
+                    </CollapsibleContent>
+
+                    <div class="mt-5 grid grid-cols-2 gap-3">
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <ListChecks class="h-4 w-4 text-indigo-600" />
+                                Jumlah Soal
+                            </div>
+                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examQuestionCount }} <span class="text-sm font-bold text-slate-500">soal</span></p>
+                            <p v-if="examRequiredCount > 0" class="mt-0.5 text-xs text-slate-500">{{ examRequiredCount }} soal wajib dijawab</p>
                         </div>
-                        <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examDurationLabel }}</p>
-                        <p v-if="examTimeLimitMinutes" class="mt-0.5 text-xs text-slate-500">Dihitung sejak tombol mulai ditekan</p>
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <Clock class="h-4 w-4 text-indigo-600" />
+                                Durasi
+                            </div>
+                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examDurationLabel }}</p>
+                            <p v-if="examTimeLimitMinutes" class="mt-0.5 text-xs text-slate-500">Dihitung sejak tombol mulai ditekan</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">Aturan Mengerjakan</h2>
+                        <ol class="mt-3 space-y-2.5">
+                            <li v-for="(rule, index) in examRules" :key="index" class="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
+                                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-black text-indigo-700">
+                                    {{ index + 1 }}
+                                </span>
+                                <span>{{ rule }}</span>
+                            </li>
+                        </ol>
+                    </div>
+
+                    <div v-if="identityEditable" class="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
+                        <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
+                            <UserRound class="h-4 w-4" />
+                            {{ isInterview ? 'Data Calon yang Diwawancarai' : 'Identitas Peserta' }}
+                        </h2>
+                        <p class="mt-1 text-xs text-slate-500">
+                            {{
+                                isInterview
+                                    ? 'Satu isian untuk satu calon. Data ini tidak dapat diubah setelah wawancara dimulai.'
+                                    : 'Isi dengan benar. Data ini tidak dapat diubah setelah ujian dimulai.'
+                            }}
+                        </p>
+                        <RespondentIdentityFields
+                            v-model:name="identity.name"
+                            v-model:kelas="identity.kelas"
+                            v-model:email="email"
+                            v-model:number="identity.number"
+                            v-model:school="identity.school"
+                            :interview="isInterview"
+                            :fields="identityFields"
+                            :classes="quizForm.respondentClasses ?? []"
+                            :errors="identityErrors"
+                            id-prefix="start-identity"
+                            class="mt-4"
+                        />
+                    </div>
+
+                    <div v-if="requiresExamToken" class="mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
+                        <label for="exam-token" class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800">
+                            <KeyRound class="h-4 w-4" />
+                            Token Ujian
+                        </label>
+                        <p class="mt-1 text-xs text-slate-600">Minta token kepada pengawas. Huruf besar atau kecil sama saja.</p>
+                        <input
+                            id="exam-token"
+                            ref="examTokenInput"
+                            :value="examToken"
+                            type="text"
+                            inputmode="text"
+                            autocomplete="off"
+                            autocapitalize="characters"
+                            autocorrect="off"
+                            spellcheck="false"
+                            :maxlength="EXAM_TOKEN_LENGTH"
+                            placeholder="••••••"
+                            :aria-invalid="Boolean(examTokenError)"
+                            :aria-describedby="examTokenError ? 'exam-token-error' : undefined"
+                            :class="[
+                                'mt-3 w-full rounded-2xl border-2 bg-white px-4 py-3 text-center font-mono text-3xl font-black uppercase tracking-[0.5em] text-slate-900 outline-none transition placeholder:text-slate-300 focus:ring-4 sm:max-w-xs',
+                                examTokenError ? 'border-red-400 focus:ring-red-100' : 'border-amber-300 focus:border-amber-500 focus:ring-amber-100',
+                            ]"
+                            @input="updateExamToken"
+                            @keydown.enter.prevent="startExam"
+                        />
+                        <p v-if="examTokenError" id="exam-token-error" class="mt-2 flex items-start gap-1.5 text-sm font-semibold text-red-700" role="alert">
+                            <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
+                            {{ examTokenError }}
+                        </p>
                     </div>
                 </div>
+            </div>
 
-                <div class="mt-6">
-                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">Aturan Mengerjakan</h2>
-                    <ol class="mt-3 space-y-2.5">
-                        <li v-for="(rule, index) in examRules" :key="index" class="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
-                            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-black text-indigo-700">
-                                {{ index + 1 }}
-                            </span>
-                            <span>{{ rule }}</span>
-                        </li>
-                    </ol>
-                </div>
-
-                <div v-if="identityEditable" class="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
-                    <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
-                        <UserRound class="h-4 w-4" />
-                        {{ isInterview ? 'Data Calon yang Diwawancarai' : 'Identitas Peserta' }}
-                    </h2>
-                    <p class="mt-1 text-xs text-slate-500">
-                        {{
-                            isInterview
-                                ? 'Satu isian untuk satu calon. Data ini tidak dapat diubah setelah wawancara dimulai.'
-                                : 'Isi dengan benar. Data ini tidak dapat diubah setelah ujian dimulai.'
-                        }}
-                    </p>
-                    <RespondentIdentityFields
-                        v-model:name="identity.name"
-                        v-model:kelas="identity.kelas"
-                        v-model:email="email"
-                        v-model:number="identity.number"
-                        v-model:school="identity.school"
-                        :interview="isInterview"
-                        :fields="identityFields"
-                        :classes="quizForm.respondentClasses ?? []"
-                        :errors="identityErrors"
-                        id-prefix="start-identity"
-                        class="mt-4"
-                    />
-                </div>
-
-                <div v-if="requiresExamToken" class="mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
-                    <label for="exam-token" class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800">
-                        <KeyRound class="h-4 w-4" />
-                        Token Ujian
-                    </label>
-                    <p class="mt-1 text-xs text-slate-600">Minta token kepada pengawas. Huruf besar atau kecil sama saja.</p>
-                    <input
-                        id="exam-token"
-                        ref="examTokenInput"
-                        :value="examToken"
-                        type="text"
-                        inputmode="text"
-                        autocomplete="off"
-                        autocapitalize="characters"
-                        autocorrect="off"
-                        spellcheck="false"
-                        :maxlength="EXAM_TOKEN_LENGTH"
-                        placeholder="••••••"
-                        :aria-invalid="Boolean(examTokenError)"
-                        :aria-describedby="examTokenError ? 'exam-token-error' : undefined"
-                        :class="[
-                            'mt-3 w-full rounded-2xl border-2 bg-white px-4 py-3 text-center font-mono text-3xl font-black uppercase tracking-[0.5em] text-slate-900 outline-none transition placeholder:text-slate-300 focus:ring-4 sm:max-w-xs',
-                            examTokenError ? 'border-red-400 focus:ring-red-100' : 'border-amber-300 focus:border-amber-500 focus:ring-amber-100',
-                        ]"
-                        @input="updateExamToken"
-                        @keydown.enter.prevent="startExam"
-                    />
-                    <p v-if="examTokenError" id="exam-token-error" class="mt-2 flex items-start gap-1.5 text-sm font-semibold text-red-700" role="alert">
-                        <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-                        {{ examTokenError }}
-                    </p>
-                </div>
-
-                <div v-if="startExamError" class="mt-5 flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">
+            <div class="shrink-0 border-t border-slate-100 px-6 py-4 sm:px-8" data-testid="exam-start-actions">
+                <div v-if="startExamError" class="mb-3 flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm font-semibold text-red-700">
                     <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{{ startExamError }}</span>
                 </div>
 
-                <div class="mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
+                <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
                     <Link
                         v-if="$page.props.auth?.user"
                         :href="route('dashboard')"

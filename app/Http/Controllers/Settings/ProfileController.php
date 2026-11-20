@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Models\QuizForm;
+use App\Support\Appearance;
 use App\Support\DisplayTime;
 use Carbon\Carbon;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProfileController extends Controller
@@ -165,6 +168,22 @@ class ProfileController extends Controller
         $user->save();
 
         return back()->with('status', 'preferences-updated');
+    }
+
+    /**
+     * Profil → Tampilan, also the quick choice in the account menu: the look follows the account
+     * to every device. The page changes at once; this only remembers the choice.
+     */
+    public function updateAppearance(Request $request): RedirectResponse|SymfonyResponse
+    {
+        $validated = $request->validate([
+            'appearance' => ['sometimes', 'required', Rule::in(Appearance::APPEARANCES)],
+            'color_theme' => ['sometimes', 'required', Rule::in(Appearance::COLOR_THEMES)],
+        ]);
+
+        $request->user()->forceFill($validated)->save();
+
+        return $request->expectsJson() ? response()->noContent() : back();
     }
 
     /**

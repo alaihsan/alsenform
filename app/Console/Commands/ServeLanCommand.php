@@ -123,29 +123,8 @@ class ServeLanCommand extends Command
             $this->call('exam:optimize');
         }
 
-        $hasBuild = file_exists($this->manifestPath());
-        $isBuildOutdated = $hasBuild && $this->assetsAreOutdated();
-
-        if ($this->option('build') || ! $hasBuild || $isBuildOutdated) {
-            $this->info($isBuildOutdated
-                ? '⚙️  Kode tampilan lebih baru daripada bundle aset (setelah git pull/merge): membuat ulang (npm run build)...'
-                : '⚙️  Membuat bundle aset produksi (npm run build)...');
-            $buildProcess = new Process(['npm', 'run', 'build'], base_path());
-            $buildProcess->setTimeout(600);
-            $buildProcess->run(function ($type, $buffer): void {
-                $this->output->write($buffer);
-            });
-
-            if (! $buildProcess->isSuccessful()) {
-                $this->error('Gagal melakukan build aset.');
-
-                // Pages still work with the previous bundle, only without the newest changes.
-                if (! $hasBuild) {
-                    return self::FAILURE;
-                }
-
-                $this->warn('Server tetap berjalan dengan tampilan lama: tombol atau fitur baru belum muncul sampai "npm run build" berhasil.');
-            }
+        if (! $this->buildAssetsWhenNeeded((bool) $this->option('build'))) {
+            return self::FAILURE;
         }
 
         $this->retireLegacyServer($port);
@@ -426,6 +405,40 @@ class ServeLanCommand extends Command
     protected function assetsAreOutdated(): bool
     {
         return app(AssetBuild::class)->isOutdated($this->manifestPath(), $this->assetSourcePaths());
+    }
+
+    /**
+     * Builds the pages (npm run build) when asked, when there is no bundle yet, or when the code is
+     * newer than it (after git pull or a merge). False only when there are no pages to serve at all.
+     */
+    protected function buildAssetsWhenNeeded(bool $isBuildAsked): bool
+    {
+        $hasBuild = file_exists($this->manifestPath());
+        $isBuildOutdated = $hasBuild && $this->assetsAreOutdated();
+
+        if (! $isBuildAsked && $hasBuild && ! $isBuildOutdated) {
+            return true;
+        }
+
+        $this->info($isBuildOutdated
+            ? '⚙️  Kode tampilan lebih baru daripada bundle aset (setelah git pull/merge): membuat ulang (npm run build)...'
+            : '⚙️  Membuat bundle aset produksi (npm run build)...');
+        $isBuilt = app(AssetBuild::class)->build(function (string $type, string $buffer): void {
+            $this->output->write($buffer);
+        });
+
+        if ($isBuilt) {
+            return true;
+        }
+
+        $this->error('Gagal melakukan build aset.');
+
+        // Pages still work with the previous bundle, only without the newest changes.
+        if ($hasBuild) {
+            $this->warn('Server tetap berjalan dengan tampilan lama: tombol atau fitur baru belum muncul sampai "npm run build" berhasil.');
+        }
+
+        return $hasBuild;
     }
 
     /**

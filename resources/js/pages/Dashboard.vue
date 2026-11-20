@@ -10,6 +10,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/composables/useToast';
 import { formTemplates } from '@/constants/dashboard';
 import type { QuizFolder, RecentForm } from '@/types/quiz';
@@ -32,6 +33,7 @@ import {
     Heart,
     HelpCircle,
     History,
+    Info,
     Key,
     LayoutDashboard,
     Library,
@@ -51,7 +53,7 @@ import {
     Wallet,
     X,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 
 type FolderModalMode = 'create' | 'rename' | 'delete';
 type FormDeleteMode = 'trash' | 'force';
@@ -103,7 +105,27 @@ const sortDirection = ref<'desc' | 'asc'>('desc');
 const isAppsOpen = ref(false);
 const isTemplateGalleryOpen = ref(true);
 const activeMenuId = ref<number | null>(null);
+/** The form card whose details (the i in its corner) are open. */
+const activeInfoId = ref<number | null>(null);
 const activeFolderMenuId = ref<number | null>(null);
+/**
+ * One menu (or details) of the cards open at a time. A menu still closing, such as the one left by
+ * Escape or by a click on the next ⋮, only clears itself, so it never shuts the one just opened.
+ */
+function oneOpenAtATime(openId: Ref<number | null>): (id: number, isOpen: boolean) => void {
+    return (id, isOpen) => {
+        if (isOpen) {
+            openId.value = id;
+        } else if (openId.value === id) {
+            openId.value = null;
+        }
+    };
+}
+const setFormMenuOpen = oneOpenAtATime(activeMenuId);
+const setFormInfoOpen = oneOpenAtATime(activeInfoId);
+const setFolderMenuOpen = oneOpenAtATime(activeFolderMenuId);
+const menuItemClass = 'cursor-pointer gap-3 rounded-xl px-3 py-2 font-semibold text-slate-700 focus:bg-slate-100 focus:text-slate-900';
+const dangerMenuItemClass = 'cursor-pointer gap-3 rounded-xl px-3 py-2 font-semibold text-red-600 focus:bg-red-50 focus:text-red-700';
 const draggedFormId = ref<number | null>(null);
 const activeDropFolderId = ref<number | null>(null);
 const isHomeDropActive = ref(false);
@@ -184,6 +206,13 @@ const activeFolderFilter = computed(() => folders.value.find((folder) => folder.
 function copyPublicUrl(form: RecentForm): void {
     copyText(form.publicUrl).then((isCopied) => showToast(isCopied ? 'Tautan publik disalin' : 'Browser tidak mengizinkan copy otomatis'));
     activeMenuId.value = null;
+}
+
+/** A menu item that opened a dialog leaves the focus there, not on the ⋮ the menu came from. */
+function keepDialogFocus(event: Event): void {
+    if (folderModalMode.value || formDeleteMode.value) {
+        event.preventDefault();
+    }
 }
 
 function duplicateForm(form: RecentForm): void {
@@ -1416,37 +1445,37 @@ function closeDonationModal(): void {
                 >
                     <span class="flex items-start justify-between gap-3">
                         <Folder class="h-16 w-16 shrink-0 text-emerald-500" />
-                        <span class="relative">
-                            <button
-                                type="button"
-                                aria-label="Opsi folder"
-                                class="rounded-full p-1 text-slate-500 hover:bg-white hover:text-slate-800"
-                                @click.stop="activeFolderMenuId = activeFolderMenuId === folder.id ? null : folder.id"
-                            >
-                                <MoreVertical class="h-5 w-5" />
-                            </button>
-                            <span
-                                v-if="activeFolderMenuId === folder.id"
-                                class="absolute right-0 top-8 z-20 w-40 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
-                            >
+                        <DropdownMenu
+                            :open="activeFolderMenuId === folder.id"
+                            :modal="false"
+                            @update:open="(isOpen: boolean) => setFolderMenuOpen(folder.id, isOpen)"
+                        >
+                            <DropdownMenuTrigger :as-child="true">
                                 <button
                                     type="button"
-                                    class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                    @click.stop="openRenameFolderModal(folder)"
+                                    aria-label="Opsi folder"
+                                    class="rounded-full p-1 text-slate-500 hover:bg-white hover:text-slate-800 data-[state=open]:bg-white data-[state=open]:text-slate-800"
+                                    @click.stop
                                 >
+                                    <MoreVertical class="h-5 w-5" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                :collision-padding="12"
+                                class="max-h-[var(--radix-dropdown-menu-content-available-height)] w-44 overflow-y-auto overscroll-contain rounded-2xl border-slate-200 bg-white p-2 shadow-xl"
+                                @close-auto-focus="keepDialogFocus"
+                            >
+                                <DropdownMenuItem :class="menuItemClass" @select="openRenameFolderModal(folder)">
                                     <FilePenLine class="h-4 w-4" />
                                     Ganti nama
-                                </button>
-                                <button
-                                    type="button"
-                                    class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
-                                    @click.stop="openDeleteFolderModal(folder)"
-                                >
+                                </DropdownMenuItem>
+                                <DropdownMenuItem :class="dangerMenuItemClass" @select="openDeleteFolderModal(folder)">
                                     <Trash2 class="h-4 w-4" />
                                     Hapus
-                                </button>
-                            </span>
-                        </span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </span>
                     <span class="min-w-0">
                         <span class="block truncate text-sm font-semibold text-slate-800">{{ folder.name }}</span>
@@ -1459,15 +1488,17 @@ function closeDonationModal(): void {
 
             <div
                 v-if="filteredRecentForms.length"
-                :class="[viewMode === 'grid' ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5' : 'flex flex-col gap-2']"
+                :class="[viewMode === 'grid' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'flex flex-col gap-2']"
             >
+                <!-- A card: the preview, the whole title, the status and the menu; the rest behind the i in its top right corner. -->
                 <article
                     v-for="form in filteredRecentForms"
                     :key="form.id"
                     :draggable="!isStudent && !form.isTrashed"
+                    data-testid="form-card"
                     :class="[
-                        'relative overflow-visible rounded-xl border border-slate-300 bg-white transition hover:-translate-y-0.5 hover:shadow-lg',
-                        viewMode === 'list' ? 'flex items-stretch' : '',
+                        'relative flex min-w-0 rounded-xl border border-slate-300 bg-white transition hover:-translate-y-0.5 hover:shadow-lg',
+                        viewMode === 'list' ? 'items-stretch' : 'flex-col',
                         !isStudent && !form.isTrashed ? 'cursor-grab active:cursor-grabbing' : '',
                     ]"
                     @dragstart="!isStudent && startDraggingForm(form, $event)"
@@ -1479,236 +1510,275 @@ function closeDonationModal(): void {
                         :href="form.publicUrl"
                         target="_blank"
                         rel="noopener noreferrer"
-                        :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block cursor-pointer']"
+                        :class="[viewMode === 'list' ? 'flex w-36 shrink-0 overflow-hidden rounded-l-[11px]' : 'block cursor-pointer overflow-hidden rounded-t-[11px]']"
                     >
                         <FormCardPreview :form="form" :view-mode="viewMode" />
                     </a>
                     <!-- For Teacher: Click card to EDIT -->
-                    <Link v-else-if="!form.isTrashed" :href="form.editUrl" :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
+                    <Link
+                        v-else-if="!form.isTrashed"
+                        :href="form.editUrl"
+                        :class="[viewMode === 'list' ? 'flex w-36 shrink-0 overflow-hidden rounded-l-[11px]' : 'block overflow-hidden rounded-t-[11px]']"
+                    >
                         <FormCardPreview :form="form" :view-mode="viewMode" />
                     </Link>
-                    <div v-else :class="[viewMode === 'list' ? 'flex w-36 shrink-0' : 'block']">
+                    <div v-else :class="[viewMode === 'list' ? 'flex w-36 shrink-0 overflow-hidden rounded-l-[11px]' : 'block overflow-hidden rounded-t-[11px]']">
                         <FormCardPreview :form="form" :view-mode="viewMode" />
                     </div>
 
-                    <div
-                        :class="['border-t border-slate-200 p-3', viewMode === 'list' ? 'flex min-w-0 flex-1 items-center border-l border-t-0' : '']"
+                    <!-- Teacher: the details of the form, behind the i in the top right corner -->
+                    <Popover
+                        v-if="!isStudent && !form.isTrashed"
+                        :open="activeInfoId === form.id"
+                        @update:open="(isOpen: boolean) => setFormInfoOpen(form.id, isOpen)"
                     >
-                        <div class="min-w-0 flex-1">
-                            <div class="mb-2 flex items-start justify-between gap-2">
-                                <!-- Title for Student -->
-                                <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" class="min-w-0">
-                                    <h3 class="line-clamp-2 break-words text-sm font-semibold text-slate-800 hover:text-indigo-600" :title="form.title" dir="auto">
-                                        {{ form.title }}
-                                    </h3>
-                                </a>
-                                <!-- Title for Teacher -->
-                                <Link v-else-if="!form.isTrashed" :href="form.editUrl" class="min-w-0">
-                                    <h3 class="line-clamp-2 break-words text-sm font-semibold text-slate-800 hover:text-emerald-700" :title="form.title" dir="auto">
-                                        {{ form.title }}
-                                    </h3>
-                                </Link>
-                                <h3 v-else class="line-clamp-2 min-w-0 break-words text-sm font-semibold text-slate-500" :title="form.title" dir="auto">
-                                    {{ form.title }}
-                                </h3>
-                                <div class="flex shrink-0 items-center gap-1.5">
-                                    <!-- Badges -->
-                                    <template v-if="isStudent">
-                                        <span
-                                            v-if="form.hasSubmitted"
-                                            class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
-                                        >
-                                            Sudah Dikerjakan
-                                        </span>
-                                        <span
-                                            v-else
-                                            class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
-                                        >
-                                            Belum Dikerjakan
-                                        </span>
-                                    </template>
-                                    <template v-else>
-                                        <span
-                                            v-if="form.isCollaborator"
-                                            class="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700"
-                                            title="Anda berkolaborasi pada formulir ini"
-                                        >
-                                            Kolaborasi
-                                        </span>
-                                        <span
-                                            v-if="form.questionsCount !== undefined"
-                                            class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600"
-                                            :title="form.questionsCount + ' butir soal'"
-                                        >
-                                            {{ form.questionsCount }} Soal
-                                        </span>
-                                        <span
-                                            :class="[
-                                                'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-                                                form.isTrashed
-                                                    ? 'border border-slate-200 bg-slate-100 text-slate-600'
-                                                    : form.isPublished
-                                                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                                                      : 'border border-amber-200 bg-amber-50 text-amber-700',
-                                            ]"
-                                        >
-                                            {{ form.isTrashed ? 'Sampah' : form.isPublished ? 'Terbit' : 'Draf' }}
-                                        </span>
-                                        <span
-                                            v-if="form.linkOnly && !form.isTrashed"
-                                            class="shrink-0 rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600"
-                                            title="Tidak tampil di Beranda siswa; hanya bisa dibuka lewat tautan"
-                                            data-testid="link-only-badge"
-                                        >
-                                            Hanya tautan
-                                        </span>
-                                    </template>
+                        <PopoverTrigger :as-child="true">
+                            <!-- Named by its hidden text, not aria-label: the tooltips of this page would pin it in place. -->
+                            <button
+                                type="button"
+                                title="Informasi formulir"
+                                data-testid="form-info-button"
+                                class="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-600 shadow-sm transition hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 data-[state=open]:border-slate-900 data-[state=open]:bg-slate-900 data-[state=open]:text-white"
+                            >
+                                <Info class="h-4 w-4" />
+                                <span class="sr-only">Informasi formulir</span>
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            align="end"
+                            :side-offset="6"
+                            :collision-padding="12"
+                            data-testid="form-info"
+                            class="max-h-[var(--radix-popover-content-available-height)] w-[min(18rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-2xl border-slate-200 bg-white p-4 text-slate-700 shadow-xl"
+                        >
+                            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Informasi formulir</p>
+                            <dl class="mt-3 space-y-2 text-sm">
+                                <div class="flex items-center justify-between gap-3">
+                                    <dt class="text-slate-500">Jumlah soal</dt>
+                                    <dd class="font-semibold text-slate-900">{{ form.questionsCount ?? 0 }} soal</dd>
                                 </div>
-                            </div>
-                            <div class="flex min-w-0 items-center justify-between gap-1.5 text-xs font-medium text-slate-500">
-                                <div class="flex min-w-0 items-center gap-1.5 truncate">
-                                    <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
-                                        <ClipboardList class="h-3.5 w-3.5" />
-                                    </span>
-                                    <span v-if="isStudent && form.scheduleLabel" class="truncate text-[11px] font-bold text-amber-700">
-                                        {{ form.scheduleLabel }}
-                                    </span>
-                                    <span v-else-if="isStudent && form.ownerName" class="truncate text-[11px] font-semibold text-slate-600">
-                                        Guru: {{ form.ownerName }}
-                                    </span>
-                                    <span v-else class="truncate text-[11px]">
-                                        {{ form.updatedLabel ?? '' }}
-                                    </span>
+                                <div class="flex items-center justify-between gap-3">
+                                    <dt class="text-slate-500">Hanya tautan</dt>
+                                    <dd :class="['font-semibold', form.linkOnly ? 'text-amber-700' : 'text-slate-900']">{{ form.linkOnly ? 'Ya' : 'Tidak' }}</dd>
                                 </div>
-
-                                <!-- Action button for Student -->
-                                <div v-if="isStudent" class="flex shrink-0 items-center gap-1.5">
-                                    <a
-                                        v-if="form.resultsUrl"
-                                        :href="form.resultsUrl"
-                                        class="shadow-xs inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-indigo-700"
+                                <p v-if="form.linkOnly" class="text-xs leading-relaxed text-slate-500">
+                                    Tidak tampil di Beranda siswa; hanya bisa dibuka lewat tautan.
+                                </p>
+                                <div v-if="form.isCollaborator" class="flex items-center justify-between gap-3">
+                                    <dt class="text-slate-500">Kolaborasi</dt>
+                                    <dd class="font-semibold text-indigo-700">Anda kolaborator</dd>
+                                </div>
+                                <div v-if="form.updatedLabel" class="flex items-center justify-between gap-3">
+                                    <dt class="text-slate-500">Diperbarui</dt>
+                                    <dd class="font-semibold text-slate-900">{{ form.updatedLabel }}</dd>
+                                </div>
+                            </dl>
+                            <div class="mt-4 border-t border-slate-100 pt-3">
+                                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Tautan publik</p>
+                                <a
+                                    :href="form.publicUrl"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="mt-1.5 block break-all rounded-lg bg-slate-50 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-slate-700 hover:bg-slate-100 hover:text-emerald-700"
+                                    >{{ form.publicUrl }}</a
+                                >
+                                <div class="mt-2 grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        @click="copyPublicUrl(form)"
                                     >
-                                        Lihat Hasil
-                                    </a>
+                                        <Clipboard class="h-3.5 w-3.5" />
+                                        Salin
+                                    </button>
                                     <a
                                         :href="form.publicUrl"
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        :class="[
-                                            'shadow-xs inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition',
-                                            form.hasSubmitted
-                                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                                : 'bg-indigo-600 text-white hover:bg-indigo-700',
-                                        ]"
+                                        class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700"
                                     >
                                         <ExternalLink class="h-3.5 w-3.5" />
-                                        {{ form.hasSubmitted ? 'Lihat Soal' : 'Kerjakan' }}
+                                        Buka
                                     </a>
                                 </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
 
-                                <!-- Teacher Menu -->
-                                <div v-else class="relative shrink-0">
-                                    <button
-                                        type="button"
-                                        aria-label="More options"
-                                        class="rounded-full p-0.5 hover:bg-slate-100"
-                                        @click="activeMenuId = activeMenuId === form.id ? null : form.id"
-                                    >
-                                        <MoreVertical class="h-5 w-5" />
-                                    </button>
-                                    <div
-                                        v-if="activeMenuId === form.id"
-                                        class="absolute right-0 top-7 z-20 w-48 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
+                    <div
+                        :class="[
+                            'flex min-w-0 flex-1 flex-col gap-3 p-3',
+                            viewMode === 'list' ? 'border-l border-slate-200' : 'border-t border-slate-200',
+                        ]"
+                    >
+                        <div :class="['min-w-0', viewMode === 'list' && !isStudent && !form.isTrashed ? 'pr-10' : '']">
+                            <!-- Title for Student -->
+                            <a v-if="isStudent" :href="form.publicUrl" target="_blank" rel="noopener noreferrer" class="block min-w-0">
+                                <h3
+                                    class="break-words text-sm font-semibold leading-snug text-slate-800 hover:text-indigo-600"
+                                    data-testid="form-title"
+                                    dir="auto"
+                                >
+                                    {{ form.title }}
+                                </h3>
+                            </a>
+                            <!-- Title for Teacher -->
+                            <Link v-else-if="!form.isTrashed" :href="form.editUrl" class="block min-w-0">
+                                <h3
+                                    class="break-words text-sm font-semibold leading-snug text-slate-800 hover:text-emerald-700"
+                                    data-testid="form-title"
+                                    dir="auto"
+                                >
+                                    {{ form.title }}
+                                </h3>
+                            </Link>
+                            <h3 v-else class="min-w-0 break-words text-sm font-semibold leading-snug text-slate-500" data-testid="form-title" dir="auto">
+                                {{ form.title }}
+                            </h3>
+
+                            <!-- Student: done or not, under the title -->
+                            <div v-if="isStudent" class="mt-1.5 flex flex-wrap gap-1.5">
+                                <span
+                                    v-if="form.hasSubmitted"
+                                    class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+                                >
+                                    Sudah Dikerjakan
+                                </span>
+                                <span v-else class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                    Belum Dikerjakan
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="mt-auto flex min-w-0 items-center justify-between gap-2 text-xs font-medium text-slate-500">
+                            <div class="flex min-w-0 items-center gap-1.5">
+                                <span :class="['flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white', form.accent]">
+                                    <ClipboardList class="h-3.5 w-3.5" />
+                                </span>
+                                <span v-if="isStudent && form.scheduleLabel" class="truncate text-[11px] font-bold text-amber-700">
+                                    {{ form.scheduleLabel }}
+                                </span>
+                                <span v-else-if="isStudent && form.ownerName" class="truncate text-[11px] font-semibold text-slate-600">
+                                    Guru: {{ form.ownerName }}
+                                </span>
+                                <span v-else class="truncate text-[11px]">
+                                    {{ form.updatedLabel ?? '' }}
+                                </span>
+                            </div>
+
+                            <!-- Action button for Student -->
+                            <div v-if="isStudent" class="flex shrink-0 items-center gap-1.5">
+                                <a
+                                    v-if="form.resultsUrl"
+                                    :href="form.resultsUrl"
+                                    class="shadow-xs inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-indigo-700"
+                                >
+                                    Lihat Hasil
+                                </a>
+                                <a
+                                    :href="form.publicUrl"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    :class="[
+                                        'shadow-xs inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition',
+                                        form.hasSubmitted ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-indigo-600 text-white hover:bg-indigo-700',
+                                    ]"
+                                >
+                                    <ExternalLink class="h-3.5 w-3.5" />
+                                    {{ form.hasSubmitted ? 'Lihat Soal' : 'Kerjakan' }}
+                                </a>
+                            </div>
+
+                            <!-- Teacher: the status, then the menu -->
+                            <div v-else class="flex shrink-0 items-center gap-1">
+                                <span
+                                    data-testid="form-status"
+                                    :class="[
+                                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                                        form.isTrashed
+                                            ? 'border border-slate-200 bg-slate-100 text-slate-600'
+                                            : form.isPublished
+                                              ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                                              : 'border border-amber-200 bg-amber-50 text-amber-700',
+                                    ]"
+                                >
+                                    {{ form.isTrashed ? 'Sampah' : form.isPublished ? 'Terbit' : 'Draf' }}
+                                </span>
+                                <DropdownMenu
+                                    :open="activeMenuId === form.id"
+                                    :modal="false"
+                                    @update:open="(isOpen: boolean) => setFormMenuOpen(form.id, isOpen)"
+                                >
+                                    <DropdownMenuTrigger :as-child="true">
+                                        <button
+                                            type="button"
+                                            aria-label="Opsi formulir"
+                                            data-testid="form-menu-button"
+                                            class="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-900"
+                                        >
+                                            <MoreVertical class="h-5 w-5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        :collision-padding="12"
+                                        class="max-h-[var(--radix-dropdown-menu-content-available-height)] w-52 overflow-y-auto overscroll-contain rounded-2xl border-slate-200 bg-white p-2 shadow-xl"
+                                        @close-auto-focus="keepDialogFocus"
                                     >
                                         <template v-if="!form.isTrashed">
-                                            <Link
-                                                :href="form.editUrl"
-                                                class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                            >
-                                                <FilePenLine class="h-4 w-4" />
-                                                Edit
-                                            </Link>
-                                            <a
-                                                :href="form.publicUrl"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                            >
-                                                <ExternalLink class="h-4 w-4" />
-                                                Buka tautan publik
-                                            </a>
-                                            <button
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                                @click="copyPublicUrl(form)"
-                                            >
+                                            <DropdownMenuItem :as-child="true" :class="menuItemClass">
+                                                <Link :href="form.editUrl">
+                                                    <FilePenLine class="h-4 w-4" />
+                                                    Edit
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem :as-child="true" :class="menuItemClass">
+                                                <a :href="form.publicUrl" target="_blank" rel="noopener noreferrer">
+                                                    <ExternalLink class="h-4 w-4" />
+                                                    Buka tautan publik
+                                                </a>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem :class="menuItemClass" @select="copyPublicUrl(form)">
                                                 <Clipboard class="h-4 w-4" />
                                                 Salin tautan
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                                @click="duplicateForm(form)"
-                                            >
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem :class="menuItemClass" @select="duplicateForm(form)">
                                                 <ClipboardList class="h-4 w-4" />
                                                 Duplikat
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                                @click="moveToFolder(form)"
-                                            >
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem :class="menuItemClass" @select="moveToFolder(form)">
                                                 <Folder class="h-4 w-4" />
                                                 Pindahkan ke folder
-                                            </button>
-                                            <button
-                                                v-if="form.folderId"
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                                @click="removeFromFolder(form)"
-                                            >
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem v-if="form.folderId" :class="menuItemClass" @select="removeFromFolder(form)">
                                                 <X class="h-4 w-4" />
                                                 Keluarkan dari folder
-                                            </button>
-                                            <button
-                                                v-if="!form.isCollaborator"
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
-                                                @click="deleteForm(form)"
-                                            >
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem v-if="!form.isCollaborator" :class="dangerMenuItemClass" @select="deleteForm(form)">
                                                 <Trash2 class="h-4 w-4" />
                                                 Hapus
-                                            </button>
-                                            <button
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
                                                 v-else
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-amber-600 hover:bg-amber-50"
-                                                @click="leaveCollaboration(form)"
+                                                class="cursor-pointer gap-3 rounded-xl px-3 py-2 font-semibold text-amber-600 focus:bg-amber-50 focus:text-amber-700"
+                                                @select="leaveCollaboration(form)"
                                             >
                                                 <LogOut class="h-4 w-4" />
                                                 Keluar Kolaborasi
-                                            </button>
+                                            </DropdownMenuItem>
                                         </template>
                                         <template v-else>
-                                            <button
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                                @click="restoreForm(form)"
-                                            >
+                                            <DropdownMenuItem :class="menuItemClass" @select="restoreForm(form)">
                                                 <RotateCcw class="h-4 w-4" />
                                                 Pulihkan
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
-                                                @click="forceDeleteForm(form)"
-                                            >
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem :class="dangerMenuItemClass" @select="forceDeleteForm(form)">
                                                 <Trash2 class="h-4 w-4" />
                                                 Hapus permanen
-                                            </button>
+                                            </DropdownMenuItem>
                                         </template>
-                                    </div>
-                                </div>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </div>
                     </div>
@@ -2621,12 +2691,13 @@ button[aria-label]::after,
     transform: translateX(-50%);
     white-space: nowrap;
     border-radius: 8px;
-    background: #0f172a;
+    /* A dark tooltip on light looks, a light one on dark looks (palette.js). */
+    background: rgb(var(--c-slate-900));
     padding: 6px 8px;
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
-    color: white;
+    color: rgb(var(--t-inverse));
     box-shadow: 0 10px 25px rgb(15 23 42 / 18%);
     /* Only rendered while shown: a hidden tooltip near the screen edge would widen the page on phones. */
     display: none;

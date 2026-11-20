@@ -5,11 +5,15 @@ use App\Models\ActivityLog;
 use App\Models\QuizForm;
 use App\Models\ServerError;
 use App\Models\User;
+use App\Support\ServerErrorAdvice;
 use App\Support\ServerErrorRecorder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
+use Symfony\Component\Console\Exception\CommandNotFoundException;
+use Symfony\Component\Console\Exception\NamespaceNotFoundException;
 
 /*
  * Galat Server: an error of the server is kept for the admin, counted once per fault, with the
@@ -175,6 +179,60 @@ test('a student\'s server error shows in the teacher\'s activity report with its
             ->where('activities.rows.0.eventLabel', 'Galat server')
             ->where('activities.rows.0.note', "{$reference}: galat server (HTTP 500)")
             ->where('activities.rows.0.detail', 'GET /_test/crash/5'));
+});
+
+test('known errors say what they mean and what to do when they happen again', function () {
+    $admin = User::factory()->create(['role' => 'admin', 'is_admin' => true]);
+    ServerError::factory()->create([
+        'exception' => QueryException::class,
+        'message' => 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction (Connection: mysql, Host: 127.0.0.1, Port: 3306, Database: alsenform, SQL: insert ignore into `cache` (`key`, `value`, `expiration`) values (alsen_form_cache_4f31:timer, i:1793944710;, 1793944710))',
+        'location' => 'public/index.php:20',
+        'last_method' => 'GET',
+        'last_url' => '/forms/ujian-ipa/status?session_token=abc&returning=navigate&unsynced_since=0',
+        'last_seen_at' => now()->subMinutes(3),
+    ]);
+    ServerError::factory()->create([
+        'exception' => NamespaceNotFoundException::class,
+        'message' => 'There are no commands defined in the "boost" namespace.',
+        'location' => 'artisan:16',
+        'last_method' => 'CLI',
+        'last_url' => 'php artisan boost:mcp',
+        'last_seen_at' => now()->subMinutes(2),
+    ]);
+    ServerError::factory()->create([
+        'exception' => CommandNotFoundException::class,
+        'message' => 'Command "pan" is not defined.',
+        'location' => 'artisan:16',
+        'last_method' => 'CLI',
+        'last_url' => 'php artisan pan',
+        'last_seen_at' => now()->subMinute(),
+    ]);
+    ServerError::factory()->create(['last_seen_at' => now()]);
+
+    $this->actingAs($admin)->get(route('server-errors.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            // A fault of the app's own code has no ready answer.
+            ->where('errors.rows.0.advice', null)
+            ->where('errors.rows.1.advice.title', 'Bukan gangguan aplikasi: perintah artisan itu tidak ada')
+            ->where('errors.rows.1.advice.steps.0.command', 'php artisan list')
+            ->where('errors.rows.2.advice.title', 'Bukan gangguan aplikasi: Laravel Boost mati di server produksi')
+            ->where('errors.rows.2.advice.steps.0.command', 'php artisan boost:mcp --env=local')
+            ->where('errors.rows.3.advice.title', 'Deadlock database: dua permintaan berebut data yang sama')
+            ->where('errors.rows.3.advice.explanation', fn (string $explanation): bool => str_contains($explanation, 'otomatis hingga 3 kali')
+                && str_contains($explanation, 'tidak ada jawaban yang hilang'))
+            ->where('errors.rows.3.advice.steps.1.text', fn (string $text): bool => str_starts_with($text, 'Galat di tabel cache berarti cache sedang memakai database karena Redis mati'))
+            ->where('errors.rows.3.advice.steps.1.command', 'brew services start redis'));
+});
+
+test('a deadlock on the sessions of another page is explained without the exam status', function () {
+    $advice = ServerErrorAdvice::for(ServerError::factory()->make([
+        'exception' => QueryException::class,
+        'message' => 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction (Connection: mysql, SQL: update `sessions` set `payload` = YTo0, `last_activity` = 1762439193 where `id` = abc)',
+        'last_url' => '/dashboard',
+    ]));
+
+    expect($advice['explanation'])->not->toContain('cek status ujian')
+        ->and($advice['steps'][1]['text'])->toStartWith('Pastikan Redis menyala');
 });
 
 test('an error during a command is recorded without a person', function () {

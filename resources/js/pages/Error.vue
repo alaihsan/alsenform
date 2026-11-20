@@ -62,10 +62,10 @@ const icons: Record<string, Component> = {
 };
 
 const tones = {
-    indigo: { icon: 'bg-indigo-50 text-indigo-600 shadow-[0_5px_0_#c7d2fe]', code: 'text-indigo-500' },
-    amber: { icon: 'bg-amber-50 text-amber-600 shadow-[0_5px_0_#fde68a]', code: 'text-amber-600' },
-    sky: { icon: 'bg-sky-50 text-sky-600 shadow-[0_5px_0_#bae6fd]', code: 'text-sky-600' },
-    rose: { icon: 'bg-rose-50 text-rose-600 shadow-[0_5px_0_#fecdd3]', code: 'text-rose-600' },
+    indigo: { icon: 'bg-indigo-50 text-indigo-600 shadow-[0_5px_0_theme(colors.indigo.200)]', code: 'text-indigo-500' },
+    amber: { icon: 'bg-amber-50 text-amber-600 shadow-[0_5px_0_theme(colors.amber.200)]', code: 'text-amber-600' },
+    sky: { icon: 'bg-sky-50 text-sky-600 shadow-[0_5px_0_theme(colors.sky.200)]', code: 'text-sky-600' },
+    rose: { icon: 'bg-rose-50 text-rose-600 shadow-[0_5px_0_theme(colors.rose.200)]', code: 'text-rose-600' },
 };
 
 const tone = computed(() => tones[props.tone] ?? tones.indigo);
@@ -85,7 +85,7 @@ const goBack = (): void => {
         <Head :title="title" />
 
         <main class="flex justify-center px-4 py-10 sm:px-6 sm:py-16">
-            <section class="w-full max-w-xl rounded-[2rem] border border-indigo-50 bg-white p-6 text-center shadow-[0_10px_0_#e0e7ff] sm:p-10">
+            <section class="w-full max-w-xl rounded-[2rem] border border-indigo-50 bg-white p-6 text-center shadow-[0_10px_0_theme(colors.indigo.100)] sm:p-10">
                 <div :class="['mx-auto flex h-16 w-16 items-center justify-center rounded-2xl', tone.icon]">
                     <component :is="iconFor(icon)" class="h-8 w-8" />
                 </div>
@@ -124,7 +124,7 @@ const goBack = (): void => {
                     <!-- A full page load (not an Inertia visit) also renews the session token and assets. -->
                     <a
                         :href="primaryAction.href ?? '/'"
-                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-[0_4px_0_#3730a3] transition hover:-translate-y-px hover:bg-indigo-700"
+                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-[0_4px_0_theme(colors.indigo.800)] transition hover:-translate-y-px hover:bg-indigo-700"
                     >
                         <component :is="iconFor(primaryAction.icon)" class="h-4 w-4" />
                         {{ primaryAction.label }}

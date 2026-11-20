@@ -323,7 +323,7 @@ defineExpose({
 }
 .rich-input:empty::before {
     content: attr(data-placeholder);
-    color: #94a3b8;
+    color: rgb(var(--t-slate-400));
     pointer-events: none;
 }
 .rich-input b,

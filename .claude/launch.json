@@ -14,6 +14,9 @@
       "name": "docx-export-check",
       "runtimeExecutable": "env",
       "runtimeArgs": [
+        "APP_CONFIG_CACHE=/private/tmp/claude-501/-Users-sansan-Herd-alsenform/42e03439-53a3-4380-aa40-feaa7c8f9b2e/scratchpad/no-config-cache.php",
+        "APP_ROUTES_CACHE=/private/tmp/claude-501/-Users-sansan-Herd-alsenform/42e03439-53a3-4380-aa40-feaa7c8f9b2e/scratchpad/no-routes-cache.php",
+        "APP_EVENTS_CACHE=/private/tmp/claude-501/-Users-sansan-Herd-alsenform/42e03439-53a3-4380-aa40-feaa7c8f9b2e/scratchpad/no-events-cache.php",
         "APP_ENV=local",
         "DB_CONNECTION=sqlite",
         "DB_DATABASE=/private/tmp/claude-501/-Users-sansan-Herd-alsenform/42e03439-53a3-4380-aa40-feaa7c8f9b2e/scratchpad/check.sqlite",
@@ -27,6 +30,19 @@
         "server.php"
       ],
       "port": 8123
+    },
+    {
+      "name": "reorder-check",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-sansan-Herd-alsenform/f6adfdcd-775c-42dd-8de7-37ef662fe3ad/scratchpad/sandbox.sh",
+      "runtimeArgs": [
+        "php",
+        "-S",
+        "127.0.0.1:8124",
+        "-t",
+        "/private/tmp/claude-501/-Users-sansan-Herd-alsenform/f6adfdcd-775c-42dd-8de7-37ef662fe3ad/scratchpad/testpublic",
+        "/private/tmp/claude-501/-Users-sansan-Herd-alsenform/f6adfdcd-775c-42dd-8de7-37ef662fe3ad/scratchpad/test-router.php"
+      ],
+      "port": 8124
     }
   ]
 }

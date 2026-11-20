@@ -1,12 +1,22 @@
 <!DOCTYPE html>
+{{-- The look the account chose in Profil → Tampilan (App\Support\Appearance). --}}
+@php($look = \App\Support\Appearance::forPage(rescue(fn () => auth()->user(), null, false), $page ?? null))
 {{-- The pages are in Indonesian, and never machine translated: the browser's translation rewrites
      the page's text behind the app's back, which breaks the page (FF-302), and would translate exam
      questions for students. --}}
-<html lang="id" translate="no">
+<html lang="id" translate="no"
+    @if ($look['appearance'] === 'dark' && ! $look['lightOnly']) class="dark" @endif
+    @if ($look['appearance']) data-appearance="{{ $look['appearance'] }}" @endif
+    @if ($look['colorTheme']) data-color-theme="{{ $look['colorTheme'] }}" @endif
+    @if ($look['colorTheme'] === 'warm' && ! $look['lightOnly']) data-theme="warm" @endif
+    @if ($look['lightOnly']) data-light-only @endif
+>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="google" content="notranslate">
+
+        @include('partials.appearance-script')
 
         <title inertia>Falcon Forms</title>
         <link rel="icon" href="/favicon.ico" sizes="32x32">

@@ -9,8 +9,8 @@ defineProps<{
 </script>
 
 <template>
-    <div class="flex min-h-svh flex-col items-center justify-center gap-6 bg-[#f5f4ff] p-6 text-slate-950 md:p-10">
-        <div class="w-full max-w-md rounded-[2rem] border-2 border-indigo-100 bg-white p-6 shadow-[0_14px_0_#e0e7ff]">
+    <div class="flex min-h-svh flex-col items-center justify-center gap-6 bg-canvas p-6 text-slate-950 md:p-10">
+        <div class="w-full max-w-md rounded-[2rem] border-2 border-indigo-100 bg-white p-6 shadow-[0_14px_0_theme(colors.indigo.100)]">
             <div class="flex flex-col gap-8">
                 <div class="flex flex-col items-center gap-4">
                     <Link :href="route('home')" class="max-w-full font-medium">

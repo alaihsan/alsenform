@@ -2,7 +2,7 @@
 import AlsenformLayout from '@/layouts/AlsenformLayout.vue';
 import { Head, Link, router, usePoll } from '@inertiajs/vue3';
 import axios from 'axios';
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Search, ServerCrash } from 'lucide-vue-next';
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Lightbulb, RefreshCw, RotateCcw, Search, ServerCrash } from 'lucide-vue-next';
 import { reactive, ref, watch } from 'vue';
 
 interface ServerErrorRow {
@@ -20,6 +20,8 @@ interface ServerErrorRow {
     lastUser: string | null;
     isResolved: boolean;
     resolvedAt: string | null;
+    /* What a known kind of error means and what to do about it. */
+    advice: { title: string; explanation: string; steps: { text: string; command?: string }[] } | null;
     occurrencesUrl: string;
     updateUrl: string;
 }
@@ -279,6 +281,24 @@ const deviceOf = (occurrence: Occurrence): string => [occurrence.device, occurre
                                 <RotateCcw class="h-3.5 w-3.5" /> Buka lagi
                             </button>
                         </div>
+                    </div>
+
+                    <div v-if="error.advice" class="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3" data-testid="server-error-advice">
+                        <p class="flex items-start gap-1.5 text-xs font-extrabold text-amber-900">
+                            <Lightbulb class="mt-px h-3.5 w-3.5 shrink-0" />
+                            <span>Cara mengatasi · {{ error.advice.title }}</span>
+                        </p>
+                        <p class="mt-1 text-xs leading-relaxed text-amber-950/80">{{ error.advice.explanation }}</p>
+                        <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-amber-950">
+                            <li v-for="step in error.advice.steps" :key="step.text">
+                                {{ step.text }}
+                                <code
+                                    v-if="step.command"
+                                    class="mt-1 block w-fit max-w-full select-all break-all rounded-lg border border-amber-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-800"
+                                    >{{ step.command }}</code
+                                >
+                            </li>
+                        </ol>
                     </div>
 
                     <div v-if="opened.includes(error.id)" class="mt-3 border-t border-slate-100 pt-3">

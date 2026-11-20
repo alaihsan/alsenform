@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class PasswordResetLinkController extends Controller
 {
@@ -23,7 +24,8 @@ class PasswordResetLinkController extends Controller
     }
 
     /**
-     * Handle an incoming password reset link request.
+     * Handle an incoming password reset link request. The same answer whether the address has an
+     * account or not; only an email the server cannot send is told, with how to connect one.
      *
      * @throws ValidationException
      */
@@ -33,10 +35,18 @@ class PasswordResetLinkController extends Controller
             'email' => 'required|email',
         ]);
 
-        Password::sendResetLink(
-            $request->only('email')
-        );
+        try {
+            Password::sendResetLink(
+                $request->only('email')
+            );
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
 
-        return back()->with('status', __('A reset link will be sent if the account exists.'));
+            return back()->withErrors([
+                'email' => 'Email belum dapat dikirim dari server. Admin perlu menyambungkan akun Gmail pengirim dengan perintah "php artisan mail:gmail".',
+            ]);
+        }
+
+        return back()->with('status', 'Jika alamat itu terdaftar, tautan atur ulang kata sandi sudah dikirim. Periksa kotak masuk atau folder Spam.');
     }
 }

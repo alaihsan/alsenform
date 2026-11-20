@@ -2,20 +2,29 @@
 
 namespace App\Providers;
 
+use App\Database\MariaDbConnection;
+use App\Database\MySqlConnection;
+use App\Database\PostgresConnection;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\Addons;
 use App\Support\ActivityRecorder;
 use App\Support\ErrorPage;
 use App\Support\ServerErrorRecorder;
+use Closure;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Auth\CanResetPassword;
+use Illuminate\Database\Connection;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use PDO;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,6 +41,21 @@ class AppServiceProvider extends ServiceProvider
 
         // The reference code of a server error, from its report to its error page.
         $this->app->scoped(ServerErrorRecorder::class);
+
+        $this->retryDeadlockedStatements();
+    }
+
+    /**
+     * A statement the database cancelled to break a deadlock, as happens when a whole class polls
+     * its exam in the same second, is run again instead of ending in an error.
+     */
+    protected function retryDeadlockedStatements(): void
+    {
+        $connections = ['mysql' => MySqlConnection::class, 'mariadb' => MariaDbConnection::class, 'pgsql' => PostgresConnection::class];
+
+        foreach ($connections as $driver => $connectionClass) {
+            Connection::resolverFor($driver, fn (PDO|Closure $pdo, string $database, string $prefix, array $config): Connection => new $connectionClass($pdo, $database, $prefix, $config));
+        }
     }
 
     /**
@@ -44,6 +68,25 @@ class AppServiceProvider extends ServiceProvider
 
         $this->configureQuizRateLimiting();
         $this->recordLoginActivity();
+        $this->writePasswordResetEmailsInIndonesian();
+    }
+
+    /**
+     * The email with the link to reset a password, in Indonesian like the rest of the app.
+     */
+    protected function writePasswordResetEmailsInIndonesian(): void
+    {
+        ResetPassword::toMailUsing(function (CanResetPassword $user, string $token): MailMessage {
+            $url = url(route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()], false));
+
+            return (new MailMessage)
+                ->subject('Atur ulang kata sandi '.config('app.name'))
+                ->markdown('mail.reset-password', [
+                    'name' => $user instanceof User ? $user->name : $user->getEmailForPasswordReset(),
+                    'url' => $url,
+                    'minutes' => config('auth.passwords.'.config('auth.defaults.passwords').'.expire'),
+                ]);
+        });
     }
 
     /**

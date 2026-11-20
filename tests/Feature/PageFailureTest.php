@@ -49,7 +49,8 @@ test('each code tells what to do next, in order', function () {
 test('pages are in Indonesian and never machine translated, which would break them (FF-302)', function () {
     $html = $this->get(route('login'))->assertOk()->getContent();
 
-    expect($html)->toContain('<html lang="id" translate="no">')
+    // The tag also carries the look of the account (Profil → Tampilan).
+    expect($html)->toMatch('/<html lang="id" translate="no"[\s>]/')
         ->toContain('<meta name="google" content="notranslate">');
 });
 

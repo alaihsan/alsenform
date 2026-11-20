@@ -59,6 +59,7 @@ function submission(QuizSession $session, bool $isTimeout = false): array
 }
 
 test('a student who leaves the exam tab is locked and the page sees it in the status', function () {
+    $this->freezeTime();
     $quizForm = lockingQuiz();
     $session = runningAttempt($quizForm);
 
@@ -71,6 +72,8 @@ test('a student who leaves the exam tab is locked and the page sees it in the st
             'locked' => true,
             'unlock_requested' => false,
             'submitted' => false,
+            'expires_at' => null,
+            'server_time' => now()->toISOString(),
         ]);
 
     expect($session->refresh())
@@ -438,6 +441,7 @@ test('a lock with answers to unknown questions still locks, without keeping thos
 });
 
 test('the page asking while the lock is off changes nothing, and is locked the moment the teacher switches it on', function () {
+    $this->freezeTime();
     $quizForm = lockingQuiz(['lockOnBlur' => false]);
     $session = runningAttempt($quizForm);
     $leave = fn () => $this->postJson(route('forms.responses.lock', $quizForm->slug), [
@@ -445,7 +449,14 @@ test('the page asking while the lock is off changes nothing, and is locked the m
         'answers' => [1 => 'Option 1'],
     ]);
 
-    $leave()->assertExactJson(['lock_on_blur' => false, 'locked' => false, 'unlock_requested' => false, 'submitted' => false]);
+    $leave()->assertExactJson([
+        'lock_on_blur' => false,
+        'locked' => false,
+        'unlock_requested' => false,
+        'submitted' => false,
+        'expires_at' => null,
+        'server_time' => now()->toISOString(),
+    ]);
     expect($session->refresh())->blur_count->toBe(0)->draft_answers->toBeNull();
 
     $quizForm->update(['settings' => array_merge($quizForm->settings, ['lockOnBlur' => true])]);
