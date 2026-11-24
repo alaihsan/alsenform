@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AnswerFile;
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Support\FileAnswers;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Http\JsonResponse;
@@ -163,7 +164,7 @@ class GradingController extends Controller
     protected function answersTo(QuizForm $quizForm, array $question, Collection $responses, array $attempts): array
     {
         $id = $question['id'];
-        $isFile = ($question['type'] ?? '') === 'File upload';
+        $isFile = FileAnswers::isFileQuestion($question);
         $given = $responses->filter(fn (QuizResponse $response): bool => $this->wasGiven($response, $question));
 
         $files = $isFile
@@ -188,7 +189,7 @@ class GradingController extends Controller
                         ? collect(is_array($answer) ? $answer : [])
                             ->map(fn (mixed $file): ?AnswerFile => is_array($file) ? $files->get($file['id'] ?? '') : null)
                             ->filter()
-                            ->map(fn (AnswerFile $file): array => [...$file->asAnswer(), 'url' => route('forms.answer-files.show', [$file->quiz_form_id, $file->id], false), 'isImage' => $file->isImage()])
+                            ->map(fn (AnswerFile $file): array => [...$file->asAnswer(), 'url' => route('forms.answer-files.show', [$file->quiz_form_id, $file->id], false), 'isImage' => $file->isImage(), 'isAudio' => $file->isAudio()])
                             ->values()
                             ->all()
                         : [],

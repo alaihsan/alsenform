@@ -15,6 +15,7 @@ import {
     FileText,
     Flag,
     KeyRound,
+    Mic,
     Send,
     LayoutGrid,
     AlertCircle,
@@ -46,6 +47,9 @@ import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDe
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
 import RespondentIdentityFields from '@/components/RespondentIdentityFields.vue';
 import InterviewScoreInput from '@/components/InterviewScoreInput.vue';
+import AudioPlayer from '@/components/audio/AudioPlayer.vue';
+import AudioRecorder from '@/components/audio/AudioRecorder.vue';
+import { durationLabel, formatAudioTime, type AudioClip } from '@/lib/audio';
 
 type Question = {
     id: number;
@@ -58,12 +62,19 @@ type Question = {
     answer?: any;
     required: boolean;
     media?: {
-        type: 'image' | 'video';
+        type: 'image' | 'video' | 'audio';
         url: string;
         width?: string;
         align?: 'left' | 'center' | 'right';
         caption?: string;
+        /** Audio: seconds, and how many times it may be played (0 or absent: no limit). */
+        duration?: number | null;
+        maxPlays?: number;
     }[];
+    /** The sound of each choice, in the order the student sees the choices. */
+    optionAudio?: (AudioClip | null)[];
+    /** Jawaban Suara: the longest recording, in seconds. */
+    maxDuration?: number;
     points?: number;
     /** Going to another section, like in Google Forms (see utils/section-flow). */
     goTo?: SectionTarget;
@@ -1868,7 +1879,7 @@ const goToFirstDoubtful = () => {
  */
 const ANSWER_FILE_ACCEPT = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt';
 const MAX_ANSWER_FILES = 5;
-type AnswerFileValue = { id: string; name: string; size: number; type: string | null };
+type AnswerFileValue = { id: string; name: string; size: number; type: string | null; duration?: number };
 const maxUploadMb = computed<number>(() => {
     const limit = Number(props.quizForm.settings.maxUploadSize);
     return limit >= 1 ? Math.min(40, limit) : 10;
@@ -1878,6 +1889,44 @@ const uploadErrors = reactive<Record<string, string>>({});
 const filesOf = (question: Question): AnswerFileValue[] => (Array.isArray(answers.value[question.id]) ? answers.value[question.id] : []);
 const isUploadingFor = (question: Question) => uploadProgress[question.id] !== undefined;
 const formatFileSize = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+/** Sends one file (or recording) of a question to the server; null when it did not get there. */
+const sendAnswerFile = async (question: Question, file: File): Promise<AnswerFileValue | null> => {
+    if (!props.session?.token) {
+        return null;
+    }
+    const body = new FormData();
+    body.append('session_token', props.session.token);
+    body.append('question_id', String(question.id));
+    body.append('file', file);
+    uploadProgress[question.id] = 0;
+    try {
+        const response = await axios.post(`/forms/${props.quizForm.slug}/answer-files`, body, {
+            timeout: 180000,
+            onUploadProgress: (progress) => {
+                if (progress.total) {
+                    uploadProgress[question.id] = Math.round((progress.loaded / progress.total) * 100);
+                }
+            },
+        });
+        markServerReachable(true);
+
+        return response.data.file as AnswerFileValue;
+    } catch (error: any) {
+        if (error?.response?.status === 419) {
+            await refreshCsrfToken();
+        }
+        const data = error?.response?.data;
+        uploadErrors[question.id] =
+            data?.errors?.file?.[0] ??
+            data?.message ??
+            (isNetworkFailure(error) ? 'Belum terkirim: periksa koneksi Wi-Fi, lalu coba lagi.' : 'Belum terkirim. Coba lagi.');
+
+        return null;
+    } finally {
+        delete uploadProgress[question.id];
+    }
+};
 
 const uploadAnswerFiles = async (question: Question, event: Event) => {
     const input = event.target as HTMLInputElement;
@@ -1898,36 +1947,50 @@ const uploadAnswerFiles = async (question: Question, event: Event) => {
             continue;
         }
 
-        const body = new FormData();
-        body.append('session_token', props.session.token);
-        body.append('question_id', String(question.id));
-        body.append('file', file);
-        uploadProgress[question.id] = 0;
-        try {
-            const response = await axios.post(`/forms/${props.quizForm.slug}/answer-files`, body, {
-                timeout: 120000,
-                onUploadProgress: (progress) => {
-                    if (progress.total) {
-                        uploadProgress[question.id] = Math.round((progress.loaded / progress.total) * 100);
-                    }
-                },
-            });
-            answers.value = { ...answers.value, [question.id]: [...filesOf(question), response.data.file] };
-            markServerReachable(true);
-        } catch (error: any) {
-            if (error?.response?.status === 419) {
-                await refreshCsrfToken();
-            }
-            const data = error?.response?.data;
-            uploadErrors[question.id] =
-                data?.errors?.file?.[0] ??
-                data?.message ??
-                (isNetworkFailure(error) ? 'Berkas belum terkirim: periksa koneksi Wi-Fi, lalu pilih berkasnya lagi.' : 'Berkas belum terkirim. Coba lagi.');
-        } finally {
-            delete uploadProgress[question.id];
+        const sent = await sendAnswerFile(question, file);
+        if (sent) {
+            answers.value = { ...answers.value, [question.id]: [...filesOf(question), sent] };
         }
     }
 };
+
+/*
+ * "Voice answer" questions (Jawaban Suara), like the speaking part of a TOEFL test: the student
+ * records (or picks a sound file); the recording goes to the server at once, where it is
+ * compressed, and is the answer. Recording again replaces it. Until the page is left the student
+ * can listen to it from the device itself, without loading it again.
+ */
+const MAX_VOICE_MB = 20;
+const voicePreviews = reactive<Record<string, string>>({});
+const reRecording = reactive<Record<string, boolean>>({});
+const voiceAnswerOf = (question: Question): AnswerFileValue | null => filesOf(question)[0] ?? null;
+
+const submitVoiceAnswer = async (question: Question, file: File) => {
+    if (isLocked.value || isSubmitted.value || !props.session?.token) {
+        return;
+    }
+    uploadErrors[question.id] = '';
+    if (file.size > Math.max(MAX_VOICE_MB, maxUploadMb.value) * 1024 * 1024) {
+        uploadErrors[question.id] = `Rekaman terlalu besar: paling besar ${Math.max(MAX_VOICE_MB, maxUploadMb.value)} MB.`;
+        return;
+    }
+
+    const sent = await sendAnswerFile(question, file);
+    if (!sent) {
+        return;
+    }
+    if (voicePreviews[question.id]) {
+        URL.revokeObjectURL(voicePreviews[question.id]);
+    }
+    voicePreviews[question.id] = URL.createObjectURL(file);
+    reRecording[question.id] = false;
+    answers.value = { ...answers.value, [question.id]: [sent] };
+};
+
+onUnmounted(() => Object.values(voicePreviews).forEach((url) => URL.revokeObjectURL(url)));
+
+/** Batas putar: counted per attempt, so a reload does not give the plays back. */
+const mediaPlayKey = (question: Question, index: number) => `${props.quizForm.id}_${props.session?.token ?? 'tamu'}:${question.id}:${index}`;
 
 const removeAnswerFile = (question: Question, fileId: string) => {
     if (isLocked.value || isSubmitted.value) {
@@ -2828,7 +2891,25 @@ const submitAnotherResponse = () => {
                                 'justify-end': media.align === 'right',
                             }"
                         >
+                            <!-- Audio: loads only when played; with a limit, like a TOEFL listening test -->
+                            <div v-if="media.type === 'audio' && media.url" class="w-full" data-testid="question-audio">
+                                <AudioPlayer
+                                    :src="media.url"
+                                    :duration="media.duration"
+                                    :max-plays="media.maxPlays ?? 0"
+                                    :play-key="mediaPlayKey(question, idx)"
+                                    :label="media.caption || `audio soal ${getQuestionNumber(question.id)}`"
+                                />
+                                <p v-if="media.caption || (media.maxPlays ?? 0) > 0" class="mt-1.5 px-1 text-xs text-slate-500">
+                                    <span v-if="media.caption" class="italic">{{ media.caption }}</span>
+                                    <span v-if="media.caption && (media.maxPlays ?? 0) > 0"> · </span>
+                                    <span v-if="(media.maxPlays ?? 0) > 0" class="font-semibold text-amber-700"
+                                        >Audio hanya bisa diputar {{ media.maxPlays }}×. Dengarkan baik-baik.</span
+                                    >
+                                </p>
+                            </div>
                             <div
+                                v-else-if="media.type !== 'audio'"
                                 class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 transition-all duration-200 hover:shadow-md"
                                 :style="{ width: media.width ?? '100%', maxWidth: '100%' }"
                             >
@@ -3094,6 +3175,15 @@ const submitAnotherResponse = () => {
                                 <template v-else>{{ optionLetter(optionIndex) }}</template>
                             </span>
                             <RichContent :content="option" class="af-option-text min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-slate-800 sm:text-base" />
+                            <!-- The sound of the choice: playing it does not choose it -->
+                            <span v-if="question.optionAudio?.[optionIndex]?.url" class="shrink-0" @click.prevent.stop>
+                                <AudioPlayer
+                                    compact
+                                    :src="question.optionAudio[optionIndex]!.url"
+                                    :duration="question.optionAudio[optionIndex]!.duration"
+                                    :label="`pilihan ${optionLetter(optionIndex)}`"
+                                />
+                            </span>
                             <span
                                 v-if="isScoreEntryQuestion(question)"
                                 class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600"
@@ -3123,6 +3213,55 @@ const submitAnotherResponse = () => {
                         type="time"
                         class="mt-4 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-800 outline-none focus:border-indigo-500 sm:mt-5 sm:w-auto"
                     />
+                    <div v-else-if="question.type === 'Voice answer'" class="mt-4 space-y-3 sm:mt-5" data-testid="voice-answer">
+                        <div
+                            v-if="voiceAnswerOf(question) && !reRecording[question.id]"
+                            class="space-y-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5"
+                        >
+                            <p class="flex items-center gap-2 text-sm font-bold text-emerald-800">
+                                <CheckCircle2 class="h-4 w-4" />
+                                Jawaban suara terkirim{{ voiceAnswerOf(question)?.duration ? ` · ${formatAudioTime(voiceAnswerOf(question)?.duration)}` : '' }}
+                            </p>
+                            <AudioPlayer
+                                v-if="voicePreviews[question.id]"
+                                :src="voicePreviews[question.id]"
+                                :duration="voiceAnswerOf(question)?.duration"
+                                label="rekaman jawaban Anda"
+                            />
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:border-rose-400 hover:text-rose-700 disabled:opacity-50"
+                                :disabled="isLocked"
+                                @click="reRecording[question.id] = true"
+                            >
+                                <Mic class="h-3.5 w-3.5" />
+                                Rekam ulang
+                            </button>
+                        </div>
+                        <div v-else class="rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50/30 p-4">
+                            <p class="mb-3 text-sm text-slate-600">
+                                Jawab dengan suara Anda<template v-if="question.maxDuration">, paling lama {{ durationLabel(question.maxDuration) }}</template>.
+                                Tekan rekam, bicara dengan jelas, lalu tekan berhenti.
+                            </p>
+                            <AudioRecorder
+                                :max-seconds="question.maxDuration ?? null"
+                                :busy="isUploadingFor(question)"
+                                :progress="uploadProgress[question.id] ?? null"
+                                :error="uploadErrors[question.id]"
+                                :disabled="isLocked"
+                                record-label="Mulai rekam"
+                                @recorded="submitVoiceAnswer(question, $event)"
+                            />
+                            <button
+                                v-if="voiceAnswerOf(question)"
+                                type="button"
+                                class="mt-3 text-xs font-bold text-slate-500 underline-offset-2 hover:underline"
+                                @click="reRecording[question.id] = false"
+                            >
+                                Batal, pakai rekaman sebelumnya
+                            </button>
+                        </div>
+                    </div>
                     <div v-else-if="question.type === 'File upload'" class="mt-4 sm:mt-5">
                         <label
                             :class="[

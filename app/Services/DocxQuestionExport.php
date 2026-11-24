@@ -94,7 +94,12 @@ class DocxQuestionExport
                 $this->writeContentItem($doc, $item);
             } elseif (! $this->isExportable($item)) {
                 $type = (string) ($item['type'] ?? '');
-                $this->note($doc, 'Soal "'.Str::limit(RichText::plain((string) ($item['title'] ?? '')), 80).'" tidak diekspor: tipe '.($type === 'File upload' ? 'Unggah Berkas' : $type).' tidak ada di templat Import Soal.');
+                $typeName = match ($type) {
+                    'File upload' => 'Unggah Berkas',
+                    'Voice answer' => 'Jawaban Suara',
+                    default => $type,
+                };
+                $this->note($doc, 'Soal "'.Str::limit(RichText::plain((string) ($item['title'] ?? '')), 80).'" tidak diekspor: tipe '.$typeName.' tidak ada di templat Import Soal.');
             } else {
                 $this->writeQuestion($doc, $item, ++$number);
             }
@@ -453,7 +458,11 @@ class DocxQuestionExport
 
         $picture = ($media['type'] ?? 'image') === 'image' ? $this->picture((string) $this->mediaUrl->normalize($media['url'])) : null;
         if ($picture === null) {
-            $this->note($doc, (($media['type'] ?? '') === 'video' ? 'Video: ' : 'Gambar: ').$media['url'], ['keepNext' => true]);
+            $this->note($doc, match ($media['type'] ?? '') {
+                'video' => 'Video: ',
+                'audio' => 'Audio: ',
+                default => 'Gambar: ',
+            }.$media['url'], ['keepNext' => true]);
 
             return;
         }

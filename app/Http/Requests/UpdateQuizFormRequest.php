@@ -14,6 +14,9 @@ use Illuminate\Validation\Rule;
 
 class UpdateQuizFormRequest extends FormRequest
 {
+    /** The longest a spoken answer may be: ten minutes. */
+    public const MAX_VOICE_SECONDS = 600;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -58,6 +61,14 @@ class UpdateQuizFormRequest extends FormRequest
             'questions.*.answer' => ['nullable'],
             'questions.*.required' => ['nullable', 'boolean'],
             'questions.*.media' => ['nullable', 'array'],
+            // The sound of each choice, in the order of the choices: {url, duration} or null.
+            'questions.*.optionAudio' => ['nullable', 'array'],
+            'questions.*.optionAudio.*' => ['nullable', 'array:url,duration,size'],
+            'questions.*.optionAudio.*.url' => ['nullable', 'string', 'max:2048'],
+            'questions.*.optionAudio.*.duration' => ['nullable', 'numeric', 'min:0'],
+            'questions.*.optionAudio.*.size' => ['nullable', 'integer', 'min:0'],
+            // Jawaban Suara: the longest a spoken answer may be, in seconds.
+            'questions.*.maxDuration' => ['nullable', 'integer', 'min:5', 'max:'.UpdateQuizFormRequest::MAX_VOICE_SECONDS],
             'questions.*.points' => ['nullable', 'integer', 'min:0'],
             // Pembahasan: shown to students with their results, when the teacher shows them in full.
             'questions.*.explanation' => ['nullable', 'string', 'max:5000'],

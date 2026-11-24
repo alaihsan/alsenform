@@ -24,8 +24,11 @@ import DeliveryQualityCard from '@/components/form-editor/DeliveryQualityCard.vu
 import ExtendTimeCard from '@/components/form-editor/ExtendTimeCard.vue';
 import UnlockRequestsPanel, { type UnlockPanelEntry } from '@/components/form-editor/UnlockRequestsPanel.vue';
 import {
+    AUDIO_PLAY_LIMITS,
+    audioOptionQuestionTypes,
     backgroundPatterns,
     colorThemes,
+    DEFAULT_VOICE_ANSWER_SECONDS,
     DESCRIPTION_MAX_CHARACTERS,
     fonts,
     gridQuestionTypes,
@@ -39,7 +42,11 @@ import {
     scaleQuestionTypes,
     templatePresets,
     UNTITLED_QUESTION,
+    VOICE_ANSWER_DURATIONS,
 } from '@/constants/form-editor';
+import AudioPlayer from '@/components/audio/AudioPlayer.vue';
+import AudioRecorder from '@/components/audio/AudioRecorder.vue';
+import { durationLabel, formatAudioSize, type AudioClip } from '@/lib/audio';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { useCardReorder } from '@/composables/useCardReorder';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
@@ -75,7 +82,9 @@ import {
     Link2,
     ListFilter,
     Maximize2,
+    Mic,
     MoreVertical,
+    Music,
     Paintbrush,
     Palette,
     PanelTop,
@@ -137,8 +146,12 @@ const form = reactive({
                 const kept = { ...m, type: m.type, url: m.url ?? '' };
                 delete kept.isUploading;
                 delete kept.uploadError;
+                delete kept.uploadProgress;
                 return kept;
             }),
+            // The sound of each choice, and the longest spoken answer: kept, or every save would drop them.
+            ...(Array.isArray(q.optionAudio) ? { optionAudio: q.optionAudio.map((clip) => (clip?.url ? { ...clip } : null)) } : {}),
+            ...(q.maxDuration ? { maxDuration: q.maxDuration } : {}),
             points: q.points ?? 1,
             // Where a section leads and where each answer sends the student: kept, or every save would reset them to "next".
             ...(q.goTo !== undefined ? { goTo: q.goTo } : {}),
@@ -1091,6 +1104,7 @@ const duplicateQuestion = (question: Question) => {
         columns: question.columns ? [...question.columns] : [],
         optionScores: question.optionScores ? [...question.optionScores] : undefined,
         columnScores: question.columnScores ? [...question.columnScores] : undefined,
+        optionAudio: question.optionAudio ? question.optionAudio.map((clip) => (clip ? { ...clip } : null)) : undefined,
         answer:
             typeof question.answer === 'object' && question.answer !== null
                 ? Array.isArray(question.answer)
@@ -1213,6 +1227,8 @@ const removeOption = (question: Question, optionIndex: number) => {
     question.options.splice(optionIndex, 1);
     question.optionGoTo?.splice(optionIndex, 1);
     question.optionScores?.splice(optionIndex, 1);
+    question.optionAudio?.splice(optionIndex, 1);
+    openOptionAudioKey.value = null;
     if (question.options.length === 0 && !noOptionQuestionTypes.includes(question.type)) {
         question.options.push('Opsi 1');
     }
@@ -1328,11 +1344,21 @@ const updateQuestionType = (question: Question, type: QuestionType) => {
     if (type !== 'Multiple-choice grid') {
         delete question.columnScores;
     }
+    if (!audioOptionQuestionTypes.includes(type)) {
+        delete question.optionAudio;
+    }
+    // Jawaban Suara: a minute to speak, like a TOEFL speaking task, until the teacher sets another.
+    if (type === 'Voice answer') {
+        question.maxDuration ??= DEFAULT_VOICE_ANSWER_SECONDS;
+    } else {
+        delete question.maxDuration;
+    }
 
     if (optionQuestionTypes.includes(type)) {
         if (question.options.length === 0 || gridQuestionTypes.includes(previousType)) {
             question.options = ['Opsi 1'];
             delete question.optionScores;
+            delete question.optionAudio;
         }
         normalizeCorrectAnswer(question);
         normalizeChoiceAnswer(question);
@@ -1467,15 +1493,145 @@ const addTitleDescription = () => {
     markChanged('Judul dan deskripsi ditambahkan');
 };
 
-const addMediaToActiveQuestion = (type: 'image' | 'video') => {
+const addMediaToActiveQuestion = (type: 'image' | 'video' | 'audio') => {
     activeQuestion.value.media.push({
         type,
         url: '',
-        sourceType: 'upload',
+        sourceType: type === 'audio' ? 'record' : 'upload',
         isUploading: false,
         uploadError: '',
+        ...(type === 'audio' ? { maxPlays: 0 } : {}),
     });
-    markChanged(type === 'image' ? 'Gambar ditambahkan ke pertanyaan' : 'Video ditambahkan ke pertanyaan');
+    markChanged({ image: 'Gambar ditambahkan ke pertanyaan', video: 'Video ditambahkan ke pertanyaan', audio: 'Audio ditambahkan ke pertanyaan' }[type]);
+};
+
+/*
+ * Sound for a question or a choice: recorded here or chosen as a file. The server compresses it
+ * to a light MP3 and says how long it is (App\Services\AudioCompressor).
+ */
+type UploadedAudio = AudioClip & { originalSize?: number; compressed?: boolean };
+
+const uploadAudio = async (file: File, onProgress: (percent: number) => void): Promise<UploadedAudio> => {
+    const body = new FormData();
+    body.append('file', file);
+    const response = await axios.post(route('forms.media.audio'), body, {
+        timeout: 300000,
+        onUploadProgress: (progress) => {
+            if (progress.total) {
+                onProgress(Math.round((progress.loaded / progress.total) * 100));
+            }
+        },
+    });
+
+    return response.data as UploadedAudio;
+};
+
+const audioUploadError = (error: any): string =>
+    error?.response?.data?.errors?.file?.[0] ??
+    (error?.response?.status === 413 ? 'Berkas suara terlalu besar untuk server: paling besar 40 MB.' : null) ??
+    error?.response?.data?.message ??
+    'Suara gagal terkirim. Periksa koneksi, lalu coba lagi.';
+
+/** What the compression saved, as "4,2 MB → 610 KB". */
+const compressionNote = ref<Record<string, string>>({});
+const noteCompression = (key: string, uploaded: UploadedAudio) => {
+    compressionNote.value[key] =
+        uploaded.compressed && uploaded.originalSize && uploaded.size && uploaded.originalSize > uploaded.size
+            ? `Dikompres ${formatAudioSize(uploaded.originalSize)} → ${formatAudioSize(uploaded.size)}`
+            : '';
+};
+
+const handleQuestionAudio = async (question: Question, media: Question['media'][number], file: File) => {
+    if (file.size > 40 * 1024 * 1024) {
+        media.uploadError = 'Berkas suara terlalu besar: paling besar 40 MB.';
+        return;
+    }
+    media.isUploading = true;
+    media.uploadProgress = 0;
+    media.uploadError = '';
+    try {
+        const uploaded = await uploadAudio(file, (percent) => (media.uploadProgress = percent));
+        media.url = uploaded.url;
+        media.duration = uploaded.duration ?? null;
+        media.size = uploaded.size ?? null;
+        noteCompression(uploaded.url, uploaded);
+        markChanged('Audio soal disimpan');
+    } catch (error: any) {
+        media.uploadError = audioUploadError(error);
+    } finally {
+        media.isUploading = false;
+        media.uploadProgress = null;
+    }
+};
+
+const setAudioPlayLimit = (media: Question['media'][number], plays: number) => {
+    media.maxPlays = plays;
+    markChanged(plays ? `Audio boleh diputar ${plays}×` : 'Audio boleh diputar tanpa batas');
+};
+
+const replaceQuestionAudio = (media: Question['media'][number]) => {
+    media.url = '';
+    media.duration = null;
+    media.size = null;
+    markChanged('Audio soal diganti');
+};
+
+/** The sound of each choice: one recorder open at a time, below its choice. */
+const openOptionAudioKey = ref<string | null>(null);
+const optionAudioState = reactive<Record<string, { busy: boolean; progress: number | null; error: string }>>({});
+const optionAudioKey = (question: Question, optionIndex: number) => `${question.id}:${optionIndex}`;
+const canHaveOptionAudio = (question: Question) => audioOptionQuestionTypes.includes(question.type);
+const optionAudioOf = (question: Question, optionIndex: number): AudioClip | null => question.optionAudio?.[optionIndex] ?? null;
+
+const toggleOptionAudio = (question: Question, optionIndex: number) => {
+    const key = optionAudioKey(question, optionIndex);
+    openOptionAudioKey.value = openOptionAudioKey.value === key ? null : key;
+};
+
+const setOptionAudio = (question: Question, optionIndex: number, clip: AudioClip | null) => {
+    const clips = question.options.map((_, at) => question.optionAudio?.[at] ?? null);
+    clips[optionIndex] = clip;
+    if (clips.some((item) => item !== null)) {
+        question.optionAudio = clips;
+    } else {
+        delete question.optionAudio;
+    }
+};
+
+const handleOptionAudio = async (question: Question, optionIndex: number, file: File) => {
+    const key = optionAudioKey(question, optionIndex);
+    const state = (optionAudioState[key] = { busy: true, progress: 0, error: '' });
+    if (file.size > 40 * 1024 * 1024) {
+        Object.assign(state, { busy: false, error: 'Berkas suara terlalu besar: paling besar 40 MB.' });
+        return;
+    }
+    try {
+        const uploaded = await uploadAudio(file, (percent) => (state.progress = percent));
+        setOptionAudio(question, optionIndex, { url: uploaded.url, duration: uploaded.duration ?? null, size: uploaded.size ?? null });
+        noteCompression(uploaded.url, uploaded);
+        openOptionAudioKey.value = null;
+        markChanged('Audio pilihan disimpan');
+    } catch (error: any) {
+        state.error = audioUploadError(error);
+    } finally {
+        state.busy = false;
+        state.progress = null;
+    }
+};
+
+const removeOptionAudio = (question: Question, optionIndex: number) => {
+    setOptionAudio(question, optionIndex, null);
+    markChanged('Audio pilihan dihapus');
+};
+
+/** Jawaban Suara: the longest recording (0: no limit). */
+const setVoiceAnswerDuration = (question: Question, seconds: number) => {
+    if (seconds > 0) {
+        question.maxDuration = seconds;
+    } else {
+        delete question.maxDuration;
+    }
+    markChanged(seconds > 0 ? `Rekaman paling lama ${durationLabel(seconds)}` : 'Rekaman tanpa batas waktu');
 };
 
 const handleMediaUpload = async (event: Event, media: any) => {
@@ -2681,6 +2837,15 @@ watch(
                                                 </span>
                                             </div>
 
+                                            <!-- Jawaban Suara: graded by listening, no key -->
+                                            <div
+                                                v-else-if="question.type === 'Voice answer'"
+                                                class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-medium leading-relaxed text-slate-500"
+                                            >
+                                                🎙️ Pertanyaan bertipe <strong>Jawaban Suara</strong> dinilai manual: dengarkan rekaman tiap siswa di tab
+                                                Jawaban, lalu beri poin. Tidak ada kunci jawaban otomatis.
+                                            </div>
+
                                             <!-- Multiple choice / Checkboxes / Drop-down Kunci Jawaban -->
                                             <div v-else-if="optionQuestionTypes.includes(question.type)" class="space-y-2.5">
                                                 <span class="block text-xs font-bold text-slate-600"
@@ -2926,11 +3091,11 @@ watch(
                                             >
                                                 <div class="mb-2.5 flex items-center justify-between">
                                                     <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
-                                                        {{ media.type === 'image' ? 'Gambar Soal' : 'Video Soal' }}
+                                                        {{ media.type === 'image' ? 'Gambar Soal' : media.type === 'audio' ? 'Audio Soal' : 'Video Soal' }}
                                                     </span>
                                                     <div class="flex items-center gap-2">
                                                         <button
-                                                            v-if="media.url"
+                                                            v-if="media.url && media.type !== 'audio'"
                                                             type="button"
                                                             class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
                                                             title="Buka Layar Penuh & Zoom"
@@ -2953,6 +3118,66 @@ watch(
                                                     </div>
                                                 </div>
 
+                                                <!-- Audio: recorded here or a sound file, compressed by the server; played up to N times -->
+                                                <div v-if="media.type === 'audio'" class="space-y-3" data-testid="question-audio-editor">
+                                                    <template v-if="media.url">
+                                                        <AudioPlayer :src="media.url" :duration="media.duration" label="audio soal" />
+                                                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                                            <div class="flex flex-wrap items-center gap-1">
+                                                                <span class="mr-1 font-bold text-slate-500">Batas putar siswa:</span>
+                                                                <button
+                                                                    v-for="plays in AUDIO_PLAY_LIMITS"
+                                                                    :key="plays"
+                                                                    type="button"
+                                                                    :class="[
+                                                                        'rounded-lg px-2.5 py-1 font-bold transition',
+                                                                        (media.maxPlays ?? 0) === plays
+                                                                            ? 'bg-indigo-600 text-white shadow-xs'
+                                                                            : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100',
+                                                                    ]"
+                                                                    @click.stop="setAudioPlayLimit(media, plays)"
+                                                                >
+                                                                    {{ plays === 0 ? 'Bebas' : `${plays}×` }}
+                                                                </button>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                class="rounded-lg px-2.5 py-1 font-bold text-indigo-700 transition hover:bg-indigo-50"
+                                                                @click.stop="replaceQuestionAudio(media)"
+                                                            >
+                                                                Ganti suara
+                                                            </button>
+                                                        </div>
+                                                        <p class="text-[11px] leading-relaxed text-slate-500">
+                                                            <template v-if="(media.maxPlays ?? 0) > 0"
+                                                                >Seperti tes TOEFL: siswa hanya bisa memutar {{ media.maxPlays }}× dan tidak bisa menggeser audio;
+                                                                jeda tetap boleh.</template
+                                                            >
+                                                            <template v-else>Siswa bisa memutar, menjeda dan menggeser audio sesukanya.</template>
+                                                            <span v-if="compressionNote[media.url]" class="font-semibold text-emerald-700">
+                                                                {{ compressionNote[media.url] }}.</span
+                                                            >
+                                                        </p>
+                                                        <input
+                                                            v-model="media.caption"
+                                                            type="text"
+                                                            maxlength="200"
+                                                            placeholder="Keterangan audio (opsional), mis. Percakapan 1"
+                                                            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-indigo-500"
+                                                            @input="markChanged('Keterangan audio diperbarui')"
+                                                        />
+                                                    </template>
+                                                    <AudioRecorder
+                                                        v-else
+                                                        :busy="Boolean(media.isUploading)"
+                                                        :progress="media.uploadProgress ?? null"
+                                                        :error="media.uploadError"
+                                                        record-label="Rekam audio soal"
+                                                        @recorded="handleQuestionAudio(question, media, $event)"
+                                                    />
+                                                </div>
+
+                                                <template v-else>
                                                 <!-- Source Selector Tabs -->
                                                 <div class="mb-3 flex gap-2 rounded-xl bg-slate-200/50 p-1 text-[10px] font-bold">
                                                     <button
@@ -3137,6 +3362,7 @@ watch(
                                                         </div>
                                                     </div>
                                                 </div>
+                                                </template>
                                             </div>
                                         </div>
 
@@ -3167,6 +3393,37 @@ watch(
                                                 Siswa mengunggah foto atau berkas (PDF, Word, Excel, PowerPoint), paling besar
                                                 {{ form.settings.maxUploadSize ?? 20 }} MB per berkas. Jawabannya dinilai guru di tab Jawaban.
                                             </p>
+                                        </div>
+
+                                        <div
+                                            v-else-if="question.type === 'Voice answer'"
+                                            class="space-y-3 rounded-xl border border-dashed border-rose-200 bg-rose-50/40 p-4"
+                                            data-testid="voice-answer-editor"
+                                        >
+                                            <p class="flex items-start gap-2 text-sm text-slate-600">
+                                                <Mic class="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+                                                <span
+                                                    >Siswa menjawab dengan suara, seperti bagian speaking tes TOEFL: merekam langsung atau memilih file
+                                                    suara. Rekaman dikompres otomatis dan dinilai guru di tab Jawaban.</span
+                                                >
+                                            </p>
+                                            <div class="flex flex-wrap items-center gap-1 text-xs">
+                                                <span class="mr-1 font-bold text-slate-500">Lama rekaman paling lama:</span>
+                                                <button
+                                                    v-for="seconds in VOICE_ANSWER_DURATIONS"
+                                                    :key="seconds"
+                                                    type="button"
+                                                    :class="[
+                                                        'rounded-lg px-2.5 py-1 font-bold transition',
+                                                        (question.maxDuration ?? 0) === seconds
+                                                            ? 'bg-rose-600 text-white shadow-xs'
+                                                            : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100',
+                                                    ]"
+                                                    @click.stop="setVoiceAnswerDuration(question, seconds)"
+                                                >
+                                                    {{ seconds === 0 ? 'Tanpa batas' : durationLabel(seconds) }}
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div
@@ -3449,6 +3706,34 @@ watch(
                                                         <span class="text-[10px] font-bold text-indigo-500">Pratinjau:</span>
                                                         <RichContent :content="question.options[optionIndex]" />
                                                     </div>
+                                                    <!-- The sound of this choice: played beside it on the exam page -->
+                                                    <div
+                                                        v-if="canHaveOptionAudio(question) && optionAudioOf(question, optionIndex)"
+                                                        class="flex items-center gap-2"
+                                                        data-testid="option-audio"
+                                                    >
+                                                        <AudioPlayer
+                                                            compact
+                                                            :src="optionAudioOf(question, optionIndex)!.url"
+                                                            :duration="optionAudioOf(question, optionIndex)!.duration"
+                                                            :label="`audio pilihan ${optionIndex + 1}`"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            class="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
+                                                            @click.stop="removeOptionAudio(question, optionIndex)"
+                                                        >
+                                                            Hapus suara
+                                                        </button>
+                                                    </div>
+                                                    <AudioRecorder
+                                                        v-else-if="canHaveOptionAudio(question) && openOptionAudioKey === optionAudioKey(question, optionIndex)"
+                                                        compact
+                                                        :busy="optionAudioState[optionAudioKey(question, optionIndex)]?.busy ?? false"
+                                                        :progress="optionAudioState[optionAudioKey(question, optionIndex)]?.progress ?? null"
+                                                        :error="optionAudioState[optionAudioKey(question, optionIndex)]?.error ?? ''"
+                                                        @recorded="handleOptionAudio(question, optionIndex, $event)"
+                                                    />
                                                     <!-- "Buka bagian berdasarkan jawaban": where this option sends the student -->
                                                     <div
                                                         v-if="question.branching && canSendByAnswer(question)"
@@ -3483,6 +3768,23 @@ watch(
                                                         @input="setChoiceScore(question, optionIndex, ($event.target as HTMLInputElement).value)"
                                                     />
                                                 </label>
+                                                <button
+                                                    v-if="canHaveOptionAudio(question) && !optionAudioOf(question, optionIndex)"
+                                                    type="button"
+                                                    :class="[
+                                                        'mt-0.5 rounded-full p-1.5 transition',
+                                                        openOptionAudioKey === optionAudioKey(question, optionIndex)
+                                                            ? 'bg-rose-50 text-rose-600'
+                                                            : 'text-slate-400 hover:bg-slate-100 hover:text-rose-600',
+                                                    ]"
+                                                    :aria-label="`Tambah suara pilihan ${optionIndex + 1}`"
+                                                    :aria-expanded="openOptionAudioKey === optionAudioKey(question, optionIndex)"
+                                                    title="Tambah suara (rekam atau unggah)"
+                                                    data-testid="option-audio-toggle"
+                                                    @click.stop="toggleOptionAudio(question, optionIndex)"
+                                                >
+                                                    <Mic class="h-4 w-4" />
+                                                </button>
                                                 <button
                                                     type="button"
                                                     class="mt-0.5 rounded-full px-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500"
@@ -3779,6 +4081,17 @@ watch(
                                         @click.stop="addMediaToActiveQuestion('video')"
                                     >
                                         <Video class="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        v-if="!isContentItem(question)"
+                                        type="button"
+                                        aria-label="Tambah audio (rekam atau unggah)"
+                                        title="Tambah audio (rekam atau unggah)"
+                                        class="tool-button"
+                                        data-testid="add-audio"
+                                        @click.stop="addMediaToActiveQuestion('audio')"
+                                    >
+                                        <Music class="h-5 w-5" />
                                     </button>
                                     <button type="button" aria-label="Tambah bagian" class="tool-button" @click.stop="addSection">
                                         <PanelTop class="h-5 w-5" />
@@ -4964,6 +5277,10 @@ watch(
                                     controls
                                     class="max-h-48 w-full bg-slate-950"
                                 ></video>
+                                <div v-else-if="media.type === 'audio' && media.url" class="p-2">
+                                    <AudioPlayer :src="media.url" :duration="media.duration" :label="media.caption || 'audio soal'" />
+                                    <p v-if="media.caption" class="mt-1 px-1 text-xs italic text-slate-500">{{ media.caption }}</p>
+                                </div>
                             </div>
                         </div>
                         <div
@@ -4971,6 +5288,13 @@ watch(
                             class="mt-4 rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
                         >
                             Area unggah berkas
+                        </div>
+                        <div
+                            v-else-if="question.type === 'Voice answer'"
+                            class="mt-4 flex items-center gap-2 rounded-xl border border-dashed border-rose-200 bg-rose-50/40 p-4 text-sm text-slate-500"
+                        >
+                            <Mic class="h-4 w-4 text-rose-500" />
+                            Area rekam suara<template v-if="question.maxDuration"> · paling lama {{ durationLabel(question.maxDuration) }}</template>
                         </div>
                         <input
                             v-else-if="question.type === 'Date'"

@@ -1,4 +1,5 @@
 import type { AddonEntry } from '@/components/addons/AddonGallery.vue';
+import type { AudioClip } from '@/lib/audio';
 import type { CardDesign, FormDesign } from '@/lib/formDesign';
 import type { Component } from 'vue';
 
@@ -9,6 +10,8 @@ export type QuestionType =
     | 'Checkboxes'
     | 'Drop-down'
     | 'File upload'
+    // Jawaban Suara: the student answers by speaking (recorded, or a sound file), graded by the teacher.
+    | 'Voice answer'
     | 'Linear scale'
     | 'Rating'
     | 'Multiple-choice grid'
@@ -33,15 +36,26 @@ export type Question = {
     answer: any;
     required: boolean;
     media: {
-        type: 'image' | 'video';
+        type: 'image' | 'video' | 'audio';
         url: string;
-        sourceType?: 'upload' | 'link';
+        sourceType?: 'upload' | 'link' | 'record';
         isUploading?: boolean;
         uploadError?: string;
+        /** Audio: percent sent while uploading (editor only). */
+        uploadProgress?: number | null;
         width?: string;
         align?: 'left' | 'center' | 'right';
         caption?: string;
+        /** Audio: seconds and bytes, from the server (shown without loading the sound). */
+        duration?: number | null;
+        size?: number | null;
+        /** Audio: how many times a student may play it, like a TOEFL listening test; 0 or absent is no limit. */
+        maxPlays?: number;
     }[];
+    /** Pilihan Ganda and Kotak Centang: the sound of each option, in the order of the options. */
+    optionAudio?: (AudioClip | null)[];
+    /** Jawaban Suara: the longest recording, in seconds (absent: no limit). */
+    maxDuration?: number;
     points: number;
     /** Pembahasan: why the answer is right, shown to students with their results. */
     explanation?: string;

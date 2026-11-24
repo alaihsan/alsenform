@@ -100,6 +100,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::patch('forms/{quizForm}/restore', [QuizFormController::class, 'restore'])->withTrashed()->name('forms.restore');
         Route::delete('forms/{quizForm}/force-delete', [QuizFormController::class, 'forceDelete'])->withTrashed()->name('forms.force-delete');
         Route::post('forms/media/upload', [QuizFormController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('forms.media.upload');
+        Route::post('forms/media/audio', [QuizFormController::class, 'uploadAudio'])->middleware('throttle:30,1')->name('forms.media.audio');
         Route::post('forms/{quizForm}/collaborators', [QuizFormCollaboratorController::class, 'store'])->name('forms.collaborators.store');
         Route::delete('forms/{quizForm}/collaborators/{user}', [QuizFormCollaboratorController::class, 'destroy'])->name('forms.collaborators.destroy');
         Route::get('forms/{quizForm}/responses/export', [QuizResponseExportController::class, 'export'])->name('forms.responses.export');

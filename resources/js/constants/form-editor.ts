@@ -6,6 +6,7 @@ import {
     Clock,
     FileText,
     Grid3X3,
+    Mic,
     List,
     Menu,
     MoreVertical,
@@ -40,6 +41,7 @@ export const QUESTION_TYPE_LABELS: Record<string, string> = {
     'Short answer': 'Isian Singkat',
     Paragraph: 'Uraian',
     'File upload': 'Unggah Berkas',
+    'Voice answer': 'Jawaban Suara',
     'Linear scale': 'Skala Linear',
     Rating: 'Rating',
     'Multiple-choice grid': 'Kisi Pilihan Ganda',
@@ -171,6 +173,7 @@ export const questionTypes = [
     { value: 'Checkboxes', group: 'choice', icon: CheckSquare },
     { value: 'Drop-down', group: 'choice', icon: ChevronDown },
     { value: 'File upload', group: 'file', icon: FileText },
+    { value: 'Voice answer', group: 'file', icon: Mic },
     { value: 'Linear scale', group: 'scale', icon: MoreVertical },
     { value: 'Rating', group: 'scale', icon: Star },
     { value: 'Multiple-choice grid', group: 'grid', icon: Grid3X3 },
@@ -180,7 +183,14 @@ export const questionTypes = [
 ] as const satisfies readonly QuestionTypeOption[];
 
 export const optionQuestionTypes: QuestionType[] = ['Multiple choice', 'Checkboxes', 'Drop-down'];
-export const noOptionQuestionTypes: QuestionType[] = ['Short answer', 'Paragraph', 'File upload', 'Date', 'Time'];
+export const noOptionQuestionTypes: QuestionType[] = ['Short answer', 'Paragraph', 'File upload', 'Voice answer', 'Date', 'Time'];
+/** Choices that can carry a sound of their own (a drop-down list cannot play one). */
+export const audioOptionQuestionTypes: QuestionType[] = ['Multiple choice', 'Checkboxes'];
+/** Batas putar of a question's sound: 0 is no limit. */
+export const AUDIO_PLAY_LIMITS = [0, 1, 2, 3];
+/** Jawaban Suara: the longest recording, in seconds (0: no limit). */
+export const VOICE_ANSWER_DURATIONS = [30, 45, 60, 90, 120, 180, 300, 0];
+export const DEFAULT_VOICE_ANSWER_SECONDS = 60;
 export const scaleQuestionTypes: QuestionType[] = ['Linear scale', 'Rating'];
 export const gridQuestionTypes: QuestionType[] = ['Multiple-choice grid', 'Tick box grid'];
 export const pieColors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#0ea5e9', '#a855f7', '#14b8a6', '#f97316'];

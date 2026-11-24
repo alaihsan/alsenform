@@ -7,6 +7,7 @@ use App\Models\QuizForm;
 use App\Models\QuizResponse;
 use App\Support\Addon;
 use App\Support\DisplayTime;
+use App\Support\FileAnswers;
 use App\Support\PageFailure;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
@@ -840,8 +841,8 @@ class QuizResultsReport
             return implode("\n", $lines);
         }
 
-        // A file handed in for a "File upload" question.
-        if (($question['type'] ?? '') === 'File upload' && is_array($answer)) {
+        // A file handed in for a "File upload" question, or the recording of a "Voice answer".
+        if (FileAnswers::isFileQuestion($question) && is_array($answer)) {
             return implode(', ', array_map(
                 fn (mixed $file): string => is_array($file) ? $this->plainText((string) ($file['name'] ?? 'berkas')) : '',
                 array_is_list($answer) ? $answer : [$answer],

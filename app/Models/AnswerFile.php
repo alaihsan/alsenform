@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A file a student handed in for a "File upload" question, kept on the school server (the local
- * disk, outside the public folder) and only given to the exam's teachers.
+ * A file a student handed in for a "File upload" question, or the recording of a "Voice answer"
+ * question, kept on the school server (the local disk, outside the public folder) and only given
+ * to the exam's teachers.
  */
 class AnswerFile extends Model
 {
@@ -22,7 +23,18 @@ class AnswerFile extends Model
         'original_name',
         'mime_type',
         'size',
+        'duration',
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'duration' => 'float',
+        ];
+    }
 
     public function quizForm(): BelongsTo
     {
@@ -35,13 +47,25 @@ class AnswerFile extends Model
     }
 
     /**
-     * The file as an answer value: what the page shows, without where it is stored.
+     * The file as an answer value: what the page shows, without where it is stored. A recording
+     * also has its length.
      *
-     * @return array{id: string, name: string, size: int, type: string|null}
+     * @return array{id: string, name: string, size: int, type: string|null, duration?: float}
      */
     public function asAnswer(): array
     {
-        return ['id' => $this->id, 'name' => $this->original_name, 'size' => (int) $this->size, 'type' => $this->mime_type];
+        return [
+            'id' => $this->id,
+            'name' => $this->original_name,
+            'size' => (int) $this->size,
+            'type' => $this->mime_type,
+            ...($this->duration !== null ? ['duration' => (float) $this->duration] : []),
+        ];
+    }
+
+    public function isAudio(): bool
+    {
+        return str_starts_with((string) $this->mime_type, 'audio/');
     }
 
     public function isImage(): bool

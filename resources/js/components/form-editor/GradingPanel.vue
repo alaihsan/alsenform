@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import RichContent from '@/components/RichContent.vue';
+import AudioPlayer from '@/components/audio/AudioPlayer.vue';
 import axios from 'axios';
 import { Check, EyeOff, FileText, Image as ImageIcon, PenLine, RefreshCw, X } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -20,7 +21,7 @@ type GradingAnswer = {
     kelas: string | null;
     attempt: number | null;
     answer: string | null;
-    files: { id: string; name: string; size: number; type: string | null; url: string; isImage: boolean }[];
+    files: { id: string; name: string; size: number; type: string | null; url: string; isImage: boolean; isAudio?: boolean; duration?: number }[];
     autoCorrect: boolean | null;
     score: number | null;
     feedback: string | null;
@@ -127,7 +128,9 @@ const setScore = (answer: GradingAnswer, score: number) => {
 };
 
 const formatSize = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
-const TYPE_LABEL: Record<string, string> = { Paragraph: 'Esai', 'File upload': 'Unggah berkas', 'Short answer': 'Isian singkat' };
+const TYPE_LABEL: Record<string, string> = { Paragraph: 'Esai', 'File upload': 'Unggah berkas', 'Voice answer': 'Jawaban suara', 'Short answer': 'Isian singkat' };
+/** Questions answered with files kept on the server (App\Support\FileAnswers::TYPES). */
+const FILE_TYPES = ['File upload', 'Voice answer'];
 </script>
 
 <template>
@@ -242,14 +245,21 @@ const TYPE_LABEL: Record<string, string> = { Paragraph: 'Esai', 'File upload': '
                                 </div>
 
                                 <p
-                                    v-if="question.type !== 'File upload'"
+                                    v-if="!FILE_TYPES.includes(question.type)"
                                     class="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-800"
                                 >
                                     {{ answer.answer || '(tidak dijawab)' }}
                                 </p>
                                 <div v-else class="mt-2 flex flex-wrap gap-2">
+                                    <!-- A spoken answer: listened to here, loaded only when played -->
+                                    <div v-for="file in answer.files.filter((item) => item.isAudio)" :key="file.id" class="w-full max-w-md">
+                                        <AudioPlayer :src="file.url" :duration="file.duration" :label="`jawaban suara ${answer.name}`" />
+                                        <a :href="file.url" target="_blank" rel="noopener" :download="file.name" class="mt-1 inline-block px-1 text-xs font-semibold text-slate-500 hover:text-indigo-700"
+                                            >Unduh rekaman · {{ formatSize(file.size) }}</a
+                                        >
+                                    </div>
                                     <a
-                                        v-for="file in answer.files"
+                                        v-for="file in answer.files.filter((item) => !item.isAudio)"
                                         :key="file.id"
                                         :href="file.url"
                                         target="_blank"

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\QuizForm;
 use App\Models\QuizResponse;
+use App\Support\FileAnswers;
 use App\Support\QuizItems;
 use App\Support\QuizScoring;
 use Illuminate\Support\Collection;
@@ -135,7 +136,11 @@ class ItemAnalysis
         ];
 
         if (! $this->scoring->isAutoScored($question)) {
-            return [...$base, 'note' => ($question['type'] ?? '') === 'Paragraph' ? 'Esai, dinilai guru' : 'Tanpa kunci jawaban'];
+            return [...$base, 'note' => match (true) {
+                ($question['type'] ?? '') === 'Paragraph' => 'Esai, dinilai guru',
+                FileAnswers::isVoiceQuestion($question) => 'Jawaban suara, dinilai guru',
+                default => 'Tanpa kunci jawaban',
+            }];
         }
 
         if ($takers->isEmpty()) {

@@ -102,18 +102,27 @@ class MediaUrl
      */
     public function normalizeQuestions(?array $questions): array
     {
-        return array_map(function (mixed $question): mixed {
-            if (! is_array($question) || ! is_array($question['media'] ?? null)) {
+        $normalizeItem = function (mixed $media): mixed {
+            if (is_array($media) && array_key_exists('url', $media)) {
+                $media['url'] = $this->normalize($media['url']);
+            }
+
+            return $media;
+        };
+
+        return array_map(function (mixed $question) use ($normalizeItem): mixed {
+            if (! is_array($question)) {
                 return $question;
             }
 
-            $question['media'] = array_map(function (mixed $media): mixed {
-                if (is_array($media) && array_key_exists('url', $media)) {
-                    $media['url'] = $this->normalize($media['url']);
-                }
+            if (is_array($question['media'] ?? null)) {
+                $question['media'] = array_map($normalizeItem, $question['media']);
+            }
 
-                return $media;
-            }, $question['media']);
+            // The sound of each choice (Pilihan Ganda, Kotak Centang).
+            if (is_array($question['optionAudio'] ?? null)) {
+                $question['optionAudio'] = array_map($normalizeItem, $question['optionAudio']);
+            }
 
             return $question;
         }, $questions ?? []);

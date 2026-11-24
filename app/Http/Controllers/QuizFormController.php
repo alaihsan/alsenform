@@ -6,9 +6,11 @@ use App\Actions\DuplicateQuizForm;
 use App\Actions\SubmitExpiredAttempts;
 use App\Http\Requests\MoveQuizFormToFolderRequest;
 use App\Http\Requests\UpdateQuizFormRequest;
+use App\Http\Requests\UploadQuizFormAudioRequest;
 use App\Http\Requests\UploadQuizFormMediaRequest;
 use App\Models\QuizFolder;
 use App\Models\QuizForm;
+use App\Services\AudioCompressor;
 use App\Services\ImageOptimizationService;
 use App\Services\QuestionBank;
 use App\Support\FormDesign;
@@ -27,6 +29,9 @@ use Inertia\Response;
 
 class QuizFormController extends Controller
 {
+    /** Choices that can carry a sound of their own (a drop-down list cannot play one). */
+    protected const AUDIO_CHOICE_TYPES = ['Multiple choice', 'Checkboxes'];
+
     public function create(Request $request, ?string $template = null): RedirectResponse
     {
         Gate::authorize('create', QuizForm::class);
@@ -85,7 +90,7 @@ class QuizFormController extends Controller
             }
 
             $wasLockingOnBlur = $current->locksOnBlur();
-            $questions = $this->choiceScoresToStore($validated['questions'], $validated['settings']);
+            $questions = $this->optionAudioToStore($this->choiceScoresToStore($validated['questions'], $validated['settings']));
             $flow = SectionFlow::normalize($mediaUrl->normalizeQuestions($questions), $this->settingsToStore($validated['settings']));
 
             $current->update([
@@ -160,6 +165,49 @@ class QuizFormController extends Controller
         );
     }
 
+    /**
+     * The sound of each choice as a list beside the choices, in their order: {url, duration, size}
+     * or null. Validation rebuilds the list key by key, so it is put back in order here; questions
+     * whose choices cannot play a sound (or that have none) keep no list.
+     *
+     * @param  array<int, mixed>  $questions
+     * @return array<int, mixed>
+     */
+    protected function optionAudioToStore(array $questions): array
+    {
+        return array_map(function (mixed $question): mixed {
+            if (! is_array($question) || ! array_key_exists('optionAudio', $question)) {
+                return $question;
+            }
+
+            $sounds = is_array($question['optionAudio']) ? $question['optionAudio'] : [];
+            $choices = in_array($question['type'] ?? '', self::AUDIO_CHOICE_TYPES, true) && is_array($question['options'] ?? null)
+                ? array_values($question['options'])
+                : [];
+
+            $clips = array_map(function (int $index) use ($sounds): ?array {
+                $clip = $sounds[$index] ?? null;
+                if (! is_array($clip) || ! is_string($clip['url'] ?? null) || trim($clip['url']) === '') {
+                    return null;
+                }
+
+                return array_filter([
+                    'url' => $clip['url'],
+                    'duration' => is_numeric($clip['duration'] ?? null) ? round((float) $clip['duration'], 2) : null,
+                    'size' => is_numeric($clip['size'] ?? null) ? (int) $clip['size'] : null,
+                ], fn (mixed $value): bool => $value !== null);
+            }, array_keys($choices));
+
+            if (array_filter($clips) === []) {
+                unset($question['optionAudio']);
+            } else {
+                $question['optionAudio'] = $clips;
+            }
+
+            return $question;
+        }, $questions);
+    }
+
     public function duplicate(QuizForm $quizForm, DuplicateQuizForm $duplicateQuizForm): RedirectResponse
     {
         Gate::authorize('update', $quizForm);
@@ -226,6 +274,28 @@ class QuizFormController extends Controller
 
         return response()->json([
             'url' => $mediaUrl->forPublicPath($path),
+        ]);
+    }
+
+    /**
+     * Sound for a question or a choice, recorded in the editor or chosen as a file: compressed to
+     * a light MP3 (AudioCompressor), with its length so the exam page shows it without loading it.
+     */
+    public function uploadAudio(UploadQuizFormAudioRequest $request, AudioCompressor $compressor, MediaUrl $mediaUrl): JsonResponse
+    {
+        $probe = $compressor->probe((string) $request->file('file')->getRealPath());
+        if ($probe !== null && ! $probe['hasAudio']) {
+            return response()->json(['message' => 'Berkas ini tidak berisi suara.', 'errors' => ['file' => ['Berkas ini tidak berisi suara.']]], 422);
+        }
+
+        $stored = $compressor->store($request->file('file'), 'media/audio', 'public', AudioCompressor::LISTENING_KBPS);
+
+        return response()->json([
+            'url' => $mediaUrl->forPublicPath($stored['path']),
+            'duration' => $stored['duration'],
+            'size' => $stored['size'],
+            'originalSize' => $stored['originalSize'],
+            'compressed' => $stored['compressed'],
         ]);
     }
 

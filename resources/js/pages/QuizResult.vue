@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import RichContent from '@/components/RichContent.vue';
+import AudioPlayer from '@/components/audio/AudioPlayer.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, CheckCircle2, Clock, Lightbulb, MessageSquare, MinusCircle, XCircle } from 'lucide-vue-next';
 import { designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
@@ -10,7 +11,7 @@ type ResultQuestion = {
     number: number;
     title: string;
     type: string;
-    media: { type: 'image' | 'video'; url: string }[];
+    media: { type: 'image' | 'video' | 'audio'; url: string; duration?: number | null; caption?: string }[];
     answer: string;
     correctAnswer: string | null;
     isCorrect: boolean | null;
@@ -218,6 +219,13 @@ const correctCount = computed(() => shown.value?.questions.filter((question) => 
                     <RichContent :content="question.title" class="mt-3 text-base text-slate-900" />
                     <div v-if="question.media?.length" class="mt-3 space-y-2">
                         <img v-for="(media, index) in question.media.filter((item) => item.type === 'image')" :key="index" :src="media.url" alt="" class="max-h-64 rounded-xl" />
+                        <AudioPlayer
+                            v-for="(media, index) in question.media.filter((item) => item.type === 'audio' && item.url)"
+                            :key="`audio-${index}`"
+                            :src="media.url"
+                            :duration="media.duration"
+                            :label="media.caption || `audio soal ${question.number}`"
+                        />
                     </div>
 
                     <dl class="mt-3 space-y-2 text-sm">

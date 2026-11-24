@@ -154,6 +154,12 @@ class ExamLayout
 
             if (is_array($order) && count($order) === count($choices) && array_diff(array_keys($choices), $order) === []) {
                 $question['options'] = array_values(array_map(fn (int $index): mixed => $choices[$index], $order));
+
+                // The sound of each choice moves with it.
+                if (is_array($question['optionAudio'] ?? null)) {
+                    $sounds = array_values($question['optionAudio']);
+                    $question['optionAudio'] = array_values(array_map(fn (int $index): mixed => $sounds[$index] ?? null, $order));
+                }
             }
 
             return $question;

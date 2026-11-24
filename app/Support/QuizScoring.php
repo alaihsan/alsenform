@@ -202,13 +202,13 @@ class QuizScoring
     }
 
     /**
-     * Questions only the teacher can grade: essays and files, worth points.
+     * Questions only the teacher can grade: essays, files and spoken answers, worth points.
      *
      * @param  array<string, mixed>  $question
      */
     public function needsGrading(array $question): bool
     {
-        return in_array($question['type'] ?? '', ['Paragraph', 'File upload'], true) && $this->points($question) > 0;
+        return in_array($question['type'] ?? '', ['Paragraph', ...FileAnswers::TYPES], true) && $this->points($question) > 0;
     }
 
     /**
