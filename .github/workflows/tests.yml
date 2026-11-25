@@ -10,50 +10,83 @@ on:
       - develop
       - main
 
+# A newer push to the same branch replaces the run still going: less load on a runner that is also a server.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: alsenform
-          POSTGRES_PASSWORD: secret
-          POSTGRES_DB: alsenform_testing
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U alsenform"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      DB_CONNECTION: pgsql
-      DB_HOST: 127.0.0.1
-      DB_PORT: 5432
-      DB_DATABASE: alsenform_testing
-      DB_USERNAME: alsenform
-      DB_PASSWORD: secret
+    # Repository variable CI_RUNNER picks the runner: the label of the runner on the school server
+    # (see "Menjalankan CI di komputer sendiri" in README.md). Not set: GitHub's own runners.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    # Pull requests from forks do not run here by accident. This is not a security boundary (a pull
+    # request can change this file): turn on "Require approval for all outside collaborators" in
+    # Settings → Actions → General, which is.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # GitHub's runners get their tools installed here. A runner of our own has PHP 8.4 (with
+      # pdo_pgsql), Composer, Node 22 and PostgreSQL already: setup-php would change the PHP of Herd.
       - name: Setup PHP
+        if: runner.environment == 'github-hosted'
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.4
           tools: composer:v2
           extensions: pdo_pgsql, pgsql
-          coverage: xdebug
+          coverage: none
 
       - name: Setup Node
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
+
+      # A database of its own for this run, in the PostgreSQL of the runner, removed at the end.
+      # Own runner: the variable CI_DB_USERNAME and the secret CI_DB_PASSWORD (a role that may only
+      # create databases, see the README) and, when psql is not in the PATH, the variable CI_PSQL
+      # (full path).
+      - name: Prepare PostgreSQL
+        shell: bash
+        env:
+          CI_DB_USERNAME: ${{ vars.CI_DB_USERNAME }}
+          CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          CI_PSQL: ${{ vars.CI_PSQL }}
+        run: |
+          set -euo pipefail
+
+          if [ "$RUNNER_ENVIRONMENT" = "github-hosted" ]; then
+            sudo systemctl start postgresql.service
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'secret'"
+            user=postgres
+            password=secret
+          else
+            user="${CI_DB_USERNAME:-ci}"
+            password="${CI_DB_PASSWORD:-}"
+          fi
+
+          psql="${CI_PSQL:-psql}"
+          database="alsenform_ci_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+
+          PGPASSWORD="$password" "$psql" -h 127.0.0.1 -U "$user" -d postgres -v ON_ERROR_STOP=1 \
+            -c "DROP DATABASE IF EXISTS \"$database\"" \
+            -c "CREATE DATABASE \"$database\""
+
+          {
+            echo "DB_CONNECTION=pgsql"
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=5432"
+            echo "DB_DATABASE=$database"
+            echo "DB_USERNAME=$user"
+            echo "DB_PASSWORD=$password"
+            echo "CI_PSQL_PATH=$psql"
+          } >> "$GITHUB_ENV"
 
       - name: Install Node Dependencies
         run: npm ci
@@ -75,3 +108,10 @@ jobs:
 
       - name: Tests
         run: ./vendor/bin/pest
+
+      - name: Remove the database of this run
+        if: always()
+        shell: bash
+        run: |
+          PGPASSWORD="${DB_PASSWORD:-}" "${CI_PSQL_PATH:-psql}" -h 127.0.0.1 -U "${DB_USERNAME:-postgres}" -d postgres \
+            -c "DROP DATABASE IF EXISTS \"${DB_DATABASE:-alsenform_ci_none}\"" || true
