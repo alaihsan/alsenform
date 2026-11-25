@@ -50,6 +50,25 @@ class DisplayTime
     }
 
     /**
+     * How long something took, in Indonesian: "45 detik", "17 menit 37 detik", "1 jam 5 menit".
+     */
+    public static function duration(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+        $rest = $seconds % 60;
+
+        $parts = match (true) {
+            $hours > 0 => ["{$hours} jam", $minutes > 0 ? "{$minutes} menit" : null],
+            $minutes > 0 => ["{$minutes} menit", $rest > 0 ? "{$rest} detik" : null],
+            default => ["{$rest} detik"],
+        };
+
+        return implode(' ', array_filter($parts));
+    }
+
+    /**
      * How long ago, in Indonesian ("5 menit yang lalu").
      */
     public static function ago(?CarbonInterface $time): ?string

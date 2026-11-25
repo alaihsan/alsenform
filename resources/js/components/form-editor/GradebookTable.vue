@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import AnswerHistoryModal from '@/components/form-editor/AnswerHistoryModal.vue';
+import { isPageSize, PAGE_SIZES, pageCount, pageNumbers, type PageSize } from '@/lib/pagination';
 import type { QuizFormPayload } from '@/types/quiz';
-import { ArrowDown, ArrowUp, ChevronsUpDown, History, ListFilter, ShieldAlert, X } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, History, ListFilter, ShieldAlert, X } from 'lucide-vue-next';
+import { computed, nextTick, ref, watch } from 'vue';
 
 type GradebookRow = NonNullable<NonNullable<QuizFormPayload['responses']>['gradebook']>[number];
 type SortKey = 'nis' | 'firstName' | 'lastName' | 'kelas' | 'score' | 'percentage' | 'status' | 'submittedAt';
@@ -112,6 +113,71 @@ const visibleRows = computed(() => {
         .sort((a, b) => direction * compareRows(a, b) || collator.compare(a.name, b.name) || a.id - b.id);
 });
 
+/*
+ * Pages of 10 rows by default; 50, 100 or every row on one page. The choice is remembered on this
+ * device. A new search, letter, order or page size starts again at the first page.
+ */
+const PAGE_SIZE_KEY = 'alsen_gradebook_page_size';
+const storedPageSize = (): PageSize => {
+    try {
+        const saved = Number(localStorage.getItem(PAGE_SIZE_KEY));
+        return isPageSize(saved) && localStorage.getItem(PAGE_SIZE_KEY) !== null ? saved : PAGE_SIZES[0];
+    } catch {
+        return PAGE_SIZES[0];
+    }
+};
+const pageSize = ref<PageSize>(storedPageSize());
+const page = ref(1);
+const tableTop = ref<HTMLElement | null>(null);
+
+const lastPage = computed(() => pageCount(visibleRows.value.length, pageSize.value));
+const pageStart = computed(() => (pageSize.value === 0 ? 0 : (page.value - 1) * pageSize.value));
+const pagedRows = computed(() =>
+    pageSize.value === 0 ? visibleRows.value : visibleRows.value.slice(pageStart.value, pageStart.value + pageSize.value),
+);
+const pageButtons = computed(() => pageNumbers(page.value, lastPage.value));
+/** The pager shows once there are more rows than the smallest page. */
+const hasPager = computed(() => visibleRows.value.length > PAGE_SIZES[0]);
+
+const rangeLabel = computed(() => {
+    const total = visibleRows.value.length;
+    const from = total === 0 ? 0 : pageStart.value + 1;
+    const to = pageStart.value + pagedRows.value.length;
+    if (from <= 1 && to === total) {
+        return `Menampilkan ${total} dari ${props.rows.length} jawaban`;
+    }
+    return total === props.rows.length
+        ? `Menampilkan ${from}–${to} dari ${total} jawaban`
+        : `Menampilkan ${from}–${to} dari ${total} hasil saringan (${props.rows.length} jawaban)`;
+});
+
+watch([search, firstInitial, lastInitial, sortKey, sortDirection, pageSize], () => {
+    page.value = 1;
+});
+// Fewer rows than before: stay on a page that exists.
+watch(lastPage, (last) => {
+    if (page.value > last) {
+        page.value = last;
+    }
+});
+watch(pageSize, (size) => {
+    try {
+        localStorage.setItem(PAGE_SIZE_KEY, String(size));
+    } catch {
+        // Storage blocked: the choice lasts until the page is left.
+    }
+});
+
+/** Another page; from the pager at the bottom, back up to the first row of the table. */
+const goToPage = (target: number) => {
+    page.value = Math.min(Math.max(1, target), lastPage.value);
+    void nextTick(() => {
+        if (tableTop.value && tableTop.value.getBoundingClientRect().top < 0) {
+            tableTop.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+};
+
 /** First click sorts ascending (A–Z, lowest first), the next one descending. */
 const sortBy = (key: SortKey) => {
     if (sortKey.value === key) {
@@ -189,7 +255,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
 </script>
 
 <template>
-    <div class="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div ref="tableTop" class="mt-6 scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white" data-testid="gradebook">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-3.5">
             <div>
                 <h3 class="text-base font-bold text-slate-900">Rekapitulasi Nilai Siswa</h3>
@@ -270,7 +336,7 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
             v-if="isFiltered || rows.length"
             class="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-2 text-[11px] font-semibold text-slate-500"
         >
-            <span>Menampilkan {{ visibleRows.length }} dari {{ rows.length }} jawaban</span>
+            <span data-testid="gradebook-range">{{ rangeLabel }}</span>
             <button
                 v-if="firstInitial"
                 type="button"
@@ -302,8 +368,8 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
 
         <!-- Phones: one card per student instead of a wide table -->
         <ul class="divide-y divide-slate-100 sm:hidden">
-            <li v-for="(row, index) in visibleRows" :key="`grade-card-${row.id}`" class="flex items-center gap-3 px-4 py-3">
-                <span class="w-5 shrink-0 text-xs font-semibold text-slate-400">{{ index + 1 }}</span>
+            <li v-for="(row, index) in pagedRows" :key="`grade-card-${row.id}`" class="flex items-center gap-3 px-4 py-3">
+                <span class="w-6 shrink-0 text-xs font-semibold text-slate-400">{{ pageStart + index + 1 }}</span>
                 <div class="min-w-0 flex-1">
                     <p class="flex min-w-0 items-center gap-1.5">
                         <span class="truncate text-sm font-bold text-slate-900">{{ row.name }}</span>
@@ -421,8 +487,8 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="(row, index) in visibleRows" :key="row.id" class="transition-colors hover:bg-slate-50/80">
-                        <td class="px-4 py-3 font-semibold text-slate-400">{{ index + 1 }}</td>
+                    <tr v-for="(row, index) in pagedRows" :key="row.id" class="transition-colors hover:bg-slate-50/80">
+                        <td class="px-4 py-3 font-semibold text-slate-400">{{ pageStart + index + 1 }}</td>
                         <td class="px-4 py-3 font-mono font-medium text-slate-700">{{ row.nis }}</td>
                         <td class="px-4 py-3 font-bold text-slate-900">
                             {{ row.name }}
@@ -499,6 +565,64 @@ const COLUMNS_AFTER_NAME: SortKey[] = ['kelas', 'score', 'percentage', 'status',
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- Pages: 10 rows by default, or 50, 100, every row -->
+        <div
+            v-if="hasPager"
+            class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-xs text-slate-600 sm:px-5"
+            data-testid="gradebook-pager"
+        >
+            <label class="flex items-center gap-2 font-semibold">
+                Baris per halaman
+                <select
+                    v-model.number="pageSize"
+                    class="rounded-lg border border-slate-200 bg-white py-1 pl-2 pr-7 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none"
+                    data-testid="gradebook-page-size"
+                >
+                    <option v-for="size in PAGE_SIZES" :key="size" :value="size">{{ size === 0 ? 'Semua' : size }}</option>
+                </select>
+            </label>
+
+            <nav v-if="lastPage > 1" class="flex items-center gap-1" aria-label="Halaman rekap nilai">
+                <button
+                    type="button"
+                    :disabled="page === 1"
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-default disabled:border-slate-100 disabled:bg-transparent disabled:text-slate-300"
+                    aria-label="Halaman sebelumnya"
+                    @click="goToPage(page - 1)"
+                >
+                    <ChevronLeft class="h-3.5 w-3.5" />
+                    <span class="hidden sm:inline">Sebelumnya</span>
+                </button>
+                <template v-for="(number, index) in pageButtons" :key="number ?? `gap-${index}`">
+                    <span v-if="number === null" class="hidden px-1 text-slate-400 sm:inline">…</span>
+                    <button
+                        v-else
+                        type="button"
+                        :class="[
+                            'hidden h-8 min-w-[2rem] rounded-lg px-2 font-bold tabular-nums transition sm:inline-block',
+                            number === page ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                        ]"
+                        :aria-current="number === page ? 'page' : undefined"
+                        :aria-label="`Halaman ${number}`"
+                        @click="goToPage(number)"
+                    >
+                        {{ number }}
+                    </button>
+                </template>
+                <span class="px-2 font-semibold tabular-nums sm:hidden">{{ page }} / {{ lastPage }}</span>
+                <button
+                    type="button"
+                    :disabled="page === lastPage"
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-default disabled:border-slate-100 disabled:bg-transparent disabled:text-slate-300"
+                    aria-label="Halaman berikutnya"
+                    @click="goToPage(page + 1)"
+                >
+                    <span class="hidden sm:inline">Berikutnya</span>
+                    <ChevronRight class="h-3.5 w-3.5" />
+                </button>
+            </nav>
         </div>
 
         <AnswerHistoryModal v-if="historyRow?.historyUrl" :url="historyRow.historyUrl" :name="historyRow.name" @close="historyRow = null" />

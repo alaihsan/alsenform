@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class QuizSession extends Model
 {
@@ -33,6 +36,7 @@ class QuizSession extends Model
         'locked_at',
         'unlocked_at',
         'submitted_at',
+        'preview_closed_at',
         'draft_answers',
         'draft_scores',
         'doubtful_question_ids',
@@ -55,6 +59,7 @@ class QuizSession extends Model
             'locked_at' => 'datetime',
             'unlocked_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'preview_closed_at' => 'datetime',
             'is_locked' => 'boolean',
             'blur_count' => 'integer',
             'blur_logs' => 'array',
@@ -256,6 +261,73 @@ class QuizSession extends Model
             fn (int|string $questionId): bool => in_array((string) $questionId, $questionIds, true),
             ARRAY_FILTER_USE_KEY,
         );
+    }
+
+    /**
+     * A preview left open this long without a sign of the page (the tab was closed instead of
+     * "Tutup pratinjau") is over: opening the preview again starts a new one.
+     */
+    public const PREVIEW_IDLE_HOURS = 6;
+
+    /**
+     * Tutup pratinjau: the teacher's preview of the exam is over. It ends as an attempt too, so
+     * nothing hands it in later and the next preview starts afresh. Only the first close counts:
+     * false when it was already closed (a double click, a retry).
+     */
+    public function closePreview(?CarbonInterface $at = null): bool
+    {
+        $closedAt = $at ?? now();
+        $ended = ['submitted_at' => $this->submitted_at ?? $closedAt, 'is_locked' => false, 'left_at' => null];
+
+        try {
+            // The transaction (a savepoint when nested) keeps the connection usable if the update is rejected.
+            $closed = DB::transaction(fn (): int => self::query()
+                ->whereKey($this->getKey())
+                ->whereNull('preview_closed_at')
+                ->update(['preview_closed_at' => $closedAt] + $ended)) === 1;
+        } catch (QueryException $exception) {
+            if (! str_contains($exception->getMessage(), 'preview_closed_at')) {
+                throw $exception;
+            }
+
+            // The database was not migrated after an update: the preview still ends, without its time.
+            self::query()->whereKey($this->getKey())->whereNull('submitted_at')->update($ended);
+            $closed = false;
+        }
+
+        $this->refresh();
+
+        return $closed;
+    }
+
+    /**
+     * When the page of this attempt was last in touch with the server.
+     */
+    public function lastActiveAt(): CarbonInterface
+    {
+        $times = array_filter([$this->created_at, $this->updated_at, $this->last_seen_at, $this->draft_saved_at]);
+
+        return collect($times)->max();
+    }
+
+    /**
+     * A preview the teacher left without closing it, long enough ago that it is over.
+     */
+    public function isLeftBehindPreview(): bool
+    {
+        return $this->submitted_at === null
+            && $this->preview_closed_at === null
+            && $this->lastActiveAt()->lt(now()->subHours(self::PREVIEW_IDLE_HOURS));
+    }
+
+    /**
+     * Seconds between opening the preview and closing it.
+     */
+    public function previewSeconds(): ?int
+    {
+        return $this->preview_closed_at === null || $this->created_at === null
+            ? null
+            : max(0, (int) $this->created_at->diffInSeconds($this->preview_closed_at));
     }
 
     public function quizForm(): BelongsTo

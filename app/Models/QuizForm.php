@@ -217,6 +217,16 @@ class QuizForm extends Model
     }
 
     /**
+     * The exam page opened by one of the people who edit the exam is a preview (Pratinjau): it can
+     * be closed with "Tutup pratinjau" and is not held to the limit of attempts. Not in Mode
+     * pewawancara, where the interviewer fills the form in for real candidates.
+     */
+    public function isPreviewedBy(?User $user): bool
+    {
+        return ! $this->isInterview() && $this->canBeEditedBy($user);
+    }
+
+    /**
      * Fingerprint of the content the editor saves. The editor sends back the version it started
      * from, so a save made from an outdated copy (another tab or device) cannot overwrite newer
      * questions. Compare versions of models loaded from the database only.
@@ -378,10 +388,15 @@ class QuizForm extends Model
     }
 
     /**
-     * The student may not start another attempt: the limit set by the teacher is reached.
+     * The student may not start another attempt: the limit set by the teacher is reached. The
+     * people who edit the exam preview it as often as they like.
      */
     public function hasNoAttemptsLeftFor(?User $user, ?string $respondentIdentifier): bool
     {
+        if ($this->isPreviewedBy($user)) {
+            return false;
+        }
+
         $maxAttempts = $this->maxAttempts();
 
         return $maxAttempts !== null && $this->attemptsUsedBy($user, $respondentIdentifier) >= $maxAttempts;

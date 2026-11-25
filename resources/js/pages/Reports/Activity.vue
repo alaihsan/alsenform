@@ -9,6 +9,7 @@ import {
     CircleHelp,
     CirclePlay,
     Download,
+    EyeOff,
     LogIn,
     LogOut,
     Monitor,
@@ -18,6 +19,7 @@ import {
     ServerCrash,
     Smartphone,
     Tablet,
+    TimerReset,
     TriangleAlert,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -25,7 +27,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 
 interface Activity {
     id: number;
-    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted' | 'page_failed' | 'server_error';
+    event: 'login' | 'logout' | 'exam_started' | 'exam_submitted' | 'page_failed' | 'server_error' | 'exam_time_extended' | 'preview_closed';
     eventLabel: string;
     date: string;
     time: string;
@@ -159,7 +161,16 @@ const eventStyles: Record<Activity['event'], { icon: Component; badge: string }>
     exam_submitted: { icon: SendHorizontal, badge: 'bg-amber-50 text-amber-700 ring-amber-200' },
     page_failed: { icon: TriangleAlert, badge: 'bg-rose-50 text-rose-700 ring-rose-200' },
     server_error: { icon: ServerCrash, badge: 'bg-rose-100 text-rose-800 ring-rose-300' },
+    exam_time_extended: { icon: TimerReset, badge: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    preview_closed: { icon: EyeOff, badge: 'bg-violet-50 text-violet-700 ring-violet-200' },
 };
+
+/** Notes warn (sent by the server, time ran out, an error), except those that only tell what was done. */
+const noteClass = (activity: Activity): string =>
+    activity.event === 'exam_time_extended' || activity.event === 'preview_closed' ? 'bg-slate-100 text-slate-600' : 'bg-rose-50 text-rose-600';
+
+/** The look of an event; one this page does not know yet still shows, with its label. */
+const eventStyle = (event: string) => eventStyles[event as Activity['event']] ?? { icon: CircleHelp, badge: 'bg-slate-100 text-slate-600 ring-slate-200' };
 
 const deviceIcons: Record<Activity['deviceType'], Component> = {
     mobile: Smartphone,
@@ -358,10 +369,10 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                 <span
                                     :class="[
                                         'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset',
-                                        eventStyles[activity.event].badge,
+                                        eventStyle(activity.event).badge,
                                     ]"
                                 >
-                                    <component :is="eventStyles[activity.event].icon" class="h-3.5 w-3.5" />
+                                    <component :is="eventStyle(activity.event).icon" class="h-3.5 w-3.5" />
                                     {{ activity.eventLabel }}
                                 </span>
                                 <span class="text-right">
@@ -383,7 +394,7 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                     }}</Link>
                                     <span v-else class="font-semibold">{{ activity.form.title }}</span>
                                 </template>
-                                <span v-if="activity.note" class="ml-1 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">{{
+                                <span v-if="activity.note" :class="['ml-1 rounded px-1.5 py-0.5 text-[10px] font-bold', noteClass(activity)]">{{
                                     activity.note
                                 }}</span>
                             </p>
@@ -427,10 +438,10 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                         <span
                                             :class="[
                                                 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset',
-                                                eventStyles[activity.event].badge,
+                                                eventStyle(activity.event).badge,
                                             ]"
                                         >
-                                            <component :is="eventStyles[activity.event].icon" class="h-3.5 w-3.5" />
+                                            <component :is="eventStyle(activity.event).icon" class="h-3.5 w-3.5" />
                                             {{ activity.eventLabel }}
                                         </span>
                                         <span v-if="activity.form" class="mt-1 block truncate text-xs text-slate-600">
@@ -444,7 +455,7 @@ const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wider te
                                         </span>
                                         <span
                                             v-if="activity.note"
-                                            class="mt-1 inline-block rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600"
+                                            :class="['mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold', noteClass(activity)]"
                                             >{{ activity.note }}</span
                                         >
                                         <span v-if="activity.detail" class="mt-1 block break-words font-mono text-[11px] text-slate-500">{{

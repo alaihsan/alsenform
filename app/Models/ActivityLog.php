@@ -37,6 +37,9 @@ class ActivityLog extends Model
     /** A teacher gave the students working on an exam extra minutes, with the minutes and attempts in the meta. */
     public const EXAM_TIME_EXTENDED = 'exam_time_extended';
 
+    /** A teacher closed their preview of an exam, with when it was opened and closed and its seconds in the meta. */
+    public const PREVIEW_CLOSED = 'preview_closed';
+
     /**
      * Labels of the events, in the order the report lists them.
      *
@@ -50,6 +53,7 @@ class ActivityLog extends Model
         self::PAGE_FAILED => 'Halaman gagal dimuat',
         self::SERVER_ERROR => 'Galat server',
         self::EXAM_TIME_EXTENDED => 'Tambah waktu ujian',
+        self::PREVIEW_CLOSED => 'Tutup pratinjau',
     ];
 
     /**

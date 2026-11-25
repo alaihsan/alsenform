@@ -12,6 +12,7 @@ use App\Models\UnlockRequest;
 use App\Models\User;
 use App\Support\ActivityRecorder;
 use App\Support\Addon;
+use App\Support\DisplayTime;
 use App\Support\ExamLayout;
 use App\Support\ExamToken;
 use App\Support\FileAnswers;
@@ -40,6 +41,9 @@ class QuizResponseController extends Controller
         abort_unless($quizForm->published_at || auth()->user()?->is($quizForm->user), 404);
 
         $user = auth()->user();
+
+        // Pratinjau: one of the people who edit the exam looks at it as a student sees it.
+        $isPreview = $quizForm->isPreviewedBy($user);
 
         // If quiz is restricted to cohorts, or to the students chosen for it (remedial / enrichment)
         if ($quizForm->isRestricted()) {
@@ -76,7 +80,7 @@ class QuizResponseController extends Controller
         $attemptsUsed = $quizForm->attemptsUsedBy($user, $respondentIdentifier);
         $maxAttempts = $quizForm->maxAttempts();
 
-        if ($maxAttempts !== null && $attemptsUsed >= $maxAttempts) {
+        if (! $isPreview && $maxAttempts !== null && $attemptsUsed >= $maxAttempts) {
             return Inertia::render('PublicQuiz', [
                 'quizForm' => [
                     'id' => $quizForm->id,
@@ -101,6 +105,12 @@ class QuizResponseController extends Controller
         // timer only starts once the student confirms the rules (see start()). After an attempt
         // was handed in (more than one allowed), the next one is a new attempt with its own timer.
         $quizSession = $this->findExamSession($quizForm, $user, $respondentIdentifier);
+
+        // A preview left open long ago (its tab closed instead of "Tutup pratinjau") is over: a
+        // new preview starts, so its time and duration are this one's.
+        if ($isPreview && $quizSession?->isLeftBehindPreview()) {
+            $quizSession->closePreview($quizSession->lastActiveAt());
+        }
 
         // Jadwal ujian: before it opens and after it closes no attempt starts. A student already
         // working goes on (their time runs out at the closing time); the exam's teachers try it any time.
@@ -216,8 +226,15 @@ class QuizResponseController extends Controller
             ],
             'attempts' => [
                 'used' => $attemptsUsed,
-                'max' => $maxAttempts,
+                'max' => $isPreview ? null : $maxAttempts,
             ],
+            // Pratinjau: when it was opened, and where "Tutup pratinjau" ends it.
+            'preview' => $isPreview ? [
+                'openedAt' => $quizSession->created_at->toISOString(),
+                'openedAtLabel' => DisplayTime::format($quizSession->created_at, 'H:i'),
+                'closeUrl' => route('forms.preview.close', ['quizForm' => $quizForm->slug]),
+                'editUrl' => route('forms.edit', ['quizForm' => $quizForm->slug]),
+            ] : null,
             'accessRestricted' => false,
         ]);
     }

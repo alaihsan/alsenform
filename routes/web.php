@@ -9,6 +9,7 @@ use App\Http\Controllers\ConnectionCheckController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeveloperSupportController;
 use App\Http\Controllers\DocxExportController;
+use App\Http\Controllers\ExamPreviewController;
 use App\Http\Controllers\ExamProgressController;
 use App\Http\Controllers\ExamTokenController;
 use App\Http\Controllers\ExtendExamTimeController;
@@ -198,6 +199,12 @@ Route::post('forms/{quizForm:slug}/start', [QuizResponseController::class, 'star
 Route::post('forms/{quizForm:slug}/draft', [QuizResponseController::class, 'saveDraft'])->middleware('throttle:quiz-activity')->name('forms.responses.draft');
 Route::post('forms/{quizForm:slug}/answer-files', [AnswerFileController::class, 'store'])->middleware('throttle:quiz-activity')->name('forms.answer-files.store');
 Route::get('forms/{quizForm:slug}/hasil', [QuizResultController::class, 'show'])->name('forms.results');
+
+// Pratinjau: the people who edit the exam close their preview of it and see how long it took.
+Route::middleware('auth')->group(function () {
+    Route::post('forms/{quizForm:slug}/pratinjau/tutup', [ExamPreviewController::class, 'close'])->middleware('throttle:quiz-activity')->name('forms.preview.close');
+    Route::get('forms/{quizForm:slug}/pratinjau/{quizSession}', [ExamPreviewController::class, 'show'])->name('forms.preview.show');
+});
 Route::post('forms/{quizForm:slug}/lock', [QuizResponseController::class, 'lockSession'])->middleware('throttle:quiz-activity')->name('forms.responses.lock');
 Route::get('forms/{quizForm:slug}/status', [QuizResponseController::class, 'examStatus'])->middleware('throttle:quiz-activity')->name('forms.responses.status');
 Route::post('forms/{quizForm:slug}/unlock-requests', [UnlockRequestController::class, 'store'])->middleware('throttle:quiz-unlock')->name('forms.public.unlock-requests.store');

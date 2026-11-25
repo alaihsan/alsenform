@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Check,
     Star,
     Lock,
     Clock,
+    Eye,
+    LoaderCircle,
     RefreshCw,
     ShieldAlert,
     ArrowLeft,
@@ -50,6 +52,7 @@ import InterviewScoreInput from '@/components/InterviewScoreInput.vue';
 import AudioPlayer from '@/components/audio/AudioPlayer.vue';
 import AudioRecorder from '@/components/audio/AudioRecorder.vue';
 import { durationLabel, formatAudioTime, type AudioClip } from '@/lib/audio';
+import { formatCountdown } from '@/lib/countdown';
 
 type Question = {
     id: number;
@@ -172,6 +175,14 @@ const props = defineProps<{
     /** Jadwal ujian: the exam opens at this time (the page reloads then). */
     opensAt?: string | null;
     serverTime?: string;
+    /** Pratinjau: the exam opened by one of the people who edit it; "Tutup pratinjau" ends it. */
+    preview?: {
+        openedAt: string;
+        /** The opening time as the school reads it ("08:15"). */
+        openedAtLabel: string;
+        closeUrl: string;
+        editUrl: string;
+    } | null;
 }>();
 
 // The exam keeps the look its teacher designed, whatever look the student's device prefers.
@@ -594,6 +605,68 @@ const clearDraft = () => {
         // ignore
     }
 };
+
+/*
+ * Pratinjau: the teacher looks at the exam as a student sees it. "Tutup pratinjau" ends it on the
+ * server (nothing is handed in, the next preview starts afresh) and shows when it was opened and
+ * closed and how long it took.
+ */
+const previewOpenedAt = props.preview ? new Date(props.preview.openedAt).getTime() : 0;
+const previewSeconds = ref(0);
+const isClosingPreview = ref(false);
+const previewCloseError = ref('');
+let previewClockTimer: ReturnType<typeof setInterval> | null = null;
+
+const updatePreviewSeconds = () => {
+    previewSeconds.value = Math.max(0, Math.floor((serverNow() - previewOpenedAt) / 1000));
+};
+
+/** "4:05", or "1:02:09" after an hour. */
+const previewClock = computed(() => {
+    const hours = Math.floor(previewSeconds.value / 3600);
+    const minutes = Math.floor((previewSeconds.value % 3600) / 60);
+    const seconds = String(previewSeconds.value % 60).padStart(2, '0');
+
+    return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+});
+
+const closePreview = async () => {
+    if (!props.preview || isClosingPreview.value) {
+        return;
+    }
+    isClosingPreview.value = true;
+    previewCloseError.value = '';
+
+    try {
+        const response = await axios.post(
+            props.preview.closeUrl,
+            { session_token: props.session?.token ?? '' },
+            { timeout: REQUEST_TIMEOUT_MS, headers: { Accept: 'application/json' } },
+        );
+        // The answers of a preview are not kept: the next preview starts empty.
+        clearDraft();
+        // Replaced, so going back does not return to the closed preview.
+        router.visit(response.data.url, { replace: true });
+    } catch (error: any) {
+        isClosingPreview.value = false;
+        previewCloseError.value = isNetworkFailure(error)
+            ? 'Server tidak terjangkau. Periksa koneksi, lalu tekan Tutup pratinjau lagi.'
+            : (error.response?.data?.message || 'Pratinjau gagal ditutup. Coba lagi.');
+    }
+};
+
+onMounted(() => {
+    if (props.preview) {
+        updatePreviewSeconds();
+        previewClockTimer = setInterval(updatePreviewSeconds, 1000);
+    }
+});
+
+onUnmounted(() => {
+    if (previewClockTimer) {
+        clearInterval(previewClockTimer);
+    }
+});
 
 watch(
     answers,
@@ -1101,16 +1174,6 @@ const hasExamStarted = computed<boolean>(() => !props.session?.token || examStar
 
 const isStartModalOpen = computed<boolean>(() => !props.accessRestricted && !isSubmitted.value && !hasExamStarted.value);
 
-const formatCountdown = (remaining: number): string => {
-    const totalSeconds = Math.floor(remaining / 1000);
-    const hrs = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    const pad = (value: number) => value.toString().padStart(2, '0');
-
-    return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
-};
-
 const startCountdown = () => {
     let endTime: number | null = null;
     let clockOffset = 0;
@@ -1141,7 +1204,7 @@ const startCountdown = () => {
 
         if (remaining <= 0) {
             timeRemaining.value = 0;
-            formattedTime.value = '00:00';
+            formattedTime.value = formatCountdown(0);
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
@@ -2561,7 +2624,47 @@ const submitAnotherResponse = () => {
                 :class="{ 'text-red-400': timeRemaining < 60000 }"
                 >Sisa Waktu</span
             >
-            <span class="font-mono text-base font-black leading-none sm:block sm:text-lg">{{ formattedTime }}</span>
+            <span class="whitespace-nowrap text-base font-black leading-none tabular-nums sm:block sm:text-lg" data-testid="countdown">{{ formattedTime }}</span>
+        </div>
+    </div>
+
+    <!-- Pratinjau: the teacher's preview, closed from here at any time (also over the rules and the lock screen).
+         On phones above the Nomor Soal button, on large screens on the side away from the number panel. -->
+    <div
+        v-if="preview && !accessRestricted && !(isQuestionDrawerOpen && !isDesktopViewport)"
+        :class="[
+            'fixed z-[105] flex max-w-[calc(100vw-2rem)] flex-col gap-1.5',
+            isQuestionNavAvailable ? 'bottom-20 lg:bottom-4' : 'bottom-4',
+            isQuestionNavAvailable && questionNavSide === 'left' ? 'right-4 items-end' : 'left-4 items-start',
+        ]"
+        data-testid="preview-bar"
+    >
+        <p
+            v-if="previewCloseError"
+            class="max-w-xs rounded-2xl border border-rose-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-700 shadow-lg"
+            role="alert"
+        >
+            {{ previewCloseError }}
+        </p>
+        <div class="flex items-center gap-2.5 rounded-full border border-indigo-200 bg-white/95 py-1.5 pl-3.5 pr-1.5 shadow-lg backdrop-blur">
+            <Eye class="h-4 w-4 shrink-0 text-indigo-600" />
+            <div class="min-w-0 leading-tight">
+                <p class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">Pratinjau</p>
+                <p class="whitespace-nowrap text-xs font-semibold tabular-nums text-slate-600" :title="`Dibuka pukul ${preview.openedAtLabel}`">
+                    <span class="hidden sm:inline">Dibuka {{ preview.openedAtLabel }} · </span><span data-testid="preview-clock">{{ previewClock }}</span>
+                </p>
+            </div>
+            <button
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 active:scale-95 disabled:cursor-wait disabled:opacity-70"
+                :disabled="isClosingPreview"
+                data-testid="close-preview"
+                @click="closePreview"
+            >
+                <LoaderCircle v-if="isClosingPreview" class="h-3.5 w-3.5 animate-spin" />
+                <X v-else class="h-3.5 w-3.5" />
+                <span>{{ isClosingPreview ? 'Menutup...' : 'Tutup pratinjau' }}</span>
+            </button>
         </div>
     </div>
 
@@ -3864,7 +3967,7 @@ const submitAnotherResponse = () => {
 
             <div v-if="hasCountdownTimer && timeRemaining > 0" class="mt-5 flex items-center justify-center gap-2 text-sm text-slate-300">
                 <Clock class="h-4 w-4 text-indigo-400" />
-                <span>Sisa waktu <span class="font-mono font-bold text-white">{{ formattedTime }}</span></span>
+                <span>Sisa waktu <span class="font-bold tabular-nums text-white">{{ formattedTime }}</span></span>
             </div>
 
             <div class="mt-6 space-y-4 border-t border-slate-800/80 pt-6">

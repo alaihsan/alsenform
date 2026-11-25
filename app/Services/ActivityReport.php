@@ -208,6 +208,7 @@ class ActivityReport
                 $log->event === ActivityLog::PAGE_FAILED => $this->pageFailureNote($log),
                 $log->event === ActivityLog::SERVER_ERROR => trim(($log->meta['reference'] ?? '').': galat server (HTTP '.($log->meta['status'] ?? 500).')', ': '),
                 $log->event === ActivityLog::EXAM_TIME_EXTENDED => '+'.(int) ($log->meta['minutes'] ?? 0).' menit untuk '.(int) ($log->meta['attempts'] ?? 0).' siswa',
+                $log->event === ActivityLog::PREVIEW_CLOSED => $this->previewNote($log),
                 ($log->meta['auto'] ?? false) && ($log->meta['locked'] ?? false) => 'Dikirim otomatis: waktu habis saat terkunci',
                 (bool) ($log->meta['auto'] ?? false) => 'Dikirim otomatis: waktu habis, halaman tertutup',
                 ($log->meta['timeout'] ?? false) && ($log->meta['locked'] ?? false) => 'Waktu habis saat terkunci',
@@ -222,6 +223,20 @@ class ActivityReport
                 default => null,
             },
         ];
+    }
+
+    /**
+     * A closed preview: from when to when, and for how long ("Pratinjau 08:15:03–08:32:40 · 17 menit 37 detik").
+     */
+    protected function previewNote(ActivityLog $log): string
+    {
+        $time = fn (mixed $value): ?string => is_string($value) && $value !== '' ? DisplayTime::format(Carbon::parse($value), 'H:i:s') : null;
+        $span = implode('–', array_filter([$time($log->meta['opened_at'] ?? null), $time($log->meta['closed_at'] ?? null)]));
+
+        return implode(' · ', array_filter([
+            $span !== '' ? 'Pratinjau '.$span : 'Pratinjau',
+            is_numeric($log->meta['seconds'] ?? null) ? DisplayTime::duration((int) $log->meta['seconds']) : null,
+        ]));
     }
 
     /**
