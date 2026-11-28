@@ -263,7 +263,7 @@ class QuizFormPayloads
                 // Handed in by the server: the time ran out while the exam page was closed or offline.
                 'is_auto_submitted' => (bool) $response->is_auto_submitted,
                 'submittedAt' => DisplayTime::ago($response->created_at),
-                'formattedDate' => $response->created_at->format('d/m/Y H:i'),
+                'formattedDate' => DisplayTime::format($response->created_at, 'd/m/Y H:i'),
                 // For sorting by the moment of handing in.
                 'submittedAtTimestamp' => $response->created_at->getTimestamp(),
                 // The receipt the student got, and whether the answers kept are still the ones handed in.

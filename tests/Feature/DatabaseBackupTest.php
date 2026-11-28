@@ -8,6 +8,7 @@ use Illuminate\Console\OutputStyle;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\BufferedOutput;
 
@@ -18,6 +19,9 @@ use Symfony\Component\Console\Output\BufferedOutput;
  */
 
 beforeEach(function () {
+    // files:backup runs with the day's backup: it copies these, never the server's own files.
+    Storage::fake('public');
+    Storage::fake('local');
     $this->directory = storage_path('framework/testing/backups-'.uniqid());
     $this->tools = storage_path('framework/testing/tools-'.uniqid());
     File::ensureDirectoryExists($this->tools);

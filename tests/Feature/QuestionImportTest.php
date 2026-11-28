@@ -1,7 +1,10 @@
 <?php
 
 use App\Models\User;
+use App\Support\DocxWriter;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 test('guests are unauthorized to import questions', function () {
     $this->postJson(route('questions.import'), [
@@ -73,4 +76,31 @@ test('authenticated users can import questions from docx template', function () 
     expect($data['questions'][0]['answer'])->toBe(1); // Jakarta is index 1
 
     @unlink($tempFile);
+});
+
+/*
+ * "Pembahasan:" under a question in the Word file is read by the import, and the editor keeps it
+ * on the question it adds, so it is saved with the exam and shown on the results page.
+ */
+test('the pembahasan of a word question reaches the editor', function () {
+    $this->actingAs(User::factory()->create());
+
+    $file = tempnam(sys_get_temp_dir(), 'docx');
+    (new DocxWriter)
+        ->paragraph('1. Satuan usaha dalam Sistem Internasional adalah ...')
+        ->paragraph('A. newton')
+        ->paragraph('B. joule')
+        ->paragraph('Jawaban: B')
+        ->paragraph('Pembahasan: Usaha diukur dalam joule (1 J = 1 N·m).')
+        ->save($file);
+
+    $this->postJson(route('questions.import'), ['file' => new UploadedFile($file, 'soal.docx', null, null, true)])
+        ->assertOk()
+        ->assertJsonPath('questions.0.explanation', 'Usaha diukur dalam joule (1 J = 1 N·m).');
+
+    $wordImport = Str::betweenFirst(File::get(resource_path('js/pages/FormEditor.vue')), 'const handleImportDocxFile', 'const handleImportExamViewFile');
+
+    expect($wordImport)->toContain('explanation: q.explanation');
+
+    @unlink($file);
 });

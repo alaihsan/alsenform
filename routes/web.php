@@ -15,6 +15,7 @@ use App\Http\Controllers\ExamTokenController;
 use App\Http\Controllers\ExtendExamTimeController;
 use App\Http\Controllers\FollowUpExamController;
 use App\Http\Controllers\GradingController;
+use App\Http\Controllers\OnlineAddressController;
 use App\Http\Controllers\PageFailureController;
 use App\Http\Controllers\QuestionBankController;
 use App\Http\Controllers\QuestionImportController;
@@ -89,6 +90,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     // Forms, Folders & Question Management (Teacher & Admin Only)
     Route::middleware('can:teacher-or-admin')->group(function (): void {
+        // Alamat online: the address of the server on the internet, asked again by the top bar every half minute
+        Route::get('alamat-online', OnlineAddressController::class)->middleware('throttle:60,1')->name('online-address');
+
         Route::post('folders', [QuizFolderController::class, 'store'])->name('folders.store');
         Route::patch('folders/{quizFolder}', [QuizFolderController::class, 'update'])->name('folders.update');
         Route::delete('folders/{quizFolder}', [QuizFolderController::class, 'destroy'])->name('folders.destroy');

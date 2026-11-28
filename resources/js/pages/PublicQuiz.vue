@@ -449,6 +449,22 @@ const applyIdentityErrors = (errors?: Record<string, string[] | string>): boolea
     return Object.keys(mapped).length > 0;
 };
 
+/**
+ * The first identity field with a problem, brought into view in the scrolling confirmation box with
+ * the cursor in it, in the order the fields are shown.
+ */
+const focusIdentityProblem = () => {
+    const field = ['name', 'number', 'school', 'kelas', 'email'].find((key) => identityErrors.value[key]);
+    if (!field) {
+        return;
+    }
+    nextTick(() => {
+        const input = document.getElementById(`start-identity-${field === 'kelas' ? 'class' : field}`);
+        input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        input?.focus({ preventScroll: true });
+    });
+};
+
 const identityPayload = () => ({
     respondent_name: identity.name.trim() || null,
     respondent_class: identity.kelas || null,
@@ -1319,7 +1335,13 @@ const startExam = async () => {
     if (!isTokenTyped) {
         showExamTokenError(normalizedExamToken.value ? `Token terdiri dari ${EXAM_TOKEN_LENGTH} huruf.` : 'Masukkan token dari pengawas.');
     }
-    if (!isIdentityValid || !isTokenTyped) {
+    if (!isIdentityValid) {
+        // Said by the button too: the fields may be out of sight in the scrolling box.
+        startExamError.value = isInterview.value ? 'Tulis data calon yang diwawancarai terlebih dahulu.' : 'Lengkapi identitas peserta terlebih dahulu.';
+        focusIdentityProblem();
+        return;
+    }
+    if (!isTokenTyped) {
         startExamError.value = '';
         return;
     }
@@ -1372,7 +1394,8 @@ const startExam = async () => {
                 break;
             }
             if (status === 422 && applyIdentityErrors(error.response?.data?.errors)) {
-                startExamError.value = 'Periksa kembali identitas Anda.';
+                startExamError.value = isInterview.value ? 'Periksa kembali data calon.' : 'Periksa kembali identitas Anda.';
+                focusIdentityProblem();
                 break;
             }
             if (status && status !== 429 && status < 500) {
@@ -1390,7 +1413,7 @@ const startExam = async () => {
 
     // A wrong token is told at the token field.
     if (!startExamError.value && !examTokenError.value) {
-        startExamError.value = 'Server ujian belum terjangkau. Periksa koneksi Wi-Fi, lalu tekan "Kerjakan Sekarang" lagi.';
+        startExamError.value = `Server ujian belum terjangkau. Periksa koneksi Wi-Fi, lalu tekan "${startButtonLabel.value}" lagi.`;
     }
     isStartingExam.value = false;
 };
@@ -1426,22 +1449,30 @@ const attemptNumber = computed<number>(() => (props.attempts?.used ?? 0) + 1);
 // After handing this attempt in: the attempts still left (null: no limit).
 const attemptsLeftAfterThis = computed<number | null>(() => (maxAttempts.value === null ? null : Math.max(0, maxAttempts.value - attemptNumber.value)));
 
+/** Mode pewawancara: the interviewer starts the interview of a candidate, not an exam of their own. */
+const startButtonLabel = computed<string>(() => (isInterview.value ? 'Mulai Wawancara' : 'Kerjakan Sekarang'));
+
 /** Rules shown before the exam starts, derived from how the teacher configured the quiz. */
 const examRules = computed<string[]>(() => {
     const settings = props.quizForm.settings;
-    const rules = ['Baca setiap soal dengan teliti dan kerjakan secara mandiri.'];
+    const rules = [
+        isInterview.value
+            ? `Tulis data calon di atas, lalu tekan "${startButtonLabel.value}". Satu isian untuk satu calon; setelah dikirim, isian berikutnya untuk calon lain.`
+            : 'Baca setiap soal dengan teliti dan kerjakan secara mandiri.',
+    ];
 
     if (requiresExamToken.value) {
-        rules.push(`Ketik token ${EXAM_TOKEN_LENGTH} huruf yang ditampilkan pengawas di kolom Token, lalu tekan "Kerjakan Sekarang". Token berganti berkala.`);
+        rules.push(`Ketik token ${EXAM_TOKEN_LENGTH} huruf yang ditampilkan pengawas di kolom Token, lalu tekan "${startButtonLabel.value}". Token berganti berkala.`);
     }
 
     rules.push(
         examTimeLimitMinutes.value
-            ? `Waktu ${examDurationLabel.value} mulai berjalan saat Anda menekan "Kerjakan Sekarang" dan tetap berjalan walau halaman ditutup. Jawaban terkirim otomatis ketika waktu habis.`
+            ? `Waktu ${examDurationLabel.value} mulai berjalan saat Anda menekan "${startButtonLabel.value}" dan tetap berjalan walau halaman ditutup. Jawaban terkirim otomatis ketika waktu habis.`
             : 'Tidak ada batas waktu. Setelah selesai, tekan "Kirim Jawaban" agar jawaban tercatat.',
     );
 
-    if (canMarkDoubt.value) {
+    // Marking answers to look at again is for students checking their own work.
+    if (canMarkDoubt.value && !isInterview.value) {
         rules.push(
             'Belum yakin dengan jawaban? Tekan "Ragu-ragu" pada soal itu: nomornya menjadi kuning di panel Nomor Soal agar mudah diperiksa lagi. Tandai dengan jujur, karena guru memakainya untuk melihat bagian yang belum dipahami.',
         );
@@ -3638,10 +3669,13 @@ const submitAnotherResponse = () => {
             <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="exam-start-body">
                 <img v-if="design?.headerImage" :src="design.headerImage" alt="" class="af-header-image af-header-image-inset" />
                 <div :class="['h-3', themeClass]"></div>
-                <div class="p-6 sm:p-8">
-                    <span class="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+                <!-- A column, so the candidate's data comes first in Mode pewawancara and after the rules otherwise. -->
+                <div class="flex flex-col p-6 sm:p-8">
+                    <span
+                        class="inline-flex items-center gap-1.5 self-start rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700"
+                    >
                         <ScrollText class="h-3.5 w-3.5" />
-                        Konfirmasi Ujian
+                        {{ isInterview ? 'Konfirmasi Wawancara' : 'Konfirmasi Ujian' }}
                     </span>
                     <div v-if="design?.logo" class="mt-4 flex" :style="{ justifyContent: logoJustify(design) }">
                         <img :src="design.logo" alt="Logo" class="af-logo" />
@@ -3657,38 +3691,12 @@ const submitAnotherResponse = () => {
                         <RichContent :content="quizForm.description" as="p" lists class="text-sm text-slate-500" />
                     </CollapsibleContent>
 
-                    <div class="mt-5 grid grid-cols-2 gap-3">
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                <ListChecks class="h-4 w-4 text-indigo-600" />
-                                Jumlah Soal
-                            </div>
-                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examQuestionCount }} <span class="text-sm font-bold text-slate-500">soal</span></p>
-                            <p v-if="examRequiredCount > 0" class="mt-0.5 text-xs text-slate-500">{{ examRequiredCount }} soal wajib dijawab</p>
-                        </div>
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                <Clock class="h-4 w-4 text-indigo-600" />
-                                Durasi
-                            </div>
-                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examDurationLabel }}</p>
-                            <p v-if="examTimeLimitMinutes" class="mt-0.5 text-xs text-slate-500">Dihitung sejak tombol mulai ditekan</p>
-                        </div>
-                    </div>
-
-                    <div class="mt-6">
-                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">Aturan Mengerjakan</h2>
-                        <ol class="mt-3 space-y-2.5">
-                            <li v-for="(rule, index) in examRules" :key="index" class="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
-                                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-black text-indigo-700">
-                                    {{ index + 1 }}
-                                </span>
-                                <span>{{ rule }}</span>
-                            </li>
-                        </ol>
-                    </div>
-
-                    <div v-if="identityEditable" class="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
+                    <!-- Mode pewawancara: the candidate is named first, in sight when the box opens. -->
+                    <div
+                        v-if="identityEditable"
+                        :class="['rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5', isInterview ? 'mt-5' : 'order-1 mt-6']"
+                        data-testid="exam-start-identity"
+                    >
                         <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-700">
                             <UserRound class="h-4 w-4" />
                             {{ isInterview ? 'Data Calon yang Diwawancarai' : 'Identitas Peserta' }}
@@ -3715,7 +3723,38 @@ const submitAnotherResponse = () => {
                         />
                     </div>
 
-                    <div v-if="requiresExamToken" class="mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
+                    <div class="mt-5 grid grid-cols-2 gap-3">
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <ListChecks class="h-4 w-4 text-indigo-600" />
+                                Jumlah Soal
+                            </div>
+                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examQuestionCount }} <span class="text-sm font-bold text-slate-500">soal</span></p>
+                            <p v-if="examRequiredCount > 0" class="mt-0.5 text-xs text-slate-500">{{ examRequiredCount }} soal wajib dijawab</p>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <Clock class="h-4 w-4 text-indigo-600" />
+                                Durasi
+                            </div>
+                            <p class="mt-1.5 text-2xl font-black text-slate-900">{{ examDurationLabel }}</p>
+                            <p v-if="examTimeLimitMinutes" class="mt-0.5 text-xs text-slate-500">Dihitung sejak tombol mulai ditekan</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ isInterview ? 'Petunjuk' : 'Aturan Mengerjakan' }}</h2>
+                        <ol class="mt-3 space-y-2.5">
+                            <li v-for="(rule, index) in examRules" :key="index" class="flex items-start gap-3 text-sm leading-relaxed text-slate-700">
+                                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-black text-indigo-700">
+                                    {{ index + 1 }}
+                                </span>
+                                <span>{{ rule }}</span>
+                            </li>
+                        </ol>
+                    </div>
+
+                    <div v-if="requiresExamToken" class="order-2 mt-6 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
                         <label for="exam-token" class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800">
                             <KeyRound class="h-4 w-4" />
                             Token Ujian
@@ -3776,7 +3815,7 @@ const submitAnotherResponse = () => {
                     >
                         <RefreshCw v-if="isStartingExam" class="h-4 w-4 animate-spin" />
                         <Play v-else class="h-4 w-4 fill-current" />
-                        <span>{{ isStartingExam ? 'Memulai ujian...' : 'Kerjakan Sekarang' }}</span>
+                        <span>{{ isStartingExam ? (isInterview ? 'Memulai wawancara...' : 'Memulai ujian...') : startButtonLabel }}</span>
                     </button>
                 </div>
             </div>

@@ -12,6 +12,7 @@ Artisan::command('inspire', function () {
 Schedule::command('exam:submit-expired')->everyMinute()->withoutOverlapping();
 
 // At night, for servers run by the scheduler instead of lan:serve (which does this by itself):
-// a copy of the database, then records past their retention removed.
+// a copy of the database and of the new files of the exams, then records past their retention removed.
 Schedule::command('db:backup --if-older-than=20')->timezone(config('app.display_timezone'))->dailyAt('01:00')->withoutOverlapping();
+Schedule::command('files:backup')->timezone(config('app.display_timezone'))->dailyAt('01:15')->withoutOverlapping();
 Schedule::command('model:prune')->timezone(config('app.display_timezone'))->dailyAt('01:30');

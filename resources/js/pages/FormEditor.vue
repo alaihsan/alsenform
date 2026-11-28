@@ -49,6 +49,7 @@ import AudioRecorder from '@/components/audio/AudioRecorder.vue';
 import { durationLabel, formatAudioSize, type AudioClip } from '@/lib/audio';
 import FormDesigner from '@/components/form-design/FormDesigner.vue';
 import { useCardReorder } from '@/composables/useCardReorder';
+import { useOnlineAddress } from '@/composables/useOnlineAddress';
 import { BRAND_ICON, BRAND_NAME } from '@/lib/brand';
 import { copyText } from '@/lib/clipboard';
 import { DEFAULT_DESIGN, designVariables, logoJustify, pageBackgroundStyle, useDesignCss, withDesignDefaults, type FormDesign } from '@/lib/formDesign';
@@ -106,6 +107,7 @@ import {
     ZoomIn,
     CornerDownRight,
     GitBranch,
+    Globe,
 } from 'lucide-vue-next';
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import MediaLightboxModal from '@/components/MediaLightboxModal.vue';
@@ -724,6 +726,19 @@ watch(
     },
 );
 const shareUrl = computed(() => publicUrl.value);
+/* Alamat online: the exam's link on the internet, on the address the tunnel has now (it changes
+ * when the tunnel starts again), for students outside the school network. */
+const { url: onlineAddress } = useOnlineAddress();
+const onlineShareUrl = computed<string | null>(() => {
+    if (!onlineAddress.value) {
+        return null;
+    }
+    try {
+        return `${onlineAddress.value}${new URL(shareUrl.value, window.location.origin).pathname}`;
+    } catch {
+        return null;
+    }
+});
 const responseQuestions = computed(() => props.quizForm?.responses?.questions ?? []);
 const latestResponses = computed(() => props.quizForm?.responses?.latest ?? []);
 
@@ -1908,6 +1923,8 @@ const handleImportDocxFile = async (event: Event) => {
                     required: !!q.required,
                     media: Array.isArray(q.media) ? [...q.media] : [],
                     points: q.points ?? 1,
+                    // "Pembahasan:" in the Word file.
+                    ...(q.explanation ? { explanation: q.explanation } : {}),
                 };
                 form.questions.push(question);
                 activeQuestionId.value = question.id;
@@ -2008,6 +2025,11 @@ const handleImportExamViewFile = async (event: Event) => {
 
 const copyShareUrl = async () => {
     markChanged((await copyText(shareUrl.value)) ? 'Tautan disalin' : shareUrl.value);
+};
+const copyOnlineShareUrl = async () => {
+    if (onlineShareUrl.value) {
+        markChanged((await copyText(onlineShareUrl.value)) ? 'Tautan online disalin' : onlineShareUrl.value);
+    }
 };
 
 // Toast Notification State
@@ -4194,6 +4216,17 @@ watch(
                                 >
                                     {{ shareUrl }}
                                 </button>
+                                <button
+                                    v-if="onlineShareUrl"
+                                    type="button"
+                                    class="mt-1 flex max-w-full items-center gap-1.5 text-left text-xs font-bold text-emerald-700"
+                                    :title="`Salin tautan online: ${onlineShareUrl}`"
+                                    data-testid="online-share-card"
+                                    @click="copyOnlineShareUrl"
+                                >
+                                    <Globe class="h-3.5 w-3.5 shrink-0" />
+                                    <span class="truncate">Online: {{ onlineShareUrl }}</span>
+                                </button>
                             </div>
                         </div>
 
@@ -5888,6 +5921,27 @@ Jawaban: A, C</pre
                     </div>
                     <p v-if="slugWarning" class="mt-2 text-sm font-bold text-red-600">{{ slugWarning }}</p>
                     <p class="mt-1 break-all text-sm font-semibold text-indigo-600">{{ shareUrl }}</p>
+                    <!-- Alamat online: the same exam on the internet, on the address the tunnel has now -->
+                    <div v-if="onlineShareUrl" class="mt-3 border-t border-slate-200 pt-3" data-testid="online-share-link">
+                        <p class="flex items-center gap-1.5 text-sm font-bold text-slate-500">
+                            <Globe class="h-4 w-4 text-emerald-600" />
+                            Tautan online (internet)
+                        </p>
+                        <div class="mt-1.5 flex items-start gap-2">
+                            <p class="min-w-0 flex-1 break-all text-sm font-semibold text-emerald-700">{{ onlineShareUrl }}</p>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-lg border border-emerald-200 bg-white px-3 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                                @click="copyOnlineShareUrl"
+                            >
+                                Salin
+                            </button>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">
+                            Untuk siswa di luar jaringan sekolah. Alamatnya berganti bila server dijalankan ulang; ambil yang terbaru dari sini. Ubah
+                            nama tautan? Tekan Simpan tautan dulu.
+                        </p>
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button type="button" class="rounded-xl px-4 py-2 font-bold text-slate-600 hover:bg-slate-100" @click="showPublish = false">

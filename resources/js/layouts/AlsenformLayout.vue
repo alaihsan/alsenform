@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BrandMark from '@/components/BrandMark.vue';
 import AccountMenu from '@/components/AccountMenu.vue';
+import OnlineAddressMenu from '@/components/OnlineAddressMenu.vue';
 import { Link } from '@inertiajs/vue3';
 
 withDefaults(
@@ -23,6 +24,8 @@ withDefaults(
                 </component>
 
                 <div class="ml-auto flex items-center gap-2">
+                    <!-- Admins and teachers: the address on the internet, always the current one -->
+                    <OnlineAddressMenu v-if="!minimal" />
                     <slot name="header-actions" />
                     <AccountMenu v-if="!minimal" />
                 </div>

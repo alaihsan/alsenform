@@ -41,7 +41,7 @@ test('only admins open Kesehatan Server', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Reports/ServerHealth')
-            ->has('health.checks', 10)
+            ->has('health.checks', 11)
             ->where('health.checks.0.key', 'database')
             ->where('health.checks.0.tone', 'good'));
 });

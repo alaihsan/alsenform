@@ -12,6 +12,11 @@ return [
     | older than "fresh_hours") and every day while it runs. The newest
     | "keep" copies are kept; lan:check warns after "max_age_hours".
     |
+    | "php artisan files:backup" (run with it) copies the new files of the
+    | exams, uploaded media and students' uploads and recordings, to the
+    | "berkas" folder here. Point BACKUP_PATH to another disk to survive
+    | the loss of this one.
+    |
     */
 
     'backup' => [

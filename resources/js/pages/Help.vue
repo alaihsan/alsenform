@@ -595,6 +595,12 @@ const selectTopic = (id: string) => {
                                         <p class="text-xs text-slate-600">
                                             Coba dulu lewat <strong>Pratinjau</strong> (ikon mata), lalu klik tombol <strong>Terbit</strong> dan salin tautan publik formulir untuk dibagikan ke siswa atau kelas.
                                         </p>
+                                        <p class="mt-2 text-xs text-slate-600">
+                                            Siswa di luar jaringan sekolah? Saat server bisa dibuka lewat internet, lencana hijau <strong>Online</strong> muncul di bilah atas.
+                                            Klik untuk menyalin alamatnya, atau salin <strong>Tautan online (internet)</strong> di jendela Terbit. Alamat ini berganti
+                                            setiap kali server dijalankan ulang dan selalu diperbarui sendiri, jadi salin yang terbaru dari sana. Lencana abu-abu
+                                            <strong>Offline</strong> berarti akses internet sedang mati.
+                                        </p>
                                     </div>
                                 </div>
 

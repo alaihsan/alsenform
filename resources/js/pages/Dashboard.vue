@@ -3,6 +3,7 @@ import BrandMark from '@/components/BrandMark.vue';
 import { BRAND_NAME } from '@/lib/brand';
 import { copyText } from '@/lib/clipboard';
 import AccountMenu from '@/components/AccountMenu.vue';
+import OnlineAddressMenu from '@/components/OnlineAddressMenu.vue';
 import FormCardPreview from '@/components/FormCardPreview.vue';
 import {
     DropdownMenu,
@@ -814,6 +815,8 @@ function closeDonationModal(): void {
                 </label>
 
                 <div class="ml-auto flex items-center gap-2">
+                    <!-- Admins and teachers: the address on the internet, always the current one -->
+                    <OnlineAddressMenu />
                     <DropdownMenu>
                         <DropdownMenuTrigger :as-child="true">
                             <button

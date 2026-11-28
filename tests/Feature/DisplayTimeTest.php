@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\QuizForm;
+use App\Models\QuizResponse;
 use App\Models\User;
 use App\Support\DisplayTime;
 use Illuminate\Support\Carbon;
@@ -29,6 +30,19 @@ test('times are written in indonesian in the display timezone, also after the lo
         ->and(DisplayTime::ago(now()->subMinutes(5)))->toBe('5 menit yang lalu')
         ->and(DisplayTime::ago(null))->toBeNull()
         ->and(DisplayTime::now()->format('Y-m-d H:i T'))->toBe('2026-10-19 17:00 WIB');
+});
+
+test('the grade recap writes when each student handed in in the display timezone', function () {
+    config(['app.display_timezone' => 'Asia/Jakarta']);
+
+    $teacher = User::factory()->create(['role' => 'guru']);
+    $form = QuizForm::factory()->for($teacher)->create(['published_at' => now()]);
+    $response = QuizResponse::factory()->for($form)->create();
+    // Handed in at 09.06 WIB.
+    $response->forceFill(['created_at' => Carbon::parse('2026-11-27 02:06:00')])->saveQuietly();
+
+    $this->actingAs($teacher)->get(route('forms.edit', $form->slug))
+        ->assertInertia(fn (Assert $page) => $page->where('quizForm.responses.gradebook.0.formattedDate', '27/11/2026 09:06'));
 });
 
 test('the form cards and the editor show indonesian dates', function () {

@@ -186,6 +186,13 @@ function runLanCheck(array $probes = []): array
                 : ['path' => '/tmp/falcon-forms-20261028-010000.dump', 'name' => 'falcon-forms-20261028-010000.dump', 'size' => 1024, 'created_at' => CarbonImmutable::now()->subHours(3)];
         }
 
+        protected function latestFileBackup(): ?array
+        {
+            return array_key_exists('fileBackup', $this->probes)
+                ? $this->probes['fileBackup']
+                : ['path' => '/tmp/berkas', 'files' => 12, 'bytes' => 4096, 'copied' => 0, 'copiedBytes' => 0, 'finishedAt' => CarbonImmutable::now()->subHours(3)];
+        }
+
         public function check(): int
         {
             return $this->handleCheck();
@@ -389,6 +396,19 @@ test('lan:check counts a missing or stale database backup as a problem', functio
 
     [, $stale] = runLanCheck(['backup' => ['path' => '/tmp/a.dump', 'name' => 'falcon-forms-20261020-010000.dump', 'size' => 1024, 'created_at' => CarbonImmutable::now()->subDays(2)]]);
     expect($stale)->toContain('✗ Backup database terakhir 2 hari yang lalu (falcon-forms-20261020-010000.dump), lebih dari 24 jam.');
+});
+
+test('lan:check counts a missing or stale backup of the files as a problem', function () {
+    [, $fresh] = runLanCheck();
+    expect($fresh)->toContain('✓ Backup berkas terakhir 3 jam yang lalu (12 berkas).');
+
+    [$exitCode, $none] = runLanCheck(['fileBackup' => null]);
+    expect($exitCode)->toBe(1)
+        ->and($none)->toContain('✗ Belum ada backup berkas: gambar, audio soal, dan rekaman serta berkas jawaban siswa tidak ada di backup database.')
+        ->toContain('Jalankan: php artisan files:backup');
+
+    [, $stale] = runLanCheck(['fileBackup' => ['path' => '/tmp/berkas', 'files' => 12, 'bytes' => 4096, 'copied' => 0, 'copiedBytes' => 0, 'finishedAt' => CarbonImmutable::now()->subDays(2)]]);
+    expect($stale)->toContain('✗ Backup berkas terakhir 2 hari yang lalu, lebih dari 24 jam.');
 });
 
 test('behind Caddy, lan:check expects the address without a port and checks that Caddy leads it here', function () {

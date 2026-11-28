@@ -9,7 +9,6 @@ use App\Support\AssetBuild;
 use App\Support\DisplayTime;
 use App\Support\PendingMigrations;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
@@ -26,8 +25,10 @@ class ServerHealth
 
     public function __construct(
         protected DatabaseBackup $backup,
+        protected FileBackup $fileBackup,
         protected AssetBuild $assetBuild,
         protected PendingMigrations $pendingMigrations,
+        protected OnlineAddress $onlineAddress,
     ) {}
 
     /**
@@ -42,6 +43,7 @@ class ServerHealth
             $this->exams(),
             $this->serverErrors(),
             $this->backup(),
+            $this->fileBackup(),
             $this->disk(),
             $this->migrations(),
             $this->build(),
@@ -150,15 +152,13 @@ class ServerHealth
      */
     protected function online(): ?array
     {
-        $metrics = trim((string) config('app.online_tunnel_metrics'));
-
-        if ($metrics === '') {
+        if (! $this->onlineAddress->isConfigured()) {
             return null;
         }
 
-        $hostname = rescue(fn (): mixed => Http::timeout(1)->get("http://{$metrics}/quicktunnel")->json('hostname'), null, report: false);
+        $url = $this->onlineAddress->url(fresh: true);
 
-        if (! is_string($hostname) || ! preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i', $hostname)) {
+        if ($url === null) {
             return $this->check(
                 'online',
                 'Akses online',
@@ -173,7 +173,7 @@ class ServerHealth
             'online',
             'Akses online',
             'Menyala',
-            "https://{$hostname}",
+            $url,
             'good',
             'Alamat ini berganti setiap kali tunnel atau komputer server dijalankan ulang: bagikan tautan dari sini.',
         );
@@ -221,6 +221,32 @@ class ServerHealth
             "{$lastHour} kejadian dalam 1 jam terakhir",
             $lastHour >= 10 ? 'bad' : ($open > 0 ? 'warn' : 'good'),
             $open > 0 ? 'Buka Galat Server untuk melihat apa yang terjadi dan siapa yang terkena.' : null,
+        );
+    }
+
+    /**
+     * The files of the exams (media, students' uploads and recordings), copied with the database.
+     *
+     * @return array{key: string, label: string, value: string, detail: string|null, tone: 'good'|'warn'|'bad', hint: string|null}
+     */
+    protected function fileBackup(): array
+    {
+        $latest = $this->fileBackup->latest();
+        $maxAgeHours = (int) config('maintenance.backup.max_age_hours');
+
+        if ($latest === null) {
+            return $this->check('file_backup', 'Backup berkas', 'Belum ada', null, 'bad', 'Gambar, audio soal, serta berkas dan rekaman jawaban siswa tidak ada di backup database. Jalankan php artisan files:backup di komputer server (lan:serve juga membuatnya setiap hari).');
+        }
+
+        $isStale = $latest['finishedAt']->lt(now()->subHours($maxAgeHours));
+
+        return $this->check(
+            'file_backup',
+            'Backup berkas',
+            (string) DisplayTime::ago($latest['finishedAt']),
+            $latest['files'].' berkas · '.$this->bytes($latest['bytes'], 1),
+            $isStale ? 'bad' : 'good',
+            $isStale ? "Backup berkas terakhir lebih dari {$maxAgeHours} jam: jalankan php artisan files:backup." : null,
         );
     }
 

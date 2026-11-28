@@ -49,6 +49,28 @@ test('the interviewer, logged in, is asked for the candidate before starting', f
         ->assertJsonPath('errors.respondent_name.0', 'Nama lengkap wajib diisi.');
 });
 
+test('an interview opened before it was published starts once it is, with the score boxes of the interviewer', function () {
+    $this->interview->update([
+        'published_at' => null,
+        'questions' => [
+            ['id' => 1, 'title' => 'Kelancaran', 'type' => 'Multiple choice', 'required' => true, 'scoreEntry' => true,
+                'options' => ['Lancar', 'Cukup', 'Lainnya'], 'optionScores' => [10, 5, null]],
+        ],
+        'settings' => [...$this->interview->settings, 'timeLimit' => 60, 'respondentFields' => ['name', 'class']],
+    ]);
+
+    // The owner tries it from the editor, then publishes it and starts with the page still open.
+    $token = $this->actingAs($this->teacher)->get(route('forms.public', $this->interview->slug))->inertiaProps('session.token');
+    $this->interview->update(['published_at' => now()]);
+
+    $this->actingAs($this->teacher)->postJson(route('forms.responses.start', $this->interview->slug), ['session_token' => $token, 'respondent_name' => 'Calon Pertama'])
+        ->assertOk()
+        ->assertJsonPath('session.respondent_name', 'Calon Pertama')
+        // A choice without a score gives nothing to type above 0.
+        ->assertJsonPath('questions.0.scoreMaxima', [10, 5, 0])
+        ->assertJsonMissingPath('questions.0.optionScores');
+});
+
 test('every candidate gets a response of their own, with their name, registration number and school', function () {
     interviewCandidate($this->interview, $this->teacher, [
         'respondent_name' => 'ahmad fauzi', 'respondent_number' => 'PMB-001', 'respondent_school' => 'SDN 1 Bekasi',

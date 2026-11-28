@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Actions\SubmitExpiredAttempts;
 use App\Services\DatabaseBackup;
+use App\Services\FileBackup;
 use App\Support\AssetBuild;
 use App\Support\DisplayTime;
 use App\Support\DnsLookup;
@@ -250,9 +251,9 @@ class ServeLanCommand extends Command
     }
 
     /**
-     * A copy of the database when the latest is older than the given hours, then records past
-     * their retention removed (config/maintenance.php). A failed backup never stops the server: it
-     * is shown here and recorded in Galat Server.
+     * A copy of the database when the latest is older than the given hours, the new files of the
+     * exams with it, then records past their retention removed (config/maintenance.php). A failed
+     * backup never stops the server: it is shown here and recorded in Galat Server.
      */
     protected function runDailyMaintenance(float $backupOlderThanHours): void
     {
@@ -261,6 +262,12 @@ class ServeLanCommand extends Command
         }
 
         Artisan::call('db:backup', [], $this->output);
+
+        try {
+            Artisan::call('files:backup', [], $this->output);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
 
         try {
             Artisan::call('model:prune');
@@ -664,6 +671,15 @@ class ServeLanCommand extends Command
             $this->checkLine(true, 'Backup database terakhir '.DisplayTime::ago($latestBackup['created_at'])." ({$latestBackup['name']}).");
         }
 
+        $latestFiles = $this->latestFileBackup();
+        if ($latestFiles === null) {
+            $this->checkLine(false, 'Belum ada backup berkas: gambar, audio soal, dan rekaman serta berkas jawaban siswa tidak ada di backup database.', ['Jalankan: php artisan files:backup (lan:serve juga membuatnya setiap hari bersama backup database)']);
+        } elseif ($latestFiles['finishedAt']->lt(now()->subHours($maxBackupAgeHours))) {
+            $this->checkLine(false, 'Backup berkas terakhir '.DisplayTime::ago($latestFiles['finishedAt']).", lebih dari {$maxBackupAgeHours} jam.", ['Jalankan: php artisan files:backup']);
+        } else {
+            $this->checkLine(true, 'Backup berkas terakhir '.DisplayTime::ago($latestFiles['finishedAt'])." ({$latestFiles['files']} berkas).");
+        }
+
         if ($lanHost === null) {
             $this->checkLine(null, 'LAN_HOST di .env kosong atau tidak valid: alamat intranet dimatikan, siswa hanya bisa memakai alamat IP.', ['Isi di .env: LAN_HOST=falcon.intranet']);
         }
@@ -820,6 +836,16 @@ class ServeLanCommand extends Command
     protected function latestBackup(): ?array
     {
         return app(DatabaseBackup::class)->latest();
+    }
+
+    /**
+     * The last copy of the files of the exams (see App\Services\FileBackup), or null when there is none.
+     *
+     * @return array{path: string, files: int, bytes: int, copied: int, copiedBytes: int, finishedAt: CarbonImmutable}|null
+     */
+    protected function latestFileBackup(): ?array
+    {
+        return app(FileBackup::class)->latest();
     }
 
     /**
